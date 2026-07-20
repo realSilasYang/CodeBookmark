@@ -123,12 +123,12 @@
       },
       {
         "command": "codebookmark.pinView",
-        "title": "设为新书签上级节点",
+        "title": "进入书签容器模式",
         "icon": "$(folder-opened)"
       },
       {
         "command": "codebookmark.unpinView",
-        "title": "取消新书签上级节点",
+        "title": "退出书签容器模式",
         "icon": "$(folder)"
       },
       {
@@ -585,14 +585,14 @@
       "view/item/context": [
         {
           "command": "codebookmark.pinView",
-          "title": "设为新书签上级节点",
+          "title": "进入书签容器模式",
           "icon": "$(folder-opened)",
           "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && (viewItem == bookmark || viewItem == watcher) ",
           "group": "inline@2"
         },
         {
           "command": "codebookmark.unpinView",
-          "title": "取消新书签上级节点",
+          "title": "退出书签容器模式",
           "icon": "$(folder)",
           "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && viewItem == bookmarkPinned",
           "group": "inline@2"

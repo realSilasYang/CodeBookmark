@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 export class CodeBookmarkDecorationProvider implements vscode.FileDecorationProvider {
-	provideFileDecoration(uri: vscode.Uri, token: vscode.CancellationToken): vscode.ProviderResult<vscode.FileDecoration> {
+	provideFileDecoration(uri: vscode.Uri, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.FileDecoration> {
 		if (uri.scheme === 'codebookmark-badge') {
 			const query = uri.query;
 			const params = new URLSearchParams(query);

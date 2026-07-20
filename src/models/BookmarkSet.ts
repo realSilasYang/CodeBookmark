@@ -188,7 +188,7 @@ export class BookmarkSet {
 			}
 			if (this.values[i].subs.size > 0) {
 				this.values[i].subs.deleteBookmark(id)
-				if (this.values[i].isDirectory) {
+				if (this.values[i].isDirectory || this.values[i].isFile) {
 					if (this.values[i].subs.size == 0) {
 						this.delete(i)
 						return
@@ -272,10 +272,12 @@ export class BookmarkSet {
 		else {
 			for (const item of group) {
 				let setParentTarget: BookmarkSet | undefined = undefined;
+				// eslint-disable-next-line @typescript-eslint/no-this-alias
 				if (this.indexOf(target) >= 0) setParentTarget = this;
 				else if (target.parent && target.parent.subs.indexOf(target) >= 0) setParentTarget = target.parent.subs;
 
 				let setParentItem: BookmarkSet | undefined = undefined;
+				// eslint-disable-next-line @typescript-eslint/no-this-alias
 				if (this.indexOf(item) >= 0) setParentItem = this;
 				else if (item.parent && item.parent.subs.indexOf(item) >= 0) setParentItem = item.parent.subs;
 
@@ -332,11 +334,11 @@ export class BookmarkSet {
 					hasChange = cc
 				}
 			}
-			if (bookmark.isDirectory) continue
+			if (bookmark.isDirectory || bookmark.isFile) continue
 			if (bookmark.path === rePath) {
 				// 如果内容为空且不等于换行符，则进行清理
 				if (start.line === end.line && start.line === bookmark.start.line) {
-					const content = fileUtils.getDocumentCurrent()?.lineAt(bookmark.start.line).text
+					const content = bookmark.start.line < doc.lineCount ? doc.lineAt(bookmark.start.line).text : undefined
 					if (content === '' && numberLine === 0) {
 						// 允许变成空内容书签，交由智能追踪判定
 						bookmark.end.column = 0;
@@ -443,7 +445,7 @@ export class BookmarkSet {
 				}
 				else if (start.line >= bookmark.start.line && end.line - start.line === 1 && end.line === bookmark.end.line && textChange === '') {
 					bookmark.end.line--
-					bookmark.end.column = fileUtils.getDocumentCurrent()?.lineAt(bookmark.end.line).range.end.character ?? 0
+					bookmark.end.column = bookmark.end.line < doc.lineCount ? doc.lineAt(bookmark.end.line).range.end.character : 0
 				}
 				else if (end.line > start.line && start.line === bookmark.start.line && textChange === '') {
 					bookmark.end.line -= end.line - start.line
@@ -536,15 +538,17 @@ export class BookmarkSet {
 		}
 		return this.size
 	}
-
 	renamePath(oldPath: string, newPath: string) {
 		for (const vi of this.values) {
 			if (vi.path === oldPath || vi.path.startsWith(oldPath + '/') || vi.path.startsWith(oldPath + '\\')) {
 				const fsPath = vi.path.replace(oldPath, newPath)
 				vi.path = fsPath
-				if (vi.isDirectory) {
+				if (vi.isDirectory || vi.isFile) {
 					vi.label = path.basename(fsPath)
 					vi.resourceUri = fileUtils.relativeToUri(fsPath)
+					if (vi.isFile && vi.Id.startsWith('file_')) {
+						vi.Id = 'file_' + fsPath;
+					}
 				}
 			}
 			if (vi.subs.size > 0) {
@@ -552,6 +556,7 @@ export class BookmarkSet {
 			}
 		}
 	}
+
 
 	deleteWithPath(pathDeleted: string): boolean {
 		let hasDelete = false
@@ -583,7 +588,7 @@ export class BookmarkSet {
 				vi.isOpened = !vi.isOpened
 				changed = true;
 			} else {
-				if (vi.isOpened !== false) {
+				if (vi.isOpened !== false && !vi.isFile && !vi.isDirectory) {
 					vi.isOpened = false
 					changed = true;
 				}
@@ -604,7 +609,7 @@ export class BookmarkSet {
 
 	addNewBookmarkToPin(bookmark: Bookmark): Bookmark | undefined {
 		for (const vi of this.values) {
-			if (vi.isOpened) {
+			if (vi.isOpened && !vi.isFile && !vi.isDirectory) {
 				vi.subs.add(bookmark.copyWith({ parent: vi }))
 				vi.refreshDisplayProps()
 				return vi
@@ -621,11 +626,27 @@ export class BookmarkSet {
 	addNewBookmark(bookmark: Bookmark): Bookmark | undefined {
 		const pin = this.addNewBookmarkToPin(bookmark)
 		if (!pin) {
-			this.add(bookmark)
+			let fileNode = this.values.find(v => v.contextValue === ContextBookmark.File && v.path === bookmark.path);
+			if (fileNode) {
+				bookmark.parent = fileNode;
+				fileNode.subs.add(bookmark);
+			} else {
+				fileNode = new Bookmark({
+					Id: `file_${bookmark.path}`,
+					label: bookmark.path,
+					path: bookmark.path,
+					contextValue: ContextBookmark.File,
+					isOpened: true
+				});
+				bookmark.parent = fileNode;
+				fileNode.subs.add(bookmark);
+				this.add(fileNode);
+			}
 		}
 		return pin
 	}
 
+	
 	filterBookmarkAll(out: BookmarkSet) {
 		for (const i of this) {
 			out.add(i)

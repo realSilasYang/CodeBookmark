@@ -115,14 +115,14 @@ export class Commands {
 		},
 		pinView: {
 			'command': Commands.nameExtension + '.pinView',
-			'title': '设为新书签上级节点',
+			'title': '进入书签容器模式',
 			'icon': '$(folder-opened)',
 			'when': `${this.bookmarkOrWatcherView} && ${this.bookmarkOnAll}`,
 			'group': 'inline@2'
 		},
 		unpinView: {
 			'command': Commands.nameExtension + '.unpinView',
-			'title': '取消新书签上级节点',
+			'title': '退出书签容器模式',
 			'icon': '$(folder)',
 			'when': `${this.bookmarkOrWatcherView} && viewItem == ${ContextBookmark.BookmarkPinned}`,
 			'group': 'inline@2'
@@ -131,7 +131,8 @@ export class Commands {
 		// Top Bar Buttons
 		undo: {
 			'command': Commands.nameExtension + '.undo',
-			'title': '撤销',
+			'title': '撤销上一步',
+			'tooltip': '撤销上一步针对书签的修改',
 			'icon': '$(discard)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varCanUndo}`,
@@ -140,7 +141,8 @@ export class Commands {
 		},
 		redo: {
 			'command': Commands.nameExtension + '.redo',
-			'title': '恢复',
+			'title': '重做/恢复上一步',
+			'tooltip': '重做/恢复上一次撤销的书签修改',
 			'icon': '$(redo)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varCanRedo}`,

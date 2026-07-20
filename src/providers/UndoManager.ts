@@ -72,7 +72,7 @@ export class UndoManager {
             // Restore context values like folder, file etc.
             const restoreContexts = (bms: Bookmark[]) => {
                 for (const bm of bms) {
-                    if (bm.isOpened) {
+                    if (bm.isOpened && bm.contextValue !== ContextBookmark.File) {
                         bm.contextValue = ContextBookmark.BookmarkPinned;
                     }
                     if (bm.subs.size > 0) restoreContexts(Array.from(bm.subs.values));
@@ -112,7 +112,7 @@ export class UndoManager {
             
             const restoreContexts = (bms: Bookmark[]) => {
                 for (const bm of bms) {
-                    if (bm.isOpened) {
+                    if (bm.isOpened && bm.contextValue !== ContextBookmark.File) {
                         bm.contextValue = ContextBookmark.BookmarkPinned;
                     }
                     if (bm.subs.size > 0) restoreContexts(Array.from(bm.subs.values));

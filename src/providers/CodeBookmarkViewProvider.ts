@@ -40,7 +40,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			this._pathIndex = new Map();
 			const buildIndex = (bms: BookmarkSet) => {
 				for (const b of bms.values) {
-					if (b.path) {
+					if (b.path && !b.isDirectory && !b.isWatcher) {
 						let arr = this._pathIndex!.get(b.path);
 						if (!arr) {
 							arr = [];
@@ -114,46 +114,51 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	async getChildren(element?: Bookmark): Promise<Bookmark[]> {
+		try {
+			return await this._getChildrenInternal(element);
+		} catch (e: any) {
+			logger.error('Error in getChildren: ' + e.message + '\n' + e.stack);
+			return [];
+		}
+	}
+
+	async _getChildrenInternal(element?: Bookmark): Promise<Bookmark[]> {
 		await this._initPromise;
 		if (this.codeBookmarks.size === 0) return []
 		
 		let items: Bookmark[];
 		if (element) {
-			if (element.contextValue === ContextBookmark.File) {
-				const fileBookmarks = Array.from(this.codeBookmarks.values).filter(b => b.path === element.path);
-				for (const child of fileBookmarks) {
-					child.parent = element
-				}
-				items = fileBookmarks;
-			} else {
-				for (const child of element.subs.values) {
-					child.parent = element
-				}
-				items = Array.from(element.subs.values)
-			}
+			items = Array.from(element.subs.values);
 		} else {
 			if (fileUtils.isWorkspaceMode()) {
 				const paths = new Set<string>();
+				const fileNodesByPath = new Map<string, Bookmark>();
+				this.fileNodesCache.clear();
+				
 				for (const child of this.codeBookmarks.values) {
-					if (child.path) paths.add(child.path);
+					if (child.contextValue === ContextBookmark.File && child.path) {
+						paths.add(child.path);
+						fileNodesByPath.set(child.path, child);
+						this.fileNodesCache.set(child.path, child);
+					}
 				}
 				
 				const folder = fileUtils.getGlobalBookmarkFolder(this.context, true);
-				if (this.workspaceOrderCache === null) {
+				if (!this.workspaceOrderCache) {
 					this.workspaceOrderCache = [];
 					if (folder) {
-						const orderFile = path.join(folder, '_workspace_order.json');
 						try {
-							const data = await fs.promises.readFile(orderFile, 'utf8');
-							this.workspaceOrderCache = JSON.parse(data) || [];
-						} catch {
-							this.workspaceOrderCache = [];
-						}
+							const orderFile = path.join(folder, '_workspace_order.json');
+							if (fs.existsSync(orderFile)) {
+								const content = await fs.promises.readFile(orderFile, 'utf8');
+								const parsed = JSON.parse(content);
+								this.workspaceOrderCache = Array.isArray(parsed) ? parsed : [];
+							}
+						} catch {}
 					}
 				}
-
-				const savedOrder = this.workspaceOrderCache || [];
-				const orderedPaths = savedOrder.filter(p => paths.has(p));
+				
+				const orderedPaths = (Array.isArray(this.workspaceOrderCache) ? this.workspaceOrderCache : []).filter(p => paths.has(p));
 				const orderedSet = new Set(orderedPaths);
 				let hasChanges = false;
 				for (const p of paths) {
@@ -163,38 +168,24 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 						hasChanges = true;
 					}
 				}
-
+				
 				if (hasChanges && folder) {
 					this.workspaceOrderCache = orderedPaths;
 					const orderFile = path.join(folder, '_workspace_order.json');
-					// Write asynchronously to avoid blocking the UI thread
-					fs.promises.writeFile(orderFile, JSON.stringify(orderedPaths)).catch(e => {
-						logger.error(`Failed to write workspace order: ${e}`);
-					});
+					fs.promises.writeFile(orderFile, JSON.stringify(orderedPaths)).catch(() => {});
+				}
+				
+				items = orderedPaths.map(p => fileNodesByPath.get(p)).filter((n): n is Bookmark => n !== undefined);
+				for (const fileNode of items) {
+					if (!fileNode.resourceUri && fileNode.path) {
+						fileNode.resourceUri = vscode.Uri.file(fileUtils.relativeToAbsolute(fileNode.path));
+					}
 				}
 
-				items = [];
-				for (const p of orderedPaths) {
-					let fileNode = this.fileNodesCache.get(p);
-					if (!fileNode) {
-						fileNode = new Bookmark({
-							Id: `file_${p}`,
-							label: p,
-							path: p,
-							contextValue: ContextBookmark.File,
-							isOpened: true, // Expanded
-						});
-						fileNode.resourceUri = vscode.Uri.file(fileUtils.relativeToAbsolute(p));
-						this.fileNodesCache.set(p, fileNode);
-					}
-					items.push(fileNode);
-				}
 			} else {
-				for (const child of this.codeBookmarks.values) {
-					child.parent = undefined
-				}
-				items = this.codeBookmarks.values
-			}
+			// Non-workspace mode: return file nodes as top-level items
+			items = Array.from(this.codeBookmarks.values).filter(child => child.contextValue === ContextBookmark.File);
+		}
 		}
 
 		if (SortModeBookmark.mode !== SortModeBookmark.Custom) {
@@ -303,8 +294,8 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			if (folder) {
 				this.workspaceOrderCache = savedOrder;
 				const orderFile = path.join(folder, '_workspace_order.json');
-				fs.promises.writeFile(orderFile, JSON.stringify(savedOrder)).catch(e => {
-					logger.error(`Failed to write workspace drag order: ${e}`);
+				fs.promises.writeFile(orderFile, JSON.stringify(savedOrder)).catch(() => {
+					logger.error(`Failed to write workspace drag order`);
 				});
 			}
 			this._onDidChangeTreeData.fire();
@@ -1143,8 +1134,8 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			groupedByPath.get(filePath)!.push(bm);
 		}
 
-		let totalOptimizedCount = 0;
-		const changedPaths: string[] = [];
+
+
 		let hasSavedUndoState = false;
 
 		for (const [filePath, bookmarks] of groupedByPath.entries()) {
@@ -1188,7 +1179,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 										}
 										bm.label = Helper.formatLabelSpacing(opt.new_label);
 										count++;
-										totalOptimizedCount++;
+
 									}
 								}
 							}
@@ -1228,7 +1219,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			const roots = await this.getChildren();
 			const expandRecursive = async (items: any[]) => {
 				for (const item of items) {
-					try { await this.treeView?.reveal(item, { expand: true, select: false, focus: false }); } catch (e) {}
+					try { await this.treeView?.reveal(item, { expand: true, select: false, focus: false }); } catch {}
 					const children = await this.getChildren(item);
 					if (children.length > 0) {
 						await expandRecursive(children);
@@ -1245,46 +1236,40 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		if (this.treeView) {
 			try {
 				await this.treeView.reveal(bookmark, { select: true, focus: false, expand: true });
-			} catch (_) {}
+			} catch {}
 		}
 	}
 
 	private smartTrackTimer: NodeJS.Timeout | undefined;
 
 	changeContentFile(event: vscode.TextDocumentChangeEvent) {
-		if (event.contentChanges.length === 0 || vscode.window.activeTextEditor === undefined || event.document.uri.scheme !== 'file') {
+		if (event.contentChanges.length === 0 || event.document.uri.scheme !== 'file') {
 			return;
 		}
+
+		// Capture path at event time to avoid race condition with editor switch
+		const docFsPath = event.document.uri.fsPath;
+		const pathRel = fileUtils.absoluteToRelative(docFsPath);
+		const contentChanges = event.contentChanges;
 
 		if (this.smartTrackTimer) {
 			clearTimeout(this.smartTrackTimer);
 		}
 
-		this.smartTrackTimer = setTimeout(() => {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) return;
-
-			const pathRel = fileUtils.absoluteToRelative(editor.document.uri.fsPath);
-			const bookmarks = this.codeBookmarks.getBookmarksWithPath(new BookmarkSet(), pathRel).values;
+		this.smartTrackTimer = setTimeout(async () => {
+			const bookmarks = this.getBookmarksByPath(pathRel);
 			if (bookmarks.length === 0) return;
 
 			let hasChange = false;
-			for (const change of event.contentChanges) {
-				const linesDelta = change.text.split('\n').length - 1 - (change.range.end.line - change.range.start.line);
-				if (linesDelta === 0) continue;
-
-				for (const bm of bookmarks) {
-					if (bm.start.line > change.range.start.line) {
-						bm.start.line += linesDelta;
-						bm.end.line += linesDelta;
-						
-						hasChange = true;
-					}
+			for (const change of contentChanges) {
+				if (this.codeBookmarks.changeLine(pathRel, change, event.document, bookmarks)) {
+					hasChange = true;
 				}
 			}
 
 			if (hasChange) {
-				this.saveBookmarksToFile([editor.document.uri.fsPath]);
+				await fileUtils.readContentBookmarkInFile(this.codeBookmarks);
+				this.saveBookmarksToFile([docFsPath]);
 				this.refreshDecoration();
 			}
 		}, 300);
@@ -1364,7 +1349,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		await vscode.commands.executeCommand('list.collapseAll');
 	}
 
-	getLinePaths(editor: vscode.TextEditor, setBookmark: BookmarkSet): Map<number, LinePath> {
+	getLinePaths(editor: vscode.TextEditor, _setBookmark: BookmarkSet): Map<number, LinePath> {
 		const path = fileUtils.absoluteToRelative(editor.document.uri.fsPath)
 		const bookmarks = this.getBookmarksByPath(path)
 		const lines = new Map<number, LinePath>([])
@@ -1562,7 +1547,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	public async refresh(editor?: vscode.TextEditor, isWorkspace?: boolean, forceReloadDisk: boolean = false) {
-		const config = vscode.workspace.getConfiguration('codebookmark');
+		vscode.workspace.getConfiguration('codebookmark');
 		
 		if (forceReloadDisk || this.currentModeIsWorkspace !== isWorkspace) {
 			this.workspaceOrderCache = null;
@@ -1577,7 +1562,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 					setTimeout(() => {
 						try {
 							this.treeView?.reveal(fileNode, { expand: true, select: false, focus: false });
-						} catch (e) {}
+						} catch {}
 					}, 10);
 				}
 			}
@@ -1602,7 +1587,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 						setTimeout(() => {
 							try {
 								this.treeView?.reveal(fileNode, { expand: true, select: false, focus: false });
-							} catch (e) {}
+							} catch {}
 						}, 10);
 					}
 				}
@@ -1695,7 +1680,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 				try {
 					await fs.promises.unlink(tmpPath.fsPath);
-				} catch (e) {}
+				} catch {}
 			}
 		});
 	}
@@ -1958,9 +1943,11 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		for (const mod of modified) {
 			this._onDidChangeTreeData.fire(mod);
 		}
-		if (bookmark.isOpened) {
+		if (bookmark.isOpened && this.treeView) {
 			setTimeout(() => {
-				this.expandFolderTreeView(bookmark);
+				try {
+					this.treeView?.reveal(bookmark, { expand: true, select: false, focus: false });
+				} catch {}
 			}, 50);
 		}
 	}

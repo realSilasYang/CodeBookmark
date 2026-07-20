@@ -43,7 +43,7 @@ export class ExtensionConfig {
 		if (!fs.existsSync(folder)) {
 			try {
 				fs.mkdirSync(folder, { recursive: true });
-			} catch (error) {
+			} catch {
 				vscode.window.showErrorMessage(`无法创建书签配置文件夹： ${folder}，请检查是否具有权限或路径是否合法。`);
 				return false;
 			}
@@ -56,7 +56,7 @@ export class ExtensionConfig {
 				return false;
 			}
 			fs.accessSync(folder, fs.constants.W_OK | fs.constants.R_OK);
-		} catch (error) {
+		} catch {
 			vscode.window.showErrorMessage(`指定的书签配置文件夹无读写权限或不可用： ${folder}`);
 			return false;
 		}

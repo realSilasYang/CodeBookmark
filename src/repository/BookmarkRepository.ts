@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import { fileUtils } from '../util/FileUtils'
+import { ContextBookmark } from '../util/ContextValue';
 import { logger } from '../util/Logger'
 import { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
@@ -40,51 +41,114 @@ class CodeBookmarksRepository {
 				}
 				const results = await Promise.all(promises);
 				for (const data of results) {
-					if (data && data.bookmarks) {
-						bookmarks.push(...(data as any).bookmarks.map((item: any) => Bookmark.fromJSON(item)));
+					if (data && data.bookmarks && data.bookmarks.length > 0) {
+						const relPath = data.bookmarks[0].path;
+						const fileNode = new Bookmark({
+							Id: `file_${relPath}`,
+							label: relPath,
+							path: relPath,
+							contextValue: ContextBookmark.File,
+							isOpened: true
+						});
+						const bms = data.bookmarks.map((item: any) => Bookmark.fromJSON(item));
+						for (const b of bms) {
+							b.parent = fileNode;
+						}
+						fileNode.subs.addAll(bms);
+						bookmarks.push(fileNode);
 					}
 				}
 			} else {
-				for (const absolutePath of activePaths) {
-					const hash = fileUtils.getHashForPath(absolutePath)
-					const scriptName = path.basename(absolutePath)
-					const jsonPath = path.join(folder, `${scriptName}_${hash}.json`)
+			// Non-workspace mode: read bookmarks for activePaths or all files in folder if no active editor
+			const pathsToProcess = activePaths.length > 0 ? activePaths : await this._getAllBookmarkFilesInFolder(folder);
+			
+			for (const absolutePath of pathsToProcess) {
+				const hash = fileUtils.getHashForPath(absolutePath)
+				const scriptName = path.basename(absolutePath)
+				const jsonPath = path.join(folder, `${scriptName}_${hash}.json`)
+				
+				if (!(await existsAsync(jsonPath))) {
+					const files = await fs.promises.readdir(folder)
+					const suffix = `_${hash}.json`
+					const matchedFile = files.find(f => f.endsWith(suffix))
 					
-					if (!(await existsAsync(jsonPath))) {
-						const files = await fs.promises.readdir(folder)
-						const suffix = `_${hash}.json`
-						const matchedFile = files.find(f => f.endsWith(suffix))
+					if (matchedFile) {
+						const oldJsonPath = path.join(folder, matchedFile)
+						await fs.promises.rename(oldJsonPath, jsonPath)
 						
-						if (matchedFile) {
-							const oldJsonPath = path.join(folder, matchedFile)
-							await fs.promises.rename(oldJsonPath, jsonPath)
-							
-							const data = await fileUtils.readJsonFileAsync(jsonPath)
-							if (data && data.bookmarks) {
-								const newRelPath = fileUtils.absoluteToRelative(absolutePath)
-								data.bookmarks.forEach((b: any) => {
-									b.path = newRelPath
-								})
-								await fileUtils.writeJsonFileAsync(jsonPath, data)
-							}
-						}
-					}
-					
-					if (await existsAsync(jsonPath)) {
 						const data = await fileUtils.readJsonFileAsync(jsonPath)
 						if (data && data.bookmarks) {
-							bookmarks.push(...(data as any).bookmarks.map((item: any) => Bookmark.fromJSON(item)))
+							const newRelPath = fileUtils.absoluteToRelative(absolutePath)
+							data.bookmarks.forEach((b: any) => {
+								b.path = newRelPath
+							})
+							await fileUtils.writeJsonFileAsync(jsonPath, data)
 						}
 					}
 				}
+				
+				if (await existsAsync(jsonPath)) {
+					const data = await fileUtils.readJsonFileAsync(jsonPath)
+					if (data && data.bookmarks && data.bookmarks.length > 0) {
+						const relPath = fileUtils.absoluteToRelative(absolutePath);
+						const fileNode = new Bookmark({
+							Id: `file_${relPath}`,
+							label: relPath,
+							path: relPath,
+							contextValue: ContextBookmark.File,
+							isOpened: true
+						});
+						const bms = data.bookmarks.map((item: any) => Bookmark.fromJSON(item));
+						for (const b of bms) {
+							b.parent = fileNode;
+						}
+						fileNode.subs.addAll(bms);
+						bookmarks.push(fileNode);
+					}
+				}
 			}
+		}
 
 			return bookmarks
-		} catch (error) {
+		} catch(error) {
 			logger.error("无法读取书签配置文件")
 			logger.error(error)
 			return []
 		}
+	}
+
+	/**
+	 * Get all bookmark file paths from the global bookmark folder.
+	 * Used in non-workspace mode when no active editor is open.
+	 */
+	private async _getAllBookmarkFilesInFolder(folder: string | null): Promise<string[]> {
+		if (!folder) return [];
+		
+		const paths: string[] = [];
+		try {
+			const files = await fs.promises.readdir(folder);
+			for (const file of files) {
+				// Bookmark files are named: {scriptName}_{hash}.json
+				if (file.endsWith('.json') && file !== '_workspace_order.json') {
+					const jsonPath = path.join(folder, file);
+					try {
+						const data = await fileUtils.readJsonFileAsync(jsonPath);
+						if (data && data.bookmarks && data.bookmarks.length > 0) {
+							const relPath = data.bookmarks[0].path;
+							const absPath = fileUtils.relativeToAbsolute(relPath);
+							if (absPath && !paths.includes(absPath)) {
+								paths.push(absPath);
+							}
+						}
+					} catch {
+						// Skip files that can't be read
+					}
+				}
+			}
+		} catch {
+			// Folder might not exist yet
+		}
+		return paths;
 	}
 
 	async saveBookmarksToFile(context: vscode.ExtensionContext, bookmarks: BookmarkSet, activePaths: string[] = []): Promise<void> {
@@ -107,16 +171,13 @@ class CodeBookmarksRepository {
 			}
 
 			if (isWorkspace) {
-				const bmsByPath = new Map<string, any[]>();
-				for (const b of bookmarks.values) {
-					const arr = bmsByPath.get(b.path) || [];
-					arr.push(b.toJSON());
-					bmsByPath.set(b.path, arr);
-				}
-
 				const desiredFiles = new Set<string>();
-				for (const [relPath, bms] of bmsByPath.entries()) {
+				for (const fileNode of bookmarks.values) {
+					if (fileNode.contextValue !== ContextBookmark.File) continue;
+					const bms = fileNode.subs.values.map(b => b.toJSON());
 					if (bms.length === 0) continue;
+
+					const relPath = fileNode.path;
 					const absPath = fileUtils.relativeToAbsolute(relPath);
 					const hash = fileUtils.getHashForPath(absPath);
 					const scriptName = path.basename(absPath);
@@ -145,10 +206,8 @@ class CodeBookmarksRepository {
 					const jsonPath = path.join(folder, `${scriptName}_${hash}.json`)
 					
 					const relPath = fileUtils.absoluteToRelative(absolutePath)
-					// Filter bookmarks by relative path because the bookmark data holds relative paths
-					const bmsForPath = bookmarks.values
-						.filter(b => b.path === relPath)
-						.map(bookmark => bookmark.toJSON())
+					const fileNode = bookmarks.values.find(f => f.path === relPath && f.contextValue === ContextBookmark.File);
+					const bmsForPath = fileNode ? fileNode.subs.values.map(b => b.toJSON()) : [];
 
 					if (bmsForPath.length > 0) {
 						const jsonAll = {

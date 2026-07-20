@@ -72,8 +72,8 @@ export class AIService {
 							try {
 								const json = JSON.parse(data);
 								resolve(json);
-							} catch (e) {
-								reject(new Error(`无法解析 AI 响应数据: ${e}`));
+							} catch {
+								reject(new Error(`无法解析 AI 响应数据: `));
 							}
 						} else {
 							reject(new Error(`AI 接口返回错误 [${res.statusCode}]: ${data}`));
@@ -144,8 +144,8 @@ export class AIService {
 				const parsed = JSON.parse(jsonStr);
 				const bookmarks: AIBookmark[] = Array.isArray(parsed) ? parsed : (parsed.bookmarks || []);
 				return bookmarks;
-			} catch (e) {
-				logger.error(`AI 响应非标准 JSON: ${reply}`);
+			} catch {
+				logger.error(`Failed to parse stream chunk`);
 				throw new Error('AI 未能返回合法的 JSON 数组，请检查提示词或重试。');
 			}
 		}
@@ -198,7 +198,7 @@ export class AIService {
 			try {
 				const parsed = JSON.parse(jsonStr);
 				return Array.isArray(parsed) ? parsed : [];
-			} catch (e) {
+			} catch {
 				logger.error(`AI 响应非标准JSON: ${reply}`);
 				throw new Error('AI 未能返回合法的 JSON 数组，请重试。');
 			}

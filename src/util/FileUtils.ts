@@ -328,7 +328,7 @@ class FileUtils {
 		try {
 			const stat = fs.statSync(absolutePath, { bigint: true })
 			return stat.ino.toString()
-		} catch (e) {
+		} catch {
 			const hash = crypto.createHash('sha256');
 			hash.update(absolutePath.replace(/\\/g, '/').toLowerCase());
 			return hash.digest('hex');
@@ -346,7 +346,7 @@ class FileUtils {
 	static pathExists(p: string): boolean {
 		try {
 			fs.accessSync(p)
-		} catch (err) {
+		} catch {
 			return false
 		}
 
