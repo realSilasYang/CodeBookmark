@@ -1218,6 +1218,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			}
 			this.isExpanded = true;
 		}
+		vscode.commands.executeCommand('setContext', 'codebookmark.var.isExpanded', this.isExpanded);
 	}
 
 	async expandFolderTreeView(bookmark: any) {
