@@ -330,7 +330,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			return;
 		}
 
-		if (target.subs.size > 0 || target.isOpened) {
+		if (target.isOpened) {
 			if (this.codeBookmarks.moveGroupToNode(source, target)) {
 				this.saveBookmarksToFile()
 				if (!extCall) this.expandFolderTreeView(target)
