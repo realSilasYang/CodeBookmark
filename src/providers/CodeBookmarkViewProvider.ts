@@ -892,6 +892,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			let failedFilesCount = 0;
 			const changedPaths: string[] = [];
 			let statusDisposable: vscode.Disposable | undefined;
+			let hasSavedUndoState = false;
 
 			for (const filePath of filesToProcess) {
 				const pathRel = fileUtils.absoluteToRelative(filePath);
@@ -935,6 +936,11 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 						let fileHasChanges = false;
 						const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
 
+						if (!hasSavedUndoState) {
+							undoManager.saveState(this.codeBookmarks, 'ai');
+							hasSavedUndoState = true;
+						}
+
 						if (mode === 'overwrite') {
 							for (const eb of existingBookmarks) {
 								if (eb.Id) {
@@ -971,7 +977,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			}
 
 			if (changedPaths.length > 0) {
-				undoManager.saveState(this.codeBookmarks, 'ai');
 				this.saveBookmarksToFile(changedPaths);
 				this._onDidChangeTreeData.fire();
 				this.refreshDecoration();
@@ -1016,6 +1021,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			let failedFilesCount = 0;
 			const changedPaths: string[] = [];
 			let statusDisposable: vscode.Disposable | undefined;
+			let hasSavedUndoState = false;
 
 			for (const filePath of files) {
 				const pathRel = fileUtils.absoluteToRelative(filePath);
@@ -1057,6 +1063,11 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 					if (optimizedList && optimizedList.length > 0) {
 						let fileHasChanges = false;
 						
+						if (!hasSavedUndoState) {
+							undoManager.saveState(this.codeBookmarks, 'ai-optimize');
+							hasSavedUndoState = true;
+						}
+
 						for (const opt of optimizedList) {
 							if (opt.id && opt.new_label) {
 								const bm = this.codeBookmarks.findBookmark(new Bookmark({ Id: opt.id }));
@@ -1086,7 +1097,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			}
 
 			if (changedPaths.length > 0) {
-				undoManager.saveState(this.codeBookmarks, 'ai-optimize');
 				this.saveBookmarksToFile(changedPaths);
 				this._onDidChangeTreeData.fire();
 				this.refreshDecoration();
@@ -1133,9 +1143,9 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			groupedByPath.get(filePath)!.push(bm);
 		}
 
-		undoManager.saveState(this.codeBookmarks, 'ai-optimize');
 		let totalOptimizedCount = 0;
 		const changedPaths: string[] = [];
+		let hasSavedUndoState = false;
 
 		for (const [filePath, bookmarks] of groupedByPath.entries()) {
 			const pathRel = fileUtils.absoluteToRelative(filePath);
@@ -1172,6 +1182,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 								if (opt.id && opt.new_label) {
 									const bm = this.codeBookmarks.findBookmark(new Bookmark({ Id: opt.id }));
 									if (bm) {
+										if (!hasSavedUndoState) {
+											undoManager.saveState(this.codeBookmarks, 'ai-optimize');
+											hasSavedUndoState = true;
+										}
 										bm.label = Helper.formatLabelSpacing(opt.new_label);
 										count++;
 										totalOptimizedCount++;
@@ -1180,7 +1194,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 							}
 							
 							if (count > 0) {
-								undoManager.saveState(this.codeBookmarks, 'ai-optimize');
 								this.saveBookmarksToFile([filePath]);
 								this.refreshDecoration();
 								this.refresh();
