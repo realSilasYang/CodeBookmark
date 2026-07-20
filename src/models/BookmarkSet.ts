@@ -315,6 +315,13 @@ export class BookmarkSet {
 	}
 
 
+	/**
+	 * @deprecated Incremental per-change line/column tracking. No longer used by smart tracking:
+	 * the debounce collapses rapid edits into only the final change event, which made this
+	 * incremental math unreliable. Smart tracking now relies solely on the content-fingerprint
+	 * sticky engine (FileUtils.readContentBookmarkInFile), which reads the final document state.
+	 * Retained for reference and potential reuse; safe to remove.
+	 */
 	changeLine(rePath: string, change: vscode.TextDocumentContentChangeEvent, doc: vscode.TextDocument, bookmarksOfPath?: Bookmark[]): boolean {
 		const textChange = change.text
 		const start = change.range.start

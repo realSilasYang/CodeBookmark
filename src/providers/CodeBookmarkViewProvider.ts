@@ -1250,7 +1250,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		// Capture path at event time to avoid race condition with editor switch
 		const docFsPath = event.document.uri.fsPath;
 		const pathRel = fileUtils.absoluteToRelative(docFsPath);
-		const contentChanges = event.contentChanges;
 
 		if (this.smartTrackTimer) {
 			clearTimeout(this.smartTrackTimer);
@@ -1260,15 +1259,20 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			const bookmarks = this.getBookmarksByPath(pathRel);
 			if (bookmarks.length === 0) return;
 
-			let hasChange = false;
-			for (const change of contentChanges) {
-				if (this.codeBookmarks.changeLine(pathRel, change, event.document, bookmarks)) {
-					hasChange = true;
-				}
-			}
+			// Authoritative content-fingerprint re-anchor.
+			//
+			// We deliberately do NOT pre-shift line numbers from `contentChanges` here: the debounce
+			// collapses multiple rapid edits into only the final change event, so any incremental line
+			// math would be stale and would merely pollute the anchor line used for proximity snapping.
+			//
+			// Instead the sticky engine reads the FINAL document state and relocates every bookmark of
+			// this file purely by its content fingerprint (nearest exact match to the original line).
+			// This is immune to dropped intermediate events and handles cut / paste / multi-line moves.
+			// It also refreshes the fingerprint on in-line edits and only invalidates a bookmark when
+			// BOTH its position and its fingerprint are gone. Scoped to the edited file to bound cost.
+			const relocated = await fileUtils.readContentBookmarkInFile(this.codeBookmarks, true, false, pathRel);
 
-			if (hasChange) {
-				await fileUtils.readContentBookmarkInFile(this.codeBookmarks);
+			if (relocated > 0) {
 				this.saveBookmarksToFile([docFsPath]);
 				this.refreshDecoration();
 			}

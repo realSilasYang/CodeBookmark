@@ -90,7 +90,8 @@ class FileUtils {
 	async readContentBookmarkInFile(
 		bookmarks: BookmarkSet,
 		isRootCall: boolean = true,
-		silent: boolean = false
+		silent: boolean = false,
+		targetPath?: string
 	): Promise<number> {
 		if (isRootCall) {
 			this.relocatedCount = 0;
@@ -104,7 +105,16 @@ class FileUtils {
 				// which removes them (and all their children) from the tree view.
 				if (item.isDirectory || item.isWatcher) {
 					if (item.subs.size > 0) {
-						await this.readContentBookmarkInFile(item.subs, false, silent)
+						await this.readContentBookmarkInFile(item.subs, false, silent, targetPath)
+					}
+					continue
+				}
+
+				// Resource optimization: when a targetPath is given (e.g. after editing one file),
+				// only re-anchor bookmarks belonging to that file. Others keep their cached state.
+				if (targetPath !== undefined && item.path !== targetPath) {
+					if (item.subs.size > 0) {
+						await this.readContentBookmarkInFile(item.subs, false, silent, targetPath)
 					}
 					continue
 				}
@@ -138,75 +148,70 @@ class FileUtils {
 						}
 
 						const trimmedItemContent = item.content.trim();
-						if (currentLineContent.trim() !== trimmedItemContent && currentLineContent.indexOf(trimmedItemContent) === -1) {
-							
-							// Fix: Empty line teleportation bug
-							// If the original bookmark was an empty line, its semantic fingerprint is void.
-							// Attempting to indexOf('') will ALWAYS return 0 and teleport it to the top.
-							// Therefore, if it no longer matches the current line, we declare it completely dead.
-							if (!trimmedItemContent) {
-								if (item.contextValue === ContextBookmark.Bookmark) {
-									item.contextValue = ContextBookmark.BookmarkInvalid;
-									this.relocatedCount++;
-								}
-								continue;
+						const currentTrimmed = currentLineContent.trim();
+
+						// CASE A — Position still holds the fingerprint (exact line/range match, or the
+						// fingerprint is a substring of the current selection). Nothing moved; keep valid.
+						if (currentTrimmed === trimmedItemContent || (trimmedItemContent !== '' && currentLineContent.indexOf(trimmedItemContent) !== -1)) {
+							if (item.contextValue !== ContextBookmark.Bookmark) {
+								this.relocatedCount++;
 							}
-
-							let foundMatch = false;
-							let newStartPos: vscode.Position | undefined;
-							let newEndPos: vscode.Position | undefined;
-							let newContent = '';
-
+							item.contextValue = ContextBookmark.Bookmark;
+						} else {
+							// The text at the bookmark's recorded position no longer matches the fingerprint.
+							// Decide between: the line MOVED (relocate by fingerprint) vs. IN-LINE EDIT
+							// (same physical line was edited → refresh fingerprint) vs. truly INVALID.
 							const isMultiLine = trimmedItemContent.includes('\n');
 							const fullText = doc.getText();
-							
-							// Fix: Greedy First-Match Teleportation bug (Proximity Snapping)
-							// Instead of just taking the first indexOf match (which could be thousands of lines away),
-							// we find ALL exact matches of this semantic fingerprint and snap to the one that is 
-							// physically closest to the original bookmark's line.
-							let currentIndex = fullText.indexOf(trimmedItemContent);
+
+							// Proximity snapping: find ALL exact fingerprint matches and pick the one
+							// physically closest to the bookmark's original line, so a cut/paste or
+							// multi-line move re-anchors precisely instead of teleporting to the first hit.
 							let bestIndex = -1;
 							let minDistance = Infinity;
-
-							while (currentIndex !== -1) {
-								const pos = doc.positionAt(currentIndex);
-								const distance = Math.abs(pos.line - item.start.line);
-								
-								if (distance < minDistance) {
-									minDistance = distance;
-									bestIndex = currentIndex;
+							if (trimmedItemContent !== '') {
+								let currentIndex = fullText.indexOf(trimmedItemContent);
+								while (currentIndex !== -1) {
+									const pos = doc.positionAt(currentIndex);
+									const distance = Math.abs(pos.line - item.start.line);
+									if (distance < minDistance) {
+										minDistance = distance;
+										bestIndex = currentIndex;
+									}
+									currentIndex = fullText.indexOf(trimmedItemContent, currentIndex + 1);
 								}
-								
-								// Move to the next match
-								currentIndex = fullText.indexOf(trimmedItemContent, currentIndex + 1);
 							}
 
 							if (bestIndex !== -1) {
-								foundMatch = true;
-								newStartPos = doc.positionAt(bestIndex);
-								newEndPos = doc.positionAt(bestIndex + trimmedItemContent.length);
-								newContent = isMultiLine ? item.content : doc.lineAt(newStartPos.line).text;
-							}
-
-							if (foundMatch && newStartPos && newEndPos) {
+								// The fingerprint still exists somewhere → the bookmarked line MOVED.
+								// Re-anchor to the closest occurrence. Precise follow for cut / move / reorder.
+								const newStartPos = doc.positionAt(bestIndex);
+								const newEndPos = doc.positionAt(bestIndex + trimmedItemContent.length);
 								item.start.line = newStartPos.line;
 								item.start.column = newStartPos.character;
 								item.end.line = newEndPos.line;
 								item.end.column = newEndPos.character;
-								item.content = newContent;
+								item.content = isMultiLine ? item.content : doc.lineAt(newStartPos.line).text;
 								item.contextValue = ContextBookmark.Bookmark;
 								this.relocatedCount++;
+							} else if (item.start.line < doc.lineCount && currentTrimmed !== '') {
+								// The fingerprint is gone from the file, BUT the bookmark's recorded line
+								// still exists and holds non-empty text → treat as an IN-LINE EDIT of the
+								// bookmarked line. Keep the bookmark alive and refresh its fingerprint.
+								// (Position unchanged + content changed → not an invalidation.)
+								item.content = currentLineContent;
+								if (item.contextValue !== ContextBookmark.Bookmark) {
+									this.relocatedCount++;
+								}
+								item.contextValue = ContextBookmark.Bookmark;
 							} else {
+								// Fingerprint gone AND position no longer valid (line removed or now empty)
+								// → position and fingerprint both changed → declare the bookmark invalid.
 								if (item.contextValue !== ContextBookmark.BookmarkInvalid) {
 									this.relocatedCount++;
 								}
 								item.contextValue = ContextBookmark.BookmarkInvalid;
 							}
-						} else {
-							if (item.contextValue !== ContextBookmark.Bookmark) {
-								this.relocatedCount++;
-							}
-							item.contextValue = ContextBookmark.Bookmark;
 						}
 					} else {
 						if (doc.lineCount <= item.start.line) {
@@ -236,7 +241,7 @@ class FileUtils {
 					item.contextValue = ContextBookmark.Bookmark;
 				}
 				if (item.subs.size > 0) {
-					await this.readContentBookmarkInFile(item.subs, false, silent)
+					await this.readContentBookmarkInFile(item.subs, false, silent, targetPath)
 				}
 			} catch (error) {
 				logger.error('Can read content file')
