@@ -188,7 +188,7 @@
       },
       {
         "command": "codebookmark.ai.optimize",
-        "title": "$(hubot) 当前文件",
+        "title": "$(hubot) 单文件",
         "category": "Code Bookmarks"
       },
       {
@@ -208,12 +208,12 @@
       },
       {
         "command": "codebookmark.ai.generateSkipFolder",
-        "title": "$(diff-added) 生成 (仅无书签)",
+        "title": "$(diff-added) 生成",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeFolder",
-        "title": "$(hubot) 文件夹及子目录"
+        "title": "$(hubot) 文件夹"
       },
       {
         "command": "codebookmark.ai.optimizeContextItem",

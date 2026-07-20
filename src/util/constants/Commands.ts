@@ -219,7 +219,7 @@ export class Commands {
 		},
 		aiOptimize: {
 			'command': Commands.nameExtension + '.ai.optimize',
-			'title': '$(hubot) 当前文件',
+			'title': '$(hubot) 单文件',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			"category": "Code Bookmarks"
 		},
@@ -243,13 +243,13 @@ export class Commands {
 		},
 		aiGenerateSkipFolder: {
 			'command': Commands.nameExtension + '.ai.generateSkipFolder',
-			'title': '$(diff-added) 生成 (仅无书签)',
+			'title': '$(diff-added) 生成',
 			'when': `${Commands.viewCodeBookmarkView} && !codebookmark.activeFileHasBookmark`,
 			"category": "Code Bookmarks"
 		},
 		aiOptimizeFolder: {
 			'command': Commands.nameExtension + '.ai.optimizeFolder',
-			'title': '$(hubot) 文件夹及子目录',
+			'title': '$(hubot) 文件夹',
 			'when': `${Commands.viewCodeBookmarkView}`
 		},
 		aiOptimizeContextItem: {
