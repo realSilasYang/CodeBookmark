@@ -98,6 +98,16 @@ class FileUtils {
 
 		for (const item of bookmarks) {
 			try {
+				// Container nodes (File/Folder/Watcher) have no semantic content fingerprint.
+				// They must be skipped by the sticky engine, otherwise their empty content would
+				// get overwritten with line-0 text and their contextValue downgraded to Bookmark,
+				// which removes them (and all their children) from the tree view.
+				if (item.isDirectory || item.isWatcher) {
+					if (item.subs.size > 0) {
+						await this.readContentBookmarkInFile(item.subs, false, silent)
+					}
+					continue
+				}
 				let content = ''
 				let doc: vscode.TextDocument | undefined
 				const keys = new Set(this.mapDocumentBuf.keys())
