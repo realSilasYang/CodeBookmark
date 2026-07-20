@@ -56,7 +56,12 @@ class FileUtils {
 	writeJsonFile(filePath: string, data: any) {
 		try {
 			const jsonData = JSON.stringify(data, null, 2)
-			fs.writeFileSync(filePath, jsonData, 'utf8')
+			// Atomic write: serialize to a temp file in the same directory, then rename over the
+			// target. rename() within a directory is atomic, so a crash mid-write can never leave a
+			// truncated / corrupted bookmark file — readers see either the old or the new content.
+			const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+			fs.writeFileSync(tmpPath, jsonData, 'utf8')
+			fs.renameSync(tmpPath, filePath)
 		} catch (error) {
 			logger.error('Can not write file')
 			logger.error(error)
@@ -75,12 +80,17 @@ class FileUtils {
 	}
 
 	async writeJsonFileAsync(filePath: string, data: any): Promise<void> {
+		const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
 		try {
 			const jsonData = JSON.stringify(data, null, 2)
-			await fs.promises.writeFile(filePath, jsonData, 'utf8')
+			// Atomic write (see writeJsonFile): temp file in the same directory + atomic rename.
+			await fs.promises.writeFile(tmpPath, jsonData, 'utf8')
+			await fs.promises.rename(tmpPath, filePath)
 		} catch (error) {
 			logger.error('Can not write file async')
 			logger.error(error)
+			// Best-effort cleanup of a leftover temp file on failure.
+			try { await fs.promises.unlink(tmpPath) } catch { /* ignore */ }
 		}
 	}
 

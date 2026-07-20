@@ -262,6 +262,10 @@ export class Bookmark extends vscode.TreeItem {
 			path: this.path,
 			line: this.start.line,
 			opened: this.collapsibleState,
+			// Persist the pin flag explicitly. `opened` above stores the tree collapsible state
+			// (a VS Code enum) — it is NOT the pin flag, despite the ambiguous name. Without this
+			// field the pinned state was lost on every reload / undo / redo.
+			pinned: this.isOpened === true,
 			content: this.content,
 			iconName: this.icon,
 			isInvalid: this.contextValue === ContextBookmark.BookmarkInvalid,
@@ -277,8 +281,21 @@ export class Bookmark extends vscode.TreeItem {
 			}
 		}
 
-		const params = data.params.split(',').map(Number)
+		// Robust params parse: tolerate missing/short/legacy `params` instead of crashing.
+		// Fall back to the legacy `line` field for the start line when params is absent.
+		const rawParams = typeof data.params === 'string' ? data.params.split(',').map(Number) : [];
+		const num = (i: number, fallback = 0) => (Number.isFinite(rawParams[i]) ? rawParams[i] : fallback);
+		const legacyLine = Number.isFinite(data.line) ? data.line : 0;
+		const startLine = num(BookmarkParam.StartLine, legacyLine);
+		const startCol = num(BookmarkParam.StartColumn, 0);
+		const endLine = num(BookmarkParam.EndLine, startLine);
+		const endCol = num(BookmarkParam.EndColumn, startCol);
+
 		const parsedIcon: string = data.iconName || '';
+
+		// Restore the pin flag (see toJSON). Nodes reaching fromJSON are always real bookmarks
+		// nested under a File node — File/Folder containers are constructed directly, not via JSON.
+		const pinned = data.pinned === true;
 
 		const parent = new Bookmark({
 			Id: data.id,
@@ -288,9 +305,10 @@ export class Bookmark extends vscode.TreeItem {
 			collapsible: data.opened,
 			icon: parsedIcon,
 			subs: subs,
-			start: new CursorIndex(params[BookmarkParam.StartLine], params[BookmarkParam.StartColumn]),
-			end: new CursorIndex(params[BookmarkParam.EndLine], params[BookmarkParam.EndColumn]),
+			start: new CursorIndex(startLine, startCol),
+			end: new CursorIndex(endLine, endCol),
 			isInvalid: data.isInvalid,
+			isOpened: pinned,
 		})
 		for (const bm of subs) {
 			bm.parent = parent

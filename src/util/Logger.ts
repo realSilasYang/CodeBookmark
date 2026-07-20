@@ -5,18 +5,24 @@ class Logger {
 	private canLog: boolean = true;
 
 	infor(message: any) {
-		if (this.canLog)
-			console.log(message); this.channel.appendLine(String(message));
+		if (this.canLog) {
+			console.log(message);
+			this.channel.appendLine(String(message));
+		}
 	}
 
 	error(message: any) {
-		if (this.canLog)
-			console.error(message); this.channel.appendLine(`[ERROR] ${String(message)}`);
+		if (this.canLog) {
+			console.error(message);
+			this.channel.appendLine(`[ERROR] ${String(message)}`);
+		}
 	}
 
 	warning(message: any) {
-		if (this.canLog)
-			console.warn(message); this.channel.appendLine(`[WARN] ${String(message)}`);
+		if (this.canLog) {
+			console.warn(message);
+			this.channel.appendLine(`[WARN] ${String(message)}`);
+		}
 	}
 
 	showWarningMessage(message: string) {
