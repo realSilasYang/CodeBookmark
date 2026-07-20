@@ -271,49 +271,41 @@ export class BookmarkSet {
 		}
 		else {
 			for (const item of group) {
-				let setParent: BookmarkSet | undefined
-				if (target.parent === undefined && item.parent === undefined) {
-					// eslint-disable-next-line @typescript-eslint/no-this-alias
-					setParent = this
-				} else if (target.parent && target.parent.equals(item.parent)) {
-					setParent = target.parent.subs
-				}
-				if (setParent !== undefined) {
-					const indexTarget = setParent.indexOf(target);
-					const indexItem = setParent.indexOf(item);
+				let setParentTarget: BookmarkSet | undefined = undefined;
+				if (this.indexOf(target) >= 0) setParentTarget = this;
+				else if (target.parent && target.parent.subs.indexOf(target) >= 0) setParentTarget = target.parent.subs;
+
+				let setParentItem: BookmarkSet | undefined = undefined;
+				if (this.indexOf(item) >= 0) setParentItem = this;
+				else if (item.parent && item.parent.subs.indexOf(item) >= 0) setParentItem = item.parent.subs;
+
+				if (setParentTarget !== undefined && setParentTarget === setParentItem) {
+					const indexTarget = setParentTarget.indexOf(target);
+					const indexItem = setParentTarget.indexOf(item);
 					if (indexTarget >= 0 && indexItem >= 0) {
 						if (indexItem === indexTarget - 1) {
-							setParent.delete(indexItem)
-							setParent.insert(indexTarget, item)
+							setParentTarget.delete(indexItem)
+							setParentTarget.insert(indexTarget, item)
 							hasChange = true
 						} else if (indexItem > indexTarget) {
-							setParent.delete(indexItem)
-							setParent.insert(indexTarget, item)
+							setParentTarget.delete(indexItem)
+							setParentTarget.insert(indexTarget, item)
 							hasChange = true
 						} else if (indexItem < indexTarget) {
-							setParent.delete(indexItem)
-							setParent.insert(indexTarget - 1, item)
+							setParentTarget.delete(indexItem)
+							setParentTarget.insert(indexTarget - 1, item)
 							hasChange = true
 						}
 					}
-				} else if (target.parent === undefined) {
-					const indexTarget = this.indexOf(target);
-					if (item.parent) {
-						item.parent.subs.fastDelete(item)
-					} else {
-						this.fastDelete(item)
+				} else if (setParentTarget !== undefined && setParentItem !== undefined) {
+					const indexTarget = setParentTarget.indexOf(target);
+					setParentItem.fastDelete(item);
+					setParentTarget.insert(indexTarget, item);
+					item.parent = target.parent;
+					if (setParentTarget === this && target.path) {
+						item.path = target.path;
 					}
-					this.insert(indexTarget, item)
-					hasChange = true
-				} else if (target.parent !== undefined) {
-					const indexTarget = target.parent.subs.indexOf(target);
-					if (item.parent) {
-						item.parent.subs.fastDelete(item)
-					} else {
-						this.fastDelete(item)
-					}
-					target.parent.subs.insert(indexTarget, item)
-					hasChange = true
+					hasChange = true;
 				}
 			}
 		}
