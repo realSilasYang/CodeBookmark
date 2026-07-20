@@ -1,0 +1,9 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Minimalist Flat Band-Aid / Patch -->
+<rect x="24" y="52" width="80" height="24" rx="12" transform="rotate(-45 64 64)" fill="#FFD43B"/>
+<rect x="48" y="48" width="32" height="32" rx="4" transform="rotate(-45 64 64)" fill="#F59F00"/>
+<circle cx="56" cy="64" r="3" fill="#FFFFFF"/>
+<circle cx="72" cy="64" r="3" fill="#FFFFFF"/>
+<circle cx="64" cy="56" r="3" fill="#FFFFFF"/>
+<circle cx="64" cy="72" r="3" fill="#FFFFFF"/>
+</svg>

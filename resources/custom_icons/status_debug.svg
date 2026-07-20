@@ -1,0 +1,18 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Bug Base -->
+<path d="M60 28C46.66 28 40 38 40 54.67V74.67C40 91.33 46.66 101.33 60 101.33C73.33 101.33 80 91.33 80 74.67V54.67C80 38 73.33 28 60 28Z" fill="#F08C00"/>
+<path d="M40 54.67H80" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+<path d="M40 74.67H80" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+<path d="M60 28V101.33" stroke="#FFFFFF" stroke-width="6"/>
+<circle cx="50" cy="41.33" r="3.33" fill="#FFFFFF"/>
+<circle cx="70" cy="41.33" r="3.33" fill="#FFFFFF"/>
+<path d="M31.67 44.67L40 48" stroke="#F08C00" stroke-width="6" stroke-linecap="round"/>
+<path d="M88.33 44.67L80 48" stroke="#F08C00" stroke-width="6" stroke-linecap="round"/>
+<path d="M28.33 63H40" stroke="#F08C00" stroke-width="6" stroke-linecap="round"/>
+<path d="M91.67 63H80" stroke="#F08C00" stroke-width="6" stroke-linecap="round"/>
+<path d="M31.67 81.33L40 78" stroke="#F08C00" stroke-width="6" stroke-linecap="round"/>
+<path d="M88.33 81.33L80 78" stroke="#F08C00" stroke-width="6" stroke-linecap="round"/>
+<!-- Play/Debug Icon Overlay -->
+<circle cx="88" cy="88" r="28" fill="#51CF66" stroke="#FFFFFF" stroke-width="6"/>
+<path d="M78 74L104 88L78 102V74Z" fill="#FFFFFF"/>
+</svg>

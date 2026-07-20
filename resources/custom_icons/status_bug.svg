@@ -1,0 +1,17 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Minimalist Flat Code Bug -->
+<path d="M64 24C48 24 40 36 40 56V80C40 100 48 112 64 112C80 112 88 100 88 80V56C88 36 80 24 64 24Z" fill="#F03E3E"/>
+<path d="M40 56H88" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+<path d="M40 80H88" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+<path d="M64 24V112" stroke="#FFFFFF" stroke-width="8"/>
+<circle cx="52" cy="40" r="4" fill="#FFFFFF"/>
+<circle cx="76" cy="40" r="4" fill="#FFFFFF"/>
+<path d="M30 46L40 50" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+<path d="M98 46L88 50" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+<path d="M26 68H40" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+<path d="M102 68H88" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+<path d="M30 90L40 86" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+<path d="M98 90L88 86" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+<path d="M52 16L56 24" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+<path d="M76 16L72 24" stroke="#F03E3E" stroke-width="8" stroke-linecap="round"/>
+</svg>

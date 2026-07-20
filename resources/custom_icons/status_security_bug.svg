@@ -1,0 +1,9 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Security Bug / Vulnerability -->
+<path d="M64 16L24 32V64C24 88 40 108 64 116C88 108 104 88 104 64V32L64 16Z" fill="#4C6EF5"/>
+<!-- Small Bug Inside -->
+<path d="M64 48C56 48 52 54 52 64V76C52 86 56 92 64 92C72 92 76 86 76 76V64C76 54 72 48 64 48Z" fill="#FFFFFF"/>
+<path d="M52 64H76" stroke="#4C6EF5" stroke-width="4" stroke-linecap="round"/>
+<path d="M52 76H76" stroke="#4C6EF5" stroke-width="4" stroke-linecap="round"/>
+<path d="M64 48V92" stroke="#4C6EF5" stroke-width="4"/>
+</svg>
