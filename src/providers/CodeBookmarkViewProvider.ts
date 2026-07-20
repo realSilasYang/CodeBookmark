@@ -800,7 +800,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				statusDisposable = vscode.window.setStatusBarMessage('AI: 正在应用优化后的标签...');
 
 				let fileHasChanges = false;
-				undoManager.saveState(this.codeBookmarks, 'edit');
+				undoManager.saveState(this.codeBookmarks, 'ai-optimize');
 
 				for (const opt of optimizedList) {
 					if (opt.id && opt.new_label) {
@@ -1086,7 +1086,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			}
 
 			if (changedPaths.length > 0) {
-				undoManager.saveState(this.codeBookmarks, 'edit');
+				undoManager.saveState(this.codeBookmarks, 'ai-optimize');
 				this.saveBookmarksToFile(changedPaths);
 				this._onDidChangeTreeData.fire();
 				this.refreshDecoration();
@@ -1133,7 +1133,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			groupedByPath.get(filePath)!.push(bm);
 		}
 
-		undoManager.saveState(this.codeBookmarks, 'edit');
+		undoManager.saveState(this.codeBookmarks, 'ai-optimize');
 		let totalOptimizedCount = 0;
 		const changedPaths: string[] = [];
 
@@ -1180,7 +1180,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 							}
 							
 							if (count > 0) {
-								undoManager.saveState(this.codeBookmarks, 'edit');
+								undoManager.saveState(this.codeBookmarks, 'ai-optimize');
 								this.saveBookmarksToFile([filePath]);
 								this.refreshDecoration();
 								this.refresh();
@@ -1213,9 +1213,16 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			this.isExpanded = false;
 		} else {
 			const roots = await this.getChildren();
-			for (const r of roots) {
-				try { await this.treeView?.reveal(r, { expand: true }); } catch (e) {}
-			}
+			const expandRecursive = async (items: any[]) => {
+				for (const item of items) {
+					try { await this.treeView?.reveal(item, { expand: true, select: false, focus: false }); } catch (e) {}
+					const children = await this.getChildren(item);
+					if (children.length > 0) {
+						await expandRecursive(children);
+					}
+				}
+			};
+			await expandRecursive(roots);
 			this.isExpanded = true;
 		}
 		vscode.commands.executeCommand('setContext', 'codebookmark.var.isExpanded', this.isExpanded);
