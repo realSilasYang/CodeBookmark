@@ -75,7 +75,7 @@ export async function runImportBookmarkConfiguration(port: BookmarkImportWorkflo
 	try {
 		selectedStat = await fs.promises.stat(selected[0].fsPath)
 	} catch (error) {
-		throw new Error(`无法读取所选配置路径：${errorMessage(error)}`)
+		throw new Error(`无法读取所选配置路径：${errorMessage(error)}`, { cause: error })
 	}
 	const scopeUri = editor?.document.uri ?? workspaceFolder?.uri
 	if (selectedStat.isDirectory()) {

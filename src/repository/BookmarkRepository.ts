@@ -618,13 +618,12 @@ class CodeBookmarksRepository {
 		const scored: Array<{ path: string, score: number, anchorMatches: number, baseNameMatches: boolean }> = []
 		for (const candidate of orderedCandidates) {
 			throwIfReadCancelled(signal)
-			let anchorMatches = 0
 			const baseNameMatches = candidate.baseNameKey === expectedBaseNameKey
 			if (anchors.length > 0 && candidate.stat.size <= 16 * 1024 * 1024) {
 				const content = await this.candidateContent(candidates, candidate.path)
 				throwIfReadCancelled(signal)
 				if (content === undefined) continue
-				anchorMatches = anchors.filter(anchor => content.includes(anchor)).length
+				const anchorMatches = anchors.filter(anchor => content.includes(anchor)).length
 				if (anchorMatches > 0) {
 					const ratioScore = Math.round(anchorMatches / anchors.length * 40)
 					const nameScore = baseNameMatches ? 15 : 0
@@ -1190,7 +1189,7 @@ class CodeBookmarksRepository {
 
 	private async performFileRename(record: ScriptRelocationRecord, storageRoot: string): Promise<void> {
 		await this.rebuildIndex(storageRoot)
-		let destinationIsDirectory = false
+		let destinationIsDirectory: boolean
 		try {
 			destinationIsDirectory = (await fs.promises.stat(record.newAbsolutePath)).isDirectory()
 		} catch {
