@@ -1,4 +1,4 @@
-name: Release VSIX
+name: Release Extension
 
 on:
   push:
@@ -8,9 +8,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
-    name: Test, package, and publish GitHub release
+    name: Test, publish Marketplace, and create GitHub release
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
@@ -22,10 +26,11 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: npm run test:integration
-      - name: Validate confirmed Marketplace publisher
+      - name: Validate Marketplace publishing configuration
         shell: pwsh
         env:
           CONFIRMED_PUBLISHER: ${{ vars.VSCODE_MARKETPLACE_PUBLISHER }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CONFIRMED_PUBLISHER)) {
             throw "Set the VSCODE_MARKETPLACE_PUBLISHER repository variable after registering the immutable Publisher ID."
@@ -33,6 +38,9 @@ jobs:
           $manifestPublisher = node -p "require('./package.json').publisher"
           if ($env:CONFIRMED_PUBLISHER -cne $manifestPublisher) {
             throw "Confirmed publisher '$env:CONFIRMED_PUBLISHER' does not match package publisher '$manifestPublisher'."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:VSCE_PAT)) {
+            throw "Set the VSCE_PAT repository secret before publishing a release tag."
           }
       - name: Validate tag and build VSIX
         shell: pwsh
@@ -42,13 +50,50 @@ jobs:
             throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
           }
           npm run package:vsix -- --out "codebookmark-$version.vsix"
-      - name: Create GitHub release
+      - name: Publish to VS Code Marketplace
+        shell: pwsh
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          npx --yes @vscode/vsce@3.9.2 publish `
+            --packagePath "codebookmark-$version.vsix" `
+            --skip-duplicate
+      - name: Verify Marketplace package matches VSIX
+        shell: pwsh
+        run: |
+          $publisher = node -p "require('./package.json').publisher"
+          $name = node -p "require('./package.json').name"
+          $version = node -p "require('./package.json').version"
+          $localVsix = "codebookmark-$version.vsix"
+          $marketplaceVsix = Join-Path $env:RUNNER_TEMP "marketplace-$version.vsix"
+          $downloadUri = "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/$publisher/vsextensions/$name/$version/vspackage"
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            try {
+              Invoke-WebRequest -Uri $downloadUri -OutFile $marketplaceVsix -ErrorAction Stop
+              break
+            } catch {
+              if ($attempt -eq 6) { throw }
+              Start-Sleep -Seconds 10
+            }
+          }
+          $localHash = (Get-FileHash -Algorithm SHA256 $localVsix).Hash
+          $marketplaceHash = (Get-FileHash -Algorithm SHA256 $marketplaceVsix).Hash
+          if ($localHash -cne $marketplaceHash) {
+            throw "Marketplace package hash does not match the VSIX built from tag $env:GITHUB_REF_NAME."
+          }
+      - name: Create or update GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = node -p "require('./package.json').version"
-          gh release create $env:GITHUB_REF_NAME "codebookmark-$version.vsix" `
-            --verify-tag `
-            --title "CodeBookmark $version" `
-            --generate-notes
+          $vsix = "codebookmark-$version.vsix"
+          if (gh release view $env:GITHUB_REF_NAME --json tagName 2>$null) {
+            gh release upload $env:GITHUB_REF_NAME $vsix --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME $vsix `
+              --verify-tag `
+              --title "CodeBookmark $version" `
+              --generate-notes
+          }

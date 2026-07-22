@@ -146,7 +146,27 @@ assert.match(releaseWorkflow, /tags:[\s\S]*- v\*/)
 assert.match(releaseWorkflow, /GITHUB_REF_NAME/)
 assert.match(releaseWorkflow, /VSCODE_MARKETPLACE_PUBLISHER/)
 assert.match(releaseWorkflow, /CONFIRMED_PUBLISHER/)
+assert.match(releaseWorkflow, /VSCE_PAT: \$\{\{ secrets\.VSCE_PAT \}\}/)
 assert.match(releaseWorkflow, /npm run test:integration/)
+assert.match(releaseWorkflow, /@vscode\/vsce@3\.9\.2 publish/)
+assert.match(releaseWorkflow, /--packagePath/)
+assert.match(releaseWorkflow, /--skip-duplicate/)
+assert.doesNotMatch(releaseWorkflow, /--pat\b/)
+assert.match(releaseWorkflow, /_apis\/public\/gallery\/publishers/)
+assert.match(releaseWorkflow, /Get-FileHash -Algorithm SHA256/)
 assert.match(releaseWorkflow, /gh release create/)
+assert.match(releaseWorkflow, /gh release upload/)
+assert.match(releaseWorkflow, /group: release/)
+const publishStep = releaseWorkflow.indexOf('Publish to VS Code Marketplace')
+const verifyStep = releaseWorkflow.indexOf('Verify Marketplace package matches VSIX')
+const createReleaseStep = releaseWorkflow.indexOf('Create or update GitHub release')
+assert.ok(
+  publishStep !== -1 && createReleaseStep !== -1 && publishStep < createReleaseStep,
+  'Marketplace publication must complete before the GitHub release is created'
+)
+assert.ok(
+  verifyStep !== -1 && createReleaseStep !== -1 && verifyStep < createReleaseStep,
+  'Marketplace package verification must complete before the GitHub release is created'
+)
 
 console.log('Release readiness contract verified.')
