@@ -27,6 +27,8 @@ assert.ok(manifest.keywords.length <= 30)
 assert.deepEqual(manifest.dependencies, {})
 assert.equal(lockfile.version, manifest.version)
 assert.equal(lockfile.packages[''].version, manifest.version)
+assert.deepEqual(manifest.dependencies, lockfile.packages[''].dependencies ?? {})
+assert.deepEqual(manifest.devDependencies, lockfile.packages[''].devDependencies ?? {})
 
 assert.deepEqual(manifest.files, [
   'out/**/*.js',

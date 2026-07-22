@@ -11,9 +11,12 @@ const commands = Commands_1.Commands
 const colors = Colors_1.Colors
 
 const basePackageJson = basePackageJsonFile.basePackage;
+const currentPackageJson = JSON.parse(fs.readFileSync(customPackageJsonPath, 'utf8'));
 
 const customPackageJson = {
   ...basePackageJson,
+  devDependencies: currentPackageJson.devDependencies ?? {},
+  dependencies: currentPackageJson.dependencies ?? {},
   contributes: {
     ...basePackageJson.contributes,
     viewsContainers: {

@@ -58,16 +58,5 @@ export const basePackage = {
 		"package:list": "npx --yes @vscode/vsce@3.9.2 ls --no-dependencies",
 		"package:vsix": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
 		"check:release": "npm run verify && npm run test:integration && npm audit --audit-level=high && npm run package:list"
-	},
-	"devDependencies": {
-		"@eslint/js": "^9.10.0",
-		"@types/node": "^26.1.1",
-		"@types/vscode": "^1.125.0",
-		"@vscode/test-electron": "^3.0.0",
-		"eslint": "^10.7.0",
-		"globals": "^15.11.0",
-		"typescript": "~6.0.0",
-		"typescript-eslint": "^8.64.0"
-	},
-	"dependencies": {}
+	}
 }
