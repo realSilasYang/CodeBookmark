@@ -2,6 +2,12 @@ name: Resolve Marketplace Identity
 
 on:
   workflow_dispatch:
+    inputs:
+      verify_marketplace_access:
+        description: Verify that the managed identity can publish for the configured Publisher
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -55,3 +61,13 @@ jobs:
             ''
             ('`{0}`' -f $profile.id)
           ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+      - name: Verify Marketplace publishing permission
+        if: ${{ inputs.verify_marketplace_access }}
+        shell: pwsh
+        env:
+          PUBLISHER: ${{ vars.VSCODE_MARKETPLACE_PUBLISHER }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PUBLISHER)) {
+            throw 'Set the VSCODE_MARKETPLACE_PUBLISHER repository variable before verifying Marketplace access.'
+          }
+          npx --yes @vscode/vsce@3.9.2 verify-pat --azure-credential $env:PUBLISHER

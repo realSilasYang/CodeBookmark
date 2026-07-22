@@ -175,13 +175,20 @@ const marketplaceIdentityWorkflow = read(
   path.join('.github', 'workflows', 'marketplace-identity.yml')
 )
 assert.match(marketplaceIdentityWorkflow, /workflow_dispatch:/)
+assert.match(marketplaceIdentityWorkflow, /verify_marketplace_access:/)
 assert.match(marketplaceIdentityWorkflow, /environment: marketplace-release/)
 assert.match(marketplaceIdentityWorkflow, /id-token: write/)
 assert.match(marketplaceIdentityWorkflow, /uses: azure\/login@v2/)
 assert.match(marketplaceIdentityWorkflow, /app\.vssps\.visualstudio\.com\/_apis\/profile\/profiles\/me/)
 assert.match(marketplaceIdentityWorkflow, /499b84ac-1321-427f-aa17-267ca6975798/)
 assert.match(marketplaceIdentityWorkflow, /GITHUB_STEP_SUMMARY/)
+assert.match(marketplaceIdentityWorkflow, /@vscode\/vsce@3\.9\.2 verify-pat --azure-credential/)
+assert.match(marketplaceIdentityWorkflow, /VSCODE_MARKETPLACE_PUBLISHER/)
 assert.doesNotMatch(marketplaceIdentityWorkflow, /VSCE_PAT|secrets\.|--pat\b/)
+assert.match(
+  read(path.join('docs', 'RELEASING.md')),
+  /repo:realSilasYang@64590265\/CodeBookmark@1308408396:environment:marketplace-release/
+)
 assert.match(releaseWorkflow, /tags:[\s\S]*- v\*/)
 assert.match(releaseWorkflow, /GITHUB_REF_NAME/)
 assert.match(releaseWorkflow, /VSCODE_MARKETPLACE_PUBLISHER/)
