@@ -15,6 +15,7 @@
 
   <p>
     <a href="https://marketplace.visualstudio.com/items?itemName=realSilasYang.codebookmark">扩展市场</a> ·
+    <a href="#界面概览">界面概览</a> ·
     <a href="#用户使用指南">用户指南</a> ·
     <a href="https://github.com/realSilasYang/CodeBookmark/releases">版本发布</a> ·
     <a href="https://github.com/realSilasYang/CodeBookmark/issues/new/choose">问题反馈</a>
@@ -22,6 +23,12 @@
 </div>
 
 代码书签（CodeBookmark）是一个面向源码导航的 VS Code 扩展：它把普通书签组织成可拖拽的层级树，在文件移动或改名后自动恢复绑定，并提供自动代码标记、导入导出、撤销重做、图标和 AI 辅助。
+
+# 界面概览
+
+[![代码书签界面概览](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
+
+左侧“代码书签”面板按文件和父子层级集中展示书签，语义图标帮助快速识别代码作用；点击任意书签，即可在右侧编辑器中定位对应的代码位置。
 
 ---
 **[用户使用指南](#用户使用指南)**<br>
@@ -49,7 +56,7 @@
 从 GitHub Releases 下载发布的 `.vsix` 文件，在 VS Code 中执行“扩展：从 VSIX 安装…”，或在终端运行：
 
 ```bash
-code --install-extension codebookmark-1.0.0.vsix
+code --install-extension codebookmark-1.0.1.vsix
 ```
 
 ### 🧑‍💻 从源码运行
@@ -289,6 +296,7 @@ CodeBookmark/
 │  ├─ SECURITY.md                   漏洞报告策略
 │  └─ SUPPORT.md                    使用支持与问题分类
 ├─ docs/
+│  ├─ images/                       README 界面截图
 │  └─ RELEASING.md                  维护者发布指南
 ├─ src/
 │  ├─ extension.ts                  扩展同步激活入口
