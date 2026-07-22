@@ -2,7 +2,7 @@ export const basePackage = {
 	"name": "codebookmark",
 	"displayName": "CodeBookmark",
 	"description": "为源码位置创建分层书签，并提供导航、排序、拖拽、撤销和 AI 辅助。",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"publisher": "realSilasYang",
 	"author": "阳熙来",
 	"private": true,

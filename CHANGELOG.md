@@ -2,6 +2,19 @@
 
 本项目的显著变化记录在此文件中，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.0.1 - 2026-07-22
+
+### Changed
+
+- README 增加界面概览截图，并完善安装入口、项目说明、Issue 模板和维护文档。
+- 升级开发依赖与 TypeScript 类型库基线，适配更严格的静态检查。
+- Marketplace 发布改用 GitHub OIDC 与 Microsoft Entra ID 短期令牌，并与 GitHub Release 共用同一份经过哈希核对的 VSIX。
+
+### Fixed
+
+- 修复重新生成扩展清单时可能丢失 `dependencies` 与 `devDependencies` 的问题。
+- 书签配置导入读取失败时保留底层文件系统错误原因，便于定位异常。
+
 ## 1.0.0 - 2026-07-21
 
 ### Added
