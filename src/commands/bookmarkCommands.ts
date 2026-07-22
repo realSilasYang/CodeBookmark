@@ -1,4 +1,3 @@
-
 import * as vscode from 'vscode'
 import { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
 import { Commands } from '../util/constants/Commands'
@@ -6,267 +5,152 @@ import { Bookmark } from '../models/Bookmark'
 import { ExtensionConfig } from '../config/ExtensionConfig'
 import { AIService } from '../util/AIService'
 
-
-export function bookmarkCommands(context: vscode.ExtensionContext,
+export function bookmarkCommands(
+	context: vscode.ExtensionContext,
 	provider: CodeBookmarksViewProvider,
 ) {
+	const register = <T extends unknown[]>(command: string, handler: (...args: T) => unknown) => {
+		context.subscriptions.push(vscode.commands.registerCommand(command, handler))
+	}
 
-	const toggleBookmark = vscode.commands.registerCommand(Commands.bookmarkCommands.toggleBookmark.command,
-		() => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			const editor = vscode.window.activeTextEditor
-			if (!editor) {
-				return
-			}
-			provider.toggleBookmark(editor)
-		})
+	const requireStorage = <T extends unknown[]>(handler: (...args: T) => unknown) => (...args: T) => {
+		if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return
+		return handler(...args)
+	}
 
-	const forceAddBookmark = vscode.commands.registerCommand(Commands.bookmarkCommands.forceAddBookmark.command,
-		() => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			const editor = vscode.window.activeTextEditor
-			if (!editor) {
-				return
-			}
-			provider.forceAddBookmark(editor)
-		})
-
-	const forceDeleteBookmark = vscode.commands.registerCommand(Commands.bookmarkCommands.forceDeleteBookmark.command,
-		() => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			const editor = vscode.window.activeTextEditor
-			if (!editor) {
-				return
-			}
-			provider.forceDeleteBookmark(editor)
-		})
-
-
-	const deleteButton = vscode.commands.registerCommand(Commands.bookmarkCommands.deleteBookmark.command,
-		(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.onDeleteBookmark(bookmark, selectedBookmarks)
-		})
-
-	const editBookmark_editLabel = vscode.commands.registerCommand(Commands.bookmarkCommands.editBookmark_editLabel.command,
-		(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.editBookmark_editLabel(bookmark, selectedBookmarks)
-		})
-
-	const editBookmark_updatePosOnly = vscode.commands.registerCommand(Commands.bookmarkCommands.editBookmark_updatePosOnly.command,
-		(bookmark: Bookmark) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.editBookmark_updatePosOnly(bookmark)
-		})
-
-	const editBookmark_updatePosAndRename = vscode.commands.registerCommand(Commands.bookmarkCommands.editBookmark_updatePosAndRename.command,
-		(bookmark: Bookmark) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.editBookmark_updatePosAndRename(bookmark)
-		})
-
-	const editBookmark_changeIcon = vscode.commands.registerCommand(Commands.bookmarkCommands.editBookmark_changeIcon.command,
-		(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.editBookmark_changeIcon(bookmark, selectedBookmarks)
-		})
-
-	const editBookmark_restoreDefaultIcon = vscode.commands.registerCommand(Commands.bookmarkCommands.editBookmark_restoreDefaultIcon.command,
-		(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.editBookmark_restoreDefaultIcon(bookmark, selectedBookmarks)
-		})
-
-	const renameBookmarkCommand = vscode.commands.registerCommand(Commands.bookmarkCommands.renameBookmark.command,
-		(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.onRenameBookmark(bookmark, selectedBookmarks)
-		})
-
-	const pinViewButton = vscode.commands.registerCommand(Commands.bookmarkCommands.pinView.command,
-		(bookmark: Bookmark) => {
-			provider.onClickPinView(bookmark)
-		})
-
-	const unpinViewButton = vscode.commands.registerCommand('codebookmark.unpinView',
-		(bookmark: Bookmark) => {
-			provider.onClickPinView(bookmark)
-		})
-
-	const moveUpLevel = vscode.commands.registerCommand('codebookmark.moveUpLevel',
-		(bookmark: Bookmark) => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.onMoveUpLevel(bookmark)
-		})
-
-	const openSettings = vscode.commands.registerCommand('codebookmark.openSettings',
-		() => {
-			vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark')
-		})
-
-	const searchInFile = vscode.commands.registerCommand('codebookmark.bookmark.searchInFile',
-		() => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.onSearchInFile()
-		})
-
-	const sortMode = vscode.commands.registerCommand('codebookmark.bookmark.sort',
-		() => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.onSort()
-		})
-
-	const actions = ['', '.drag', '.add', '.delete', '.sync', '.rename', '.icon', '.move', '.status', '.ai', '.ai-optimize'];
-	
-	const undoCommands = actions.map(action => 
-		vscode.commands.registerCommand(`codebookmark.undo${action}`, () => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.undo();
-		})
-	);
-
-	const redoCommands = actions.map(action => 
-		vscode.commands.registerCommand(`codebookmark.redo${action}`, () => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.redo();
-		})
-	);
-
-	const checkAIPrerequisites = (): vscode.TextEditor | undefined => {
-		if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return undefined;
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) {
-			vscode.window.showInformationMessage('未打开任何文件，无法进行 AI 分析。');
-			return undefined;
+	const withEditor = (handler: (editor: vscode.TextEditor) => unknown) => requireStorage(async () => {
+		const editor = vscode.window.activeTextEditor
+		if (editor?.document.uri.scheme === 'file') {
+			await provider.ensureEditorScope(editor)
+			return handler(editor)
 		}
-		if (!ExtensionConfig.aiApiKey || !ExtensionConfig.aiEndpoint || !ExtensionConfig.aiModel) {
-			vscode.window.showErrorMessage('尚未完整配置 AI 相关信息 （Endpoint， Model， API Key）。请先在设置中填写。');
-			vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.ai');
-			return undefined;
-		}
-		return editor;
-	};
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiGenerateAppend.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.generateBookmarksWithAI(editor, 'append');
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiGenerateOverwrite.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.generateBookmarksWithAI(editor, 'overwrite');
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiGenerateSkip.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.generateBookmarksWithAI(editor, 'skip_existing');
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiGenerateAppendFolder.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.generateBookmarksForFolderWithAI(editor, 'append');
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiGenerateOverwriteFolder.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.generateBookmarksForFolderWithAI(editor, 'overwrite');
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiGenerateSkipFolder.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.generateBookmarksForFolderWithAI(editor, 'skip_existing');
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiOptimize.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.optimizeBookmarksWithAI(editor);
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiOptimizeFolder.command,
-		async () => {
-			const editor = checkAIPrerequisites();
-			if (editor) await provider.optimizeBookmarksForFolderWithAI(editor);
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiOptimizeSelected.command,
-		async () => {
-			await provider.optimizeSelectedBookmarksWithAI();
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiOptimizeContextItem.command,
-		async (bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => {
-			await provider.optimizeSelectedBookmarksWithAI(bookmark, selectedBookmarks);
-		}));
-
-	context.subscriptions.push(vscode.commands.registerCommand(Commands.bookmarkCommands.aiTestConnection.command,
-		async () => {
-			if (!ExtensionConfig.aiApiKey || !ExtensionConfig.aiEndpoint || !ExtensionConfig.aiModel) {
-				vscode.window.showErrorMessage('尚未完整配置 AI 相关信息 （Endpoint， Model， API Key）。请先在设置中填写。');
-				vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.ai');
-				return;
-			}
-			vscode.window.showInformationMessage('正在测试 AI 连接，请稍候。。。');
-			try {
-				await AIService.testConnection();
-				vscode.window.showInformationMessage('AI 连接测试成功！');
-			} catch (err: any) {
-				vscode.window.showErrorMessage(`AI 连接测试失败： ${err.message}`);
-			}
-		}));
-
-	const toggleExpandCollapse = vscode.commands.registerCommand('codebookmark.toggleExpandCollapse',
-		() => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.toggleExpandCollapse();
-		})
-
-	const collapseToLevel = vscode.commands.registerCommand('codebookmark.collapseToLevel',
-		() => {
-			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-			provider.toggleExpandCollapse();
-		})
-
-	const openHelp = vscode.commands.registerCommand('codebookmark.openHelp', () => {
-		const uri = vscode.Uri.joinPath(context.extensionUri, 'README.md');
-		vscode.commands.executeCommand('markdown.showPreview', uri);
+		void vscode.window.showInformationMessage('请先打开一个本地文件。')
 	})
 
-	const clearInvalid = vscode.commands.registerCommand('codebookmark.clearInvalidBookmarks', () => {
-		if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return;
-		provider.clearInvalidBookmarks();
-	});
+	const checkAIPrerequisites = async (): Promise<vscode.TextEditor | undefined> => {
+		if (!ExtensionConfig.ensureAIConfigured()) return undefined
+		if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return undefined
+		const editor = vscode.window.activeTextEditor
+		if (!editor || editor.document.uri.scheme !== 'file') {
+			vscode.window.showInformationMessage('未打开任何文件，无法进行 AI 分析。')
+			return undefined
+		}
+		return editor
+	}
 
-	context.subscriptions.push(
-		toggleBookmark,
-		forceAddBookmark,
-		forceDeleteBookmark,
-		openSettings,
-		openHelp,
+	const withAIEditor = async (handler: (editor: vscode.TextEditor) => Promise<unknown>) => {
+		try {
+			const editor = await checkAIPrerequisites()
+			if (!editor) return
+			await provider.ensureEditorScope(editor)
+			await handler(editor)
+		} catch (error) {
+			vscode.window.showErrorMessage(`AI 操作失败：${error instanceof Error ? error.message : String(error)}`)
+		}
+	}
 
-		pinViewButton,
-		unpinViewButton,
-		editBookmark_editLabel,
-		editBookmark_updatePosOnly,
-		editBookmark_updatePosAndRename,
-		editBookmark_changeIcon,
-		editBookmark_restoreDefaultIcon,
-		renameBookmarkCommand,
-		deleteButton,
-		moveUpLevel,
-		searchInFile,
-		sortMode,
-		toggleExpandCollapse,
-		collapseToLevel,
-		clearInvalid,
-		...undoCommands,
-		...redoCommands,
-	)
+	const withAIConfiguration = async (handler: () => Promise<unknown>) => {
+		try {
+			if (!ExtensionConfig.ensureAIConfigured()) return
+			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return
+			await handler()
+		} catch (error) {
+			vscode.window.showErrorMessage(`AI 操作失败：${error instanceof Error ? error.message : String(error)}`)
+		}
+	}
+
+	register(Commands.bookmarkCommands.toggleBookmark.command, withEditor(editor => provider.toggleBookmark(editor)))
+	register(Commands.bookmarkCommands.forceAddBookmark.command, withEditor(editor => provider.forceAddBookmark(editor)))
+	register(Commands.bookmarkCommands.forceDeleteBookmark.command, withEditor(editor => provider.forceDeleteBookmark(editor)))
+
+	register(Commands.bookmarkCommands.deleteBookmark.command,
+		requireStorage((bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => provider.onDeleteBookmark(bookmark, selectedBookmarks)))
+	register(Commands.bookmarkCommands.editBookmark_editLabel.command,
+		requireStorage((bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => provider.editBookmark_editLabel(bookmark, selectedBookmarks)))
+	register(Commands.bookmarkCommands.editBookmark_updatePosOnly.command,
+		requireStorage((bookmark: Bookmark) => provider.editBookmark_updatePosOnly(bookmark)))
+	register(Commands.bookmarkCommands.editBookmark_updatePosAndRename.command,
+		requireStorage((bookmark: Bookmark) => provider.editBookmark_updatePosAndRename(bookmark)))
+	register(Commands.bookmarkCommands.editBookmark_changeIcon.command,
+		requireStorage((bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => provider.editBookmark_changeIcon(bookmark, selectedBookmarks)))
+	register(Commands.bookmarkCommands.editBookmark_restoreDefaultIcon.command,
+		requireStorage((bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => provider.editBookmark_restoreDefaultIcon(bookmark, selectedBookmarks)))
+	register(Commands.bookmarkCommands.renameBookmark.command,
+		requireStorage((bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => provider.onRenameBookmark(bookmark, selectedBookmarks)))
+
+	register(Commands.bookmarkCommands.pinView.command, requireStorage((bookmark: Bookmark) => provider.onClickPinView(bookmark)))
+	register(Commands.bookmarkCommands.unpinView.command, requireStorage((bookmark: Bookmark) => provider.onClickPinView(bookmark)))
+	register(Commands.bookmarkCommands.openSettings.command,
+		() => vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark'))
+	register(Commands.bookmarkCommands.aiOpenSettings.command,
+		() => vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.AI'))
+	register(Commands.bookmarkCommands.importBookmarkConfig.command,
+		requireStorage(async () => {
+			try {
+				await provider.importBookmarkConfiguration()
+			} catch (error) {
+				vscode.window.showErrorMessage(`导入书签配置失败：${error instanceof Error ? error.message : String(error)}`)
+			}
+		}))
+	register(Commands.bookmarkCommands.searchInFile.command, withEditor(() => provider.onSearchInFile()))
+	register(Commands.bookmarkCommands.sort.command, requireStorage(() => provider.onSort()))
+	register(Commands.bookmarkCommands.undo.command, requireStorage(() => provider.undo()))
+	register(Commands.bookmarkCommands.redo.command, requireStorage(() => provider.redo()))
+	for (const command of Commands.undoCommands) register(command.command, requireStorage(() => provider.undo()))
+	for (const command of Commands.redoCommands) register(command.command, requireStorage(() => provider.redo()))
+
+	register(Commands.bookmarkCommands.aiGenerateAppend.command,
+		() => withAIEditor(editor => provider.generateBookmarksWithAI(editor, 'append')))
+	register(Commands.bookmarkCommands.aiGenerateOverwrite.command,
+		() => withAIEditor(editor => provider.generateBookmarksWithAI(editor, 'overwrite')))
+	register(Commands.bookmarkCommands.aiGenerateSkip.command,
+		() => withAIEditor(editor => provider.generateBookmarksWithAI(editor, 'skip_existing')))
+	register(Commands.bookmarkCommands.aiGenerateAppendFolder.command,
+		() => withAIConfiguration(() => provider.generateBookmarksForFolderWithAI('append')))
+	register(Commands.bookmarkCommands.aiGenerateOverwriteFolder.command,
+		() => withAIConfiguration(() => provider.generateBookmarksForFolderWithAI('overwrite')))
+	register(Commands.bookmarkCommands.aiGenerateAppendFolderDirect.command,
+		() => withAIConfiguration(() => provider.generateBookmarksForFolderWithAI('append')))
+	register(Commands.bookmarkCommands.aiGenerateOverwriteFolderDirect.command,
+		() => withAIConfiguration(() => provider.generateBookmarksForFolderWithAI('overwrite')))
+	register(Commands.bookmarkCommands.aiGenerateSkipFolder.command,
+		() => withAIConfiguration(() => provider.generateBookmarksForFolderWithAI('skip_existing')))
+	register(Commands.bookmarkCommands.aiGenerateSkipFolderDirect.command,
+		() => withAIConfiguration(() => provider.generateBookmarksForFolderWithAI('skip_existing')))
+	register(Commands.bookmarkCommands.aiOptimize.command,
+		() => withAIEditor(editor => provider.optimizeBookmarksWithAI(editor)))
+	register(Commands.bookmarkCommands.aiOptimizeDirect.command,
+		() => withAIEditor(editor => provider.optimizeBookmarksWithAI(editor)))
+	register(Commands.bookmarkCommands.aiOptimizeFolderDirect.command,
+		() => withAIConfiguration(() => provider.optimizeBookmarksForFolderWithAI()))
+	register(Commands.bookmarkCommands.aiOptimizeSelectedDirect.command,
+		() => withAIConfiguration(() => provider.optimizeSelectedBookmarksWithAI()))
+	register(Commands.bookmarkCommands.aiOptimizeFolder.command,
+		() => withAIConfiguration(() => provider.optimizeBookmarksForFolderWithAI()))
+	register(Commands.bookmarkCommands.aiOptimizeSelected.command,
+		() => withAIConfiguration(() => provider.optimizeSelectedBookmarksWithAI()))
+	register(Commands.bookmarkCommands.aiOptimizeContextItem.command,
+		(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => withAIConfiguration(() => provider.optimizeSelectedBookmarksWithAI(bookmark, selectedBookmarks)))
+	register(Commands.bookmarkCommands.aiTestConnection.command, async () => {
+		try {
+			if (!ExtensionConfig.ensureAIConfigured()) return
+			void vscode.window.showInformationMessage('正在测试 AI 连接，请稍候…')
+			await AIService.testConnection()
+			vscode.window.showInformationMessage('AI 连接测试成功！')
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			vscode.window.showErrorMessage(`AI 连接测试失败： ${message}`)
+		}
+	})
+
+	register(Commands.bookmarkCommands.toggleExpandCollapse.command,
+		requireStorage(() => provider.toggleExpandCollapse()))
+	register(Commands.bookmarkCommands.toggleExpandCollapse_collapse.command,
+		requireStorage(() => provider.toggleExpandCollapse()))
+	register(Commands.bookmarkCommands.openHelp.command, () => {
+		const uri = vscode.Uri.joinPath(context.extensionUri, 'README.md')
+		return vscode.commands.executeCommand('markdown.showPreview', uri)
+	})
+	register(Commands.bookmarkCommands.clearInvalidBookmarks.command,
+		requireStorage(() => provider.clearInvalidBookmarks()))
 }

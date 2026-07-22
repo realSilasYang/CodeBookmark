@@ -6,13 +6,24 @@ out/
 
 # Node
 node_modules/
+.vscode-test/
 
 # History / debug / temp scratch files
 .history/
-getChildren_debug.json
-log.txt
-fix.js
-fix-tooltip.js
-update_provider.js
-update_repo.js
-implementation_plan.md
+.claude/
+.agents/
+/.instructions.md
+/*_debug.json
+*.log
+*.tgz
+
+# Local environment and operating-system files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+coverage/
+
+# Machine-specific VS Code preferences
+.vscode/settings.json

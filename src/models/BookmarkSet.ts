@@ -1,9 +1,9 @@
-import * as vscode from 'vscode';
-import { fileUtils } from '../util/FileUtils';
 import { logger } from '../util/Logger';
-import { Bookmark } from './Bookmark';
+import type { Bookmark } from './Bookmark';
 import path = require('path')
-import { ContextBookmark } from '../util/ContextValue';
+import * as vscode from 'vscode'
+import { bookmarkPathKey, isSameOrDescendantBookmarkPath, renamedBookmarkPath } from '../util/BookmarkPath'
+import { createBookmarkId } from '../util/ScriptIdentity'
 
 export class BookmarkSet {
 	public values: Array<Bookmark> = new Array<Bookmark>()
@@ -21,29 +21,6 @@ export class BookmarkSet {
 		return false
 	}
 
-	idConflict(bookmarks: BookmarkSet): string | undefined {
-		const ids1: Array<string> = [];
-		const ids2: Array<string> = [];
-		this.getListId(ids1)
-		bookmarks.getListId(ids2)
-		for (const id1 of ids1) {
-			for (const id2 of ids2) {
-				if (id1 === id2) {
-					return id1;
-				}
-			}
-		}
-	}
-
-	getListId(out: Array<string>) {
-		for (const i of this.values) {
-			out.push(i.Id)
-			if (i.subs.size > 0) {
-				i.subs.getListId(out)
-			}
-		}
-	}
-
 	public add(value: Bookmark): boolean {
 		if (this.has(value)) {
 			return false
@@ -51,14 +28,6 @@ export class BookmarkSet {
 			this.values.push(value)
 			return true
 		}
-	}
-
-	public addForce(value: Bookmark) {
-		this.values.push(value)
-	}
-
-	public replace(index: number, value: Bookmark): void {
-		this.values.splice(index, 1, value)
 	}
 
 	public delete(index: number): void {
@@ -91,20 +60,6 @@ export class BookmarkSet {
 		this.values = []
 	}
 
-	get(i: number): Bookmark {
-		return this.values[i]
-	}
-
-	set(index: number, value: Bookmark) {
-		this.values[index] = value
-	}
-
-	public filter(callbackfn: (value: Bookmark, index: number, array: Bookmark[]) => boolean, thisArg?: any): BookmarkSet {
-		const filteredValues = this.values.filter(callbackfn, thisArg)
-		return new BookmarkSet(filteredValues)
-	}
-
-
 	public [Symbol.iterator](): IterableIterator<Bookmark> {
 		return this.values[Symbol.iterator]()
 	}
@@ -112,63 +67,6 @@ export class BookmarkSet {
 
 	public get size(): number {
 		return this.values.length
-	}
-
-	sortById() {
-		this.values.sort((a, b) => {
-			if (a.Id < b.Id) return -1
-			if (a.Id > b.Id) return 1
-			return 0
-		})
-	}
-
-	sortByPath(parent?: Bookmark) {
-		if (this.values.length > 0) {
-			if (parent && parent.isFile) {
-				this.values.sort((a, b) => {
-					if (a.start.line < b.start.line) return -1
-					if (a.start.line > b.start.line) return 1
-					return 0
-				})
-			} else {
-				this.values.sort((a, b) => {
-					if (a.path < b.path) return -1
-					if (a.path > b.path) return 1
-					return 0
-				})
-			}
-		}
-
-		for (const i of this.values) {
-			if (i.subs.size > 0) {
-				i.subs.sortByPath(i)
-			}
-		}
-	}
-
-	// ================= 
-	public getBookmarksWithPath(out: BookmarkSet, path: string) {
-		for (const i of this) {
-			if (i.path === path) {
-				out.add(i.copyWith())
-			}
-			if (i.subs.size > 0) {
-				out = i.subs.getBookmarksWithPath(out, path)
-			}
-		}
-		return out
-	}
-
-	public getBookmarksWithIndex(out: Array<Bookmark>, bookmark: Bookmark): Bookmark[] {
-		for (const bm of this) {
-			if (bm.compareIndex(bookmark)) {
-				out.push(bm)
-			}
-			if (bm.subs.size > 0) {
-				bm.subs.getBookmarksWithIndex(out, bookmark)
-			}
-		}
-		return out
 	}
 
 	public fastDelete(bookmark: Bookmark) {
@@ -182,13 +80,13 @@ export class BookmarkSet {
 
 	public deleteBookmark(id: string) {
 		for (let i = 0; i < this.values.length; i++) {
-			if (this.values[i].equals(new Bookmark({ Id: id }))) {
+			if (this.values[i].id === id) {
 				this.delete(i)
 				return
 			}
 			if (this.values[i].subs.size > 0) {
 				this.values[i].subs.deleteBookmark(id)
-				if (this.values[i].isDirectory || this.values[i].isFile) {
+				if (this.values[i].isFile) {
 					if (this.values[i].subs.size == 0) {
 						this.delete(i)
 						return
@@ -234,328 +132,85 @@ export class BookmarkSet {
 	moveGroupToNode(group: BookmarkSet, target: Bookmark | undefined): boolean {
 		const isChild = target?.isChildOf(group)
 		if (isChild) {
-			logger.showWarningMessage('Cannot move parent branch into child branch')
+			logger.showWarningMessage('不能把父书签移动到它的子书签中。')
 			return false
 		}
-		const newGroup = [...group]
-		if (!target) {
-			for (const item of group) {
-				this.deleteBookmark(item.Id)
-			}
-			this.addAll(newGroup)
-			return true
+		const items = [...group]
+		if (items.length === 0 || (target && items.some(item => item.equals(target)))) return false
+		if (items.some(item => this.containerOf(item) === undefined)) return false
+		const before = this.orderSignature()
+		const previousParents = new Set(items.map(item => item.parent).filter((parent): parent is Bookmark => parent !== undefined))
+
+		for (const item of items) this.containerOf(item)?.fastDelete(item)
+		for (const item of items) {
+			item.parent = target
+			if (target) target.subs.add(item)
+			else this.add(item)
 		}
-		else {
-			for (const item of group) {
-				this.deleteBookmark(item.Id)
-			}
-			target.subs.addAll(newGroup)
-			return true
+
+		for (const parent of previousParents) {
+			parent.refreshDisplayProps()
+			if (parent.isFile && parent !== target && parent.subs.size === 0) this.fastDelete(parent)
 		}
+		target?.refreshDisplayProps()
+		return before !== this.orderSignature()
 	}
 
 	changeIndexNode(group: BookmarkSet, target: Bookmark | undefined): boolean {
 		const isChild = target?.isChildOf(group)
-		let hasChange = false
 		if (isChild) {
-			logger.showWarningMessage('Cannot move parent branch into child branch')
+			logger.showWarningMessage('不能把父书签移动到它的子书签之前。')
 			return false
 		}
-		const newGroup = [...group]
-		if (!target) { // add to last index of root
-			for (const item of group) {
-				this.deleteBookmark(item.Id)
-			}
-			this.addAll(newGroup)
-			return true
-		}
-		else {
-			for (const item of group) {
-				let setParentTarget: BookmarkSet | undefined = undefined;
-				// eslint-disable-next-line @typescript-eslint/no-this-alias
-				if (this.indexOf(target) >= 0) setParentTarget = this;
-				else if (target.parent && target.parent.subs.indexOf(target) >= 0) setParentTarget = target.parent.subs;
+		if (!target) return false
+		const targetContainer = this.containerOf(target)
+		const items = [...group]
+		if (!targetContainer || items.length === 0 || items.some(item => item.equals(target))) return false
+		if (items.some(item => this.containerOf(item) === undefined)) return false
+		const before = this.orderSignature()
+		const previousParents = new Set(items.map(item => item.parent).filter((parent): parent is Bookmark => parent !== undefined))
 
-				let setParentItem: BookmarkSet | undefined = undefined;
-				// eslint-disable-next-line @typescript-eslint/no-this-alias
-				if (this.indexOf(item) >= 0) setParentItem = this;
-				else if (item.parent && item.parent.subs.indexOf(item) >= 0) setParentItem = item.parent.subs;
-
-				if (setParentTarget !== undefined && setParentTarget === setParentItem) {
-					const indexTarget = setParentTarget.indexOf(target);
-					const indexItem = setParentTarget.indexOf(item);
-					if (indexTarget >= 0 && indexItem >= 0) {
-						if (indexItem === indexTarget - 1) {
-							setParentTarget.delete(indexItem)
-							setParentTarget.insert(indexTarget, item)
-							hasChange = true
-						} else if (indexItem > indexTarget) {
-							setParentTarget.delete(indexItem)
-							setParentTarget.insert(indexTarget, item)
-							hasChange = true
-						} else if (indexItem < indexTarget) {
-							setParentTarget.delete(indexItem)
-							setParentTarget.insert(indexTarget - 1, item)
-							hasChange = true
-						}
-					}
-				} else if (setParentTarget !== undefined && setParentItem !== undefined) {
-					const indexTarget = setParentTarget.indexOf(target);
-					setParentItem.fastDelete(item);
-					setParentTarget.insert(indexTarget, item);
-					item.parent = target.parent;
-					if (setParentTarget === this && target.path) {
-						item.path = target.path;
-					}
-					hasChange = true;
-				}
-			}
+		for (const item of items) this.containerOf(item)?.fastDelete(item)
+		const targetIndex = targetContainer.indexOf(target)
+		if (targetIndex < 0) return false
+		for (let offset = 0; offset < items.length; offset++) {
+			const item = items[offset]
+			item.parent = target.parent
+			targetContainer.insert(targetIndex + offset, item)
 		}
-		return hasChange
+		for (const parent of previousParents) parent.refreshDisplayProps()
+		target.parent?.refreshDisplayProps()
+		return before !== this.orderSignature()
 	}
 
-
-	/**
-	 * @deprecated Incremental per-change line/column tracking. No longer used by smart tracking:
-	 * the debounce collapses rapid edits into only the final change event, which made this
-	 * incremental math unreliable. Smart tracking now relies solely on the content-fingerprint
-	 * sticky engine (FileUtils.readContentBookmarkInFile), which reads the final document state.
-	 * Retained for reference and potential reuse; safe to remove.
-	 */
-	changeLine(rePath: string, change: vscode.TextDocumentContentChangeEvent, doc: vscode.TextDocument, bookmarksOfPath?: Bookmark[]): boolean {
-		const textChange = change.text
-		const start = change.range.start
-		const end = change.range.end
-		const linesAdded = change.text.split('\n').length - 1
-		const linesRemoved = end.line - start.line
-		const numberLine = linesAdded - linesRemoved
-
-		let hasChange = false
-		const iterable = bookmarksOfPath || this.values;
-		for (const bookmark of iterable) {
-			const cacheStart = bookmark.start.copy()
-			const cacheEnd = bookmark.end.copy()
-			if (bookmarksOfPath === undefined && bookmark.subs.size > 0) {
-				const cc = bookmark.subs.changeLine(rePath, change, doc)
-				if (hasChange === false) {
-					hasChange = cc
-				}
-			}
-			if (bookmark.isDirectory || bookmark.isFile) continue
-			if (bookmark.path === rePath) {
-				// 如果内容为空且不等于换行符，则进行清理
-				if (start.line === end.line && start.line === bookmark.start.line) {
-					const content = bookmark.start.line < doc.lineCount ? doc.lineAt(bookmark.start.line).text : undefined
-					if (content === '' && numberLine === 0) {
-						// 允许变成空内容书签，交由智能追踪判定
-						bookmark.end.column = 0;
-					} else if (content === '' && numberLine > 0) {
-						bookmark.start.line += numberLine
-						bookmark.end.line += numberLine
-					}
-					else if (content !== '') {
-						if (!bookmark.start.equals(bookmark.end) && bookmark.start.line === bookmark.end.line) {
-							if (start.line === end.line && start.character <= end.character) { // chnage on start line
-								if (textChange === '') {
-									if (end.character <= bookmark.start.column) {
-										// 从当前书签起始位置之前进行内容裁剪/删除
-										const c = end.character - start.character
-										bookmark.start.column -= c
-										bookmark.end.column -= c
-									} else if (end.character > bookmark.start.column && end.character < bookmark.end.column) {
-										// 截断并删除当前书签中间的内容
-										const c = end.character - start.character
-										bookmark.end.column -= c
-									} else if (start.character < bookmark.end.column && end.character >= bookmark.end.column) {
-										if (start.character > bookmark.start.column) {
-											// 删除当前书签后续的内容
-											const c = bookmark.end.column - start.character
-											bookmark.end.column -= c
-										} else if (start.character <= bookmark.start.column && end.character >= bookmark.end.column) {
-											// xoa toan bo
-											bookmark.end.column = 0
-											bookmark.start.column = 0
-										}
-									}
-								} else {
-									if (end.character === bookmark.start.column) {
-										// 在书签起始位置插入内容
-										if (textChange.endsWith(' ')) {
-											// 边界处理：若是空白字符结尾，需回退起始坐标
-											const c = textChange.length
-											bookmark.start.column += c
-											bookmark.end.column += c
-										} else {
-											// 内容非空时，将新片段无缝整合进当前书签节点
-											let cx = 0
-											for (let i = textChange.length - 1; i >= 0; i--) {
-												if (textChange[i] === ' ') break
-												cx++
-											}
-											const cStart = textChange.length - cx
-											const cEnd = textChange.length
-											bookmark.start.column += cStart
-											bookmark.end.column += cEnd
-										}
-									} else if (end.character < bookmark.start.column) {
-										// 在书签前方一个字符的偏移量处插入新片段
-										const c = textChange.length
-										bookmark.start.column += c
-										bookmark.end.column += c
-									} else if (start.character <= bookmark.start.column && end.character >= bookmark.start.column) {
-										// 覆盖书签首部选中区域，并追加新文本
-										bookmark.start.column = start.character + textChange.length
-										bookmark.end.column -= bookmark.start.column - end.character + textChange.length
-									} else if (start.character >= bookmark.start.column && end.character < bookmark.end.column) {
-										// 将新文本精确插入到书签节点内部
-										const c = textChange.length
-										bookmark.end.column += c
-									} else if (start.character === bookmark.end.column) {
-										if (!textChange.startsWith(' ')) {
-											// 在书签节点的末尾追加新文本
-											const c = textChange.trim().length
-											bookmark.end.column += c
-										}
-									}
-								}
-							}
-						}
-						else if (start.line === bookmark.start.line && bookmark.start.line < bookmark.end.line && textChange.split('\n').length > 1) {
-							bookmark.end.line += textChange.split('\n').length - 1
-						}
-						else if (start.line === bookmark.start.line && textChange.split('\n').length > 0) {
-							// bookmark.end.line = textChange.split('\n').length - 1
-							hasChange = true
-						}
-					}
-				}
-				else if (end.line < bookmark.end.line && start.line > bookmark.start.line && textChange !== '') {
-					// 在多行书签的中间位置插入新行
-					const c = textChange.split('\n').length - 1
-					if (c > 0) {
-						bookmark.end.line += c
-					}
-				}
-				else if (end.line < bookmark.end.line && start.line > bookmark.start.line && textChange === '') {
-					// 删除多行书签中间的某一行
-					const c = end.line - start.line
-					if (c > 0) {
-						bookmark.end.line -= c
-					}
-				}
-				else if (start.line >= bookmark.start.line && (end.line > bookmark.end.line || (end.line === bookmark.end.line && start.character < bookmark.end.column)) && start.line < bookmark.end.line && textChange === '') {
-					bookmark.end.line -= bookmark.end.line - start.line
-					bookmark.end.column = start.character
-				}
-				else if (start.line === bookmark.end.line && start.character <= bookmark.end.column && textChange === '') {
-					bookmark.end.column -= bookmark.end.column - start.character
-				}
-				else if (start.line >= bookmark.start.line && end.line - start.line === 1 && end.line === bookmark.end.line && textChange === '') {
-					bookmark.end.line--
-					bookmark.end.column = bookmark.end.line < doc.lineCount ? doc.lineAt(bookmark.end.line).range.end.character : 0
-				}
-				else if (end.line > start.line && start.line === bookmark.start.line && textChange === '') {
-					bookmark.end.line -= end.line - start.line
-				}
-
-				/// NOK
-				else if (bookmark.start.line === start.line && bookmark.start.line <= end.line && textChange === '' && numberLine === -1) {
-					// 允许变成空内容书签，交由智能追踪判定
-				}
-				else if (bookmark.start.line > start.line && end.line > bookmark.start.line) {
-					// 删除整个跨越书签行的节点内容，此时不应硬删除书签，而是收缩坐标，交由智能追踪来决定是否恢复
-					bookmark.start.line = start.line;
-					bookmark.end.line = start.line;
-					bookmark.start.column = start.character;
-					bookmark.end.column = start.character;
-				}
-				else if (bookmark.start.line > start.line) {
-					bookmark.start.line += numberLine // 动态调整书签节点的起止行号映射
-					bookmark.end.line += numberLine // 动态调整书签节点的起止行号映射
-				}
-
-				if (bookmark.start.line >= start.line) {
-					// do nothing
-				}
-			}
-			if (bookmark.start.line < 0) {
-				bookmark.start.line = 0
-			}
-			if (bookmark.end.line < 0) {
-				bookmark.end.line = 0
-			}
-			if (bookmark.start.column < 0) {
-				bookmark.start.column = 0
-			}
-			if (bookmark.end.column < 0) {
-				bookmark.end.column = 0
-			}
-			if (!hasChange) {
-				hasChange = !cacheStart.equals(bookmark.start) || !cacheEnd.equals(bookmark.end)
-			}
-
-			if (!bookmark.isDirectory && bookmark.start.line === bookmark.end.line && bookmark.contextValue !== ContextBookmark.BookmarkInvalid) {
-				if (change.range.start.line <= bookmark.end.line && change.range.end.line >= bookmark.start.line) {
-					if (bookmark.start.line < doc.lineCount) {
-						const currentText = doc.lineAt(bookmark.start.line).text;
-						// Detect if the line was completely removed (e.g. ctrl+x) so it shifted up
-						const isLineCut = change.text === '' && 
-							change.range.start.line <= bookmark.start.line && 
-							change.range.end.line > bookmark.end.line &&
-							change.range.start.character === 0 &&
-							change.range.end.character === 0;
-						
-						if (!isLineCut && currentText.trim() !== '' && bookmark.content !== currentText) {
-							bookmark.content = currentText;
-							hasChange = true;
-						}
-					}
-				}
-			}
-		}
-		return hasChange
+	private containerOf(bookmark: Bookmark): BookmarkSet | undefined {
+		if (this.indexOf(bookmark) >= 0) return this
+		const parent = bookmark.parent
+		if (parent && parent.subs.indexOf(bookmark) >= 0) return parent.subs
+		return undefined
 	}
 
-	removePath(oldPath: string, newPath: string) {
-		const sub = new BookmarkSet()
-		this._findFolderAndRemovePath(oldPath, sub)
-		sub.renamePath(oldPath, newPath)
-		for (const i of sub) {
-			const paths = i.path.split(path.sep).slice(0, -1).join(path.sep).split(path.sep)
-			this._findFolderAndAddBookmark(this, paths, 0, i)
-		}
+	private orderSignature(): string {
+		const visit = (set: BookmarkSet): unknown[] => set.values.map(bookmark => [bookmark.id, visit(bookmark.subs)])
+		return JSON.stringify(visit(this))
 	}
 
-	private _findFolderAndRemovePath(oldPath: string, out: BookmarkSet): number {
-		for (let i = 0; i < this.values.length;) {
-			const vi = this.values[i]
-			if (vi.path === oldPath) {
-				out.add(vi)
-				this.delete(i)
-				return this.size
-			}
-			if (vi.subs.size > 0) {
-				const size = this.values[i].subs._findFolderAndRemovePath(oldPath, out)
-				if (size === 0) {
-					this.delete(i)
-					return this.size
-				}
-			}
-			i++
+	containsPath(targetPath: string): boolean {
+		for (const bookmark of this.values) {
+			if (isSameOrDescendantBookmarkPath(bookmark.path, targetPath)) return true
+			if (bookmark.subs.size > 0 && bookmark.subs.containsPath(targetPath)) return true
 		}
-		return this.size
+		return false
 	}
+
 	renamePath(oldPath: string, newPath: string) {
 		for (const vi of this.values) {
-			if (vi.path === oldPath || vi.path.startsWith(oldPath + '/') || vi.path.startsWith(oldPath + '\\')) {
-				const fsPath = vi.path.replace(oldPath, newPath)
+			if (isSameOrDescendantBookmarkPath(vi.path, oldPath)) {
+				const fsPath = renamedBookmarkPath(vi.path, oldPath, newPath)
 				vi.path = fsPath
-				if (vi.isDirectory || vi.isFile) {
+				if (vi.isFile) {
 					vi.label = path.basename(fsPath)
-					vi.resourceUri = fileUtils.relativeToUri(fsPath)
-					if (vi.isFile && vi.Id.startsWith('file_')) {
-						vi.Id = 'file_' + fsPath;
-					}
+					vi.resourceUri = undefined
 				}
 			}
 			if (vi.subs.size > 0) {
@@ -564,11 +219,47 @@ export class BookmarkSet {
 		}
 	}
 
+	mergeFileNodesAtPath(targetPath: string, preferredScriptId?: string): Bookmark | undefined {
+		const matching = this.values.filter(bookmark => bookmark.isFile && bookmarkPathKey(bookmark.path) === bookmarkPathKey(targetPath))
+		if (matching.length === 0) return undefined
+		const primary = matching.find(bookmark => bookmark.scriptId === preferredScriptId) ?? matching[0]
+		const existingIds = new Map(primary.subs.values.map(bookmark => [bookmark.id, bookmark]))
+		const rewriteIds = (bookmark: Bookmark): void => {
+			bookmark.id = createBookmarkId()
+			for (const child of bookmark.subs) rewriteIds(child)
+		}
+		for (const duplicate of matching) {
+			if (duplicate === primary) continue
+			for (const bookmark of duplicate.subs.values) {
+				const existing = existingIds.get(bookmark.id)
+				if (existing && JSON.stringify(existing.toJSON()) === JSON.stringify(bookmark.toJSON())) continue
+				if (existing) rewriteIds(bookmark)
+				bookmark.parent = primary
+				primary.subs.add(bookmark)
+				existingIds.set(bookmark.id, bookmark)
+			}
+			const duplicateIndex = this.indexOf(duplicate)
+			if (duplicateIndex >= 0) this.delete(duplicateIndex)
+		}
+		primary.createdAt = Math.min(primary.createdAt, ...primary.subs.values.map(bookmark => bookmark.createdAt))
+		return primary
+	}
+
+	mergeDuplicateFileNodes(preferredScriptIds: Set<string> = new Set()): void {
+		const paths = new Set(this.values.filter(bookmark => bookmark.isFile).map(bookmark => bookmarkPathKey(bookmark.path)))
+		for (const pathKey of paths) {
+			const matching = this.values.filter(bookmark => bookmark.isFile && bookmarkPathKey(bookmark.path) === pathKey)
+			if (matching.length < 2) continue
+			const preferred = matching.find(bookmark => bookmark.scriptId && preferredScriptIds.has(bookmark.scriptId))
+			this.mergeFileNodesAtPath(matching[0].path, preferred?.scriptId)
+		}
+	}
+
 
 	deleteWithPath(pathDeleted: string): boolean {
 		let hasDelete = false
 		for (let i = 0; i < this.values.length;) {
-			if (this.values[i].path === pathDeleted || this.values[i].path.startsWith(pathDeleted + '/') || this.values[i].path.startsWith(pathDeleted + '\\')) {
+			if (isSameOrDescendantBookmarkPath(this.values[i].path, pathDeleted)) {
 				this.delete(i)
 				hasDelete = true
 				continue
@@ -577,9 +268,6 @@ export class BookmarkSet {
 				const de = this.values[i].subs.deleteWithPath(pathDeleted)
 				if (hasDelete === false) {
 					hasDelete = de
-				}
-				if (this.values[i].isFolder && this.values[i].subs.size === 0) {
-					this.delete(i)
 				}
 			}
 			i++
@@ -592,15 +280,18 @@ export class BookmarkSet {
 		for (const vi of this.values) {
 			let changed = false;
 			if (vi.equals(bookmark)) {
-				vi.isOpened = !vi.isOpened
+				vi.isPinned = !vi.isPinned
 				changed = true;
 			} else {
-				if (vi.isOpened !== false && !vi.isFile && !vi.isDirectory) {
-					vi.isOpened = false
+				if (vi.isPinned && !vi.isFile) {
+					vi.isPinned = false
 					changed = true;
 				}
 			}
 			if (changed) {
+				vi.collapsibleState = vi.isPinned
+					? vscode.TreeItemCollapsibleState.Expanded
+					: vi.subs.size > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
 				vi.refreshDisplayProps();
 				modified.push(vi);
 			}
@@ -616,8 +307,14 @@ export class BookmarkSet {
 
 	addNewBookmarkToPin(bookmark: Bookmark): Bookmark | undefined {
 		for (const vi of this.values) {
-			if (vi.isOpened && !vi.isFile && !vi.isDirectory) {
-				vi.subs.add(bookmark.copyWith({ parent: vi }))
+			if (vi.isPinned && !vi.isFile && bookmarkPathKey(vi.path) === bookmarkPathKey(bookmark.path)) {
+				bookmark.parent = vi
+				vi.subs.add(bookmark)
+				const refreshSubtree = (node: Bookmark) => {
+					node.refreshDisplayProps()
+					for (const child of node.subs) refreshSubtree(child)
+				}
+				refreshSubtree(bookmark)
 				vi.refreshDisplayProps()
 				return vi
 			}
@@ -633,18 +330,13 @@ export class BookmarkSet {
 	addNewBookmark(bookmark: Bookmark): Bookmark | undefined {
 		const pin = this.addNewBookmarkToPin(bookmark)
 		if (!pin) {
-			let fileNode = this.values.find(v => v.contextValue === ContextBookmark.File && v.path === bookmark.path);
+			let fileNode = this.values.find(v => v.isFile && bookmarkPathKey(v.path) === bookmarkPathKey(bookmark.path));
 			if (fileNode) {
 				bookmark.parent = fileNode;
 				fileNode.subs.add(bookmark);
+				fileNode.createdAt = Math.min(fileNode.createdAt, bookmark.createdAt)
 			} else {
-				fileNode = new Bookmark({
-					Id: `file_${bookmark.path}`,
-					label: bookmark.path,
-					path: bookmark.path,
-					contextValue: ContextBookmark.File,
-					isOpened: true
-				});
+				fileNode = bookmark.createContainingFileNode()
 				bookmark.parent = fileNode;
 				fileNode.subs.add(bookmark);
 				this.add(fileNode);
@@ -653,81 +345,4 @@ export class BookmarkSet {
 		return pin
 	}
 
-	
-	filterBookmarkAll(out: BookmarkSet) {
-		for (const i of this) {
-			out.add(i)
-			if (i.subs.size > 0) {
-				i.subs.filterBookmarkAll(out)
-			}
-		}
-	}
-
-	filterBookmarkFolder(out: BookmarkSet) {
-		for (const i of this) {
-			if (i.path !== '') {
-				out.addBookmarkToFolder(i)
-			}
-			if (i.subs.size > 0) {
-				i.subs.filterBookmarkFolder(out);
-			}
-		}
-	}
-
-	// ok not change
-	addBookmarkToFolder(bookmark: Bookmark) {
-		const paths = bookmark.path.split(path.sep)
-		this._findFolderAndAddBookmark(this, paths, 0, bookmark)
-	}
-
-	private _findFolderAndAddBookmark(out: BookmarkSet, paths: string[], index: number, bookmark: Bookmark): boolean {
-		if (index === paths.length || (paths.length === 1 && paths[0] === '')) {
-			out.add(bookmark)
-			return true
-		}
-		for (const i of out) {
-			if (i.label === paths[index]) {
-				if (this._findFolderAndAddBookmark(i.subs, paths, index + 1, bookmark)) {
-					return true
-				}
-			}
-		}
-		out.addForce(this._createNewPathAndAddBookmark(paths, index, bookmark))
-		return true
-	}
-
-	private _createNewPathAndAddBookmark(paths: string[], index: number, bookmark: Bookmark): Bookmark {
-		if (index === paths.length) {
-			return bookmark
-		}
-		let contextValue = ContextBookmark.Folder
-		if (index === paths.length - 1 && !bookmark.isDirectory) {
-			contextValue = ContextBookmark.File
-		} else {
-			contextValue = ContextBookmark.Folder
-		}
-		const fsPath = paths.slice(0, index + 1).join(path.sep)
-		const bm = this._createNewPathAndAddBookmark(paths, index + 1, bookmark)
-		return new Bookmark({
-			label: paths[index],
-			path: fsPath,
-			contextValue: contextValue,
-			subs: new BookmarkSet([bm]),
-		})
-	}
-
-	private _getAllBookmarkFollowPath(out: Map<string, Bookmark[]>) {
-		for (const i of this) {
-			const a = out.get(i.path)
-			if (a) {
-				a.push(i.copyWith({ subs: new BookmarkSet(), isOpened: false }))
-				out.set(i.path, a)
-			} else {
-				out.set(i.path, [i.copyWith({ subs: new BookmarkSet() })])
-			}
-			if (i.subs.size > 0) {
-				i.subs._getAllBookmarkFollowPath(out)
-			}
-		}
-	}
 }

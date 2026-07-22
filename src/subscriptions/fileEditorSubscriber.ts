@@ -1,46 +1,165 @@
 import * as vscode from 'vscode'
+import * as path from 'path'
 import { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
 import { bookmarkRepository } from '../repository/BookmarkRepository'
+import { logger } from '../util/Logger'
+import { ExtensionConfig } from '../config/ExtensionConfig'
+import { isExcludedSourceRelativePath } from '../util/SourceFilePolicy'
 export function fileEditorSubscriber(context: vscode.ExtensionContext,
 	bookmarkProvider: CodeBookmarksViewProvider,
 ) {
-	vscode.workspace.onDidChangeTextDocument(event => {
+	const sourceFileWatchers: vscode.Disposable[] = []
+	const pendingSourceAppearances = new Set<string>()
+	let sourceAppearanceTimer: NodeJS.Timeout | undefined
+	const isEligibleWorkspaceSource = (workspaceFolder: vscode.WorkspaceFolder, uri: vscode.Uri): boolean => {
+		if (uri.scheme !== 'file') return false
+		const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath)
+		return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath)
+			&& !isExcludedSourceRelativePath(relativePath)
+	}
+	const isEligibleSource = (uri: vscode.Uri): boolean => {
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri)
+		return uri.scheme === 'file' && (!workspaceFolder || isEligibleWorkspaceSource(workspaceFolder, uri))
+	}
+	const reconcileSourceAppearances = async (): Promise<void> => {
+		const paths = [...pendingSourceAppearances]
+		pendingSourceAppearances.clear()
+		if (paths.length === 0) return
+		const changes = await bookmarkRepository.handleFileAppearances(paths)
+		await bookmarkProvider.applyRepositoryRelocations(changes)
+	}
+	const scheduleSourceAppearance = (absolutePath: string): void => {
+		pendingSourceAppearances.add(path.resolve(absolutePath))
+		if (sourceAppearanceTimer) clearTimeout(sourceAppearanceTimer)
+		sourceAppearanceTimer = setTimeout(() => {
+			sourceAppearanceTimer = undefined
+			void reconcileSourceAppearances().catch(error =>
+				logger.error(`Source file appearance batch rebind failed: ${error}`))
+		}, 150)
+	}
+	const disposeSourceFileWatchers = (): void => {
+		if (sourceAppearanceTimer) clearTimeout(sourceAppearanceTimer)
+		sourceAppearanceTimer = undefined
+		pendingSourceAppearances.clear()
+		for (const watcher of sourceFileWatchers) watcher.dispose()
+		sourceFileWatchers.length = 0
+	}
+	const setupSourceFileWatchers = (): void => {
+		disposeSourceFileWatchers()
+		if (typeof vscode.workspace.createFileSystemWatcher !== 'function') return
+		for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
+			if (workspaceFolder.uri.scheme !== 'file') continue
+			try {
+				const watcher = vscode.workspace.createFileSystemWatcher(
+					new vscode.RelativePattern(workspaceFolder, '**/*'),
+				)
+					sourceFileWatchers.push(
+					watcher.onDidCreate(uri => {
+						if (!isEligibleWorkspaceSource(workspaceFolder, uri)) return
+						scheduleSourceAppearance(uri.fsPath)
+					}),
+					watcher,
+				)
+			} catch (error) {
+				logger.error(`Unable to watch workspace source files: ${error}`)
+			}
+		}
+	}
+	setupSourceFileWatchers()
+
+	const documentChanges = vscode.workspace.onDidChangeTextDocument(event => {
 		bookmarkProvider.changeContentFile(event)
 	})
 
 	const focusEditor = vscode.window.onDidChangeActiveTextEditor(editor => {
 		if (editor) {
 			const scheme = editor.document.uri.scheme;
-			// Ignore internal VS Code panels that should not affect bookmark context
-			if (scheme === 'output' || scheme === 'extension-output' || scheme === 'vscode-webview' || scheme === 'debug' || scheme === 'log') {
-				return;
+			// Non-file editors must not switch or overwrite the current workspace bookmark scope.
+			if (scheme !== 'file') return
+			void bookmarkProvider.reloadActiveTab().catch(error => logger.error(`切换文件后加载书签失败: ${error}`))
+		}
+	})
+
+	const openDocuments = vscode.workspace.onDidOpenTextDocument(document => {
+		if (isEligibleSource(document.uri)) {
+			scheduleSourceAppearance(document.uri.fsPath)
+		}
+		void bookmarkProvider.syncCodeMarkersInDocument(document)
+			.catch(error => logger.error(`打开脚本后同步 TODO/FIXME/BUG 失败（${document.uri.fsPath}）: ${error}`))
+	})
+
+	const createFiles = vscode.workspace.onDidCreateFiles(event => {
+		bookmarkProvider.onSourceFilesChanged()
+		for (const uri of event.files) {
+			if (isEligibleSource(uri)) {
+				scheduleSourceAppearance(uri.fsPath)
 			}
-			bookmarkProvider.reloadActiveTab()
+			bookmarkProvider.scheduleCodeMarkerFileSync(uri)
 		}
 	})
 
-	const visibleEditors = vscode.window.onDidChangeVisibleTextEditors(_editors => {
-		// Nothing to do for bookmarks on visible editors change anymore
+	const renameFiles = vscode.workspace.onDidRenameFiles(event => {
+		void (async () => {
+			for (const file of event.files) {
+				try {
+					await bookmarkRepository.handleFileRename(file.oldUri.fsPath, file.newUri.fsPath)
+				} catch (error) {
+					logger.error(`转移重命名文件的书签配置失败（${file.oldUri.fsPath}）: ${error}`)
+				}
+				try {
+					await bookmarkProvider.onRenameDirectory(file.oldUri.fsPath, file.newUri.fsPath)
+				} catch (error) {
+					logger.error(`更新重命名文件的内存书签失败（${file.oldUri.fsPath}）: ${error}`)
+				}
+			}
+			bookmarkProvider.onSourceFilesChanged()
+		})().catch(error => logger.error(`处理文件重命名事件失败: ${error}`))
 	})
 
-	const renameFiles = vscode.workspace.onDidRenameFiles(async (event) => {
-		for (const file of event.files) {
-			await bookmarkRepository.handleFileRename(file.oldUri.fsPath, file.newUri.fsPath)
-			bookmarkProvider.onRenameDirectory(file.oldUri.fsPath, file.newUri.fsPath)
+	const deleteFiles = vscode.workspace.onDidDeleteFiles(event => {
+		void (async () => {
+			for (const file of event.files) {
+				try {
+					await bookmarkRepository.handleFileDelete(file.fsPath)
+				} catch (error) {
+					logger.error(`删除文件的书签配置失败（${file.fsPath}）: ${error}`)
+				}
+				try {
+					bookmarkProvider.onDeleteDirectory(file.fsPath)
+				} catch (error) {
+					logger.error(`更新已删除文件的内存书签失败（${file.fsPath}）: ${error}`)
+				}
+			}
+			bookmarkProvider.onSourceFilesChanged()
+		})().catch(error => logger.error(`处理文件删除事件失败: ${error}`))
+	})
+
+	const configurationChanges = vscode.workspace.onDidChangeConfiguration(event => {
+		if (event.affectsConfiguration('codebookmark')) ExtensionConfig.invalidate()
+		if (event.affectsConfiguration('codebookmark.defaultExpandLevel')) {
+			bookmarkProvider.refreshExpandCollapseContext()
+		}
+		if (event.affectsConfiguration('codebookmark.globalStoragePath')) {
+			void bookmarkProvider.onStoragePathChanged().catch(error => logger.error(`切换书签存储路径失败: ${error}`))
+		} else if (event.affectsConfiguration('codebookmark.inlineLabel')) {
+			bookmarkProvider.onDisplayConfigurationChanged()
 		}
 	})
 
-	const deleteFiles = vscode.workspace.onDidDeleteFiles(async (event) => {
-		for (const file of event.files) {
-			await bookmarkRepository.handleFileDelete(file.fsPath)
-			bookmarkProvider.onDeleteDirectory(file.fsPath)
-		}
+	const workspaceFolderChanges = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+		setupSourceFileWatchers()
+		void bookmarkProvider.onWorkspaceFoldersChanged().catch(error => logger.error(`工作区文件夹变更后加载书签失败: ${error}`))
 	})
 
 	context.subscriptions.push(
+		documentChanges,
 		focusEditor,
-		visibleEditors,
+		openDocuments,
+		createFiles,
 		renameFiles,
-		deleteFiles
+		deleteFiles,
+		configurationChanges,
+		workspaceFolderChanges,
+		{ dispose: disposeSourceFileWatchers },
 	)
 }

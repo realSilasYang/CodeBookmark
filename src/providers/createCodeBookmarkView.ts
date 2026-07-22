@@ -12,30 +12,21 @@ export function createCodeBookmarkView(context: vscode.ExtensionContext, provide
 			dragAndDropController: provider,
 			canSelectMany: true,
 		})
-	// treeView.onDidChangeVisibility((event) => {
-
-	// })
-	treeView.onDidCollapseElement((event) => {
-		if (event) {
-			event.element.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed
-			if (event.element.contextValue === ContextBookmark.Bookmark) {
-				provider.saveBookmarksToFile()
-			}
+	const collapseListener = treeView.onDidCollapseElement(event => {
+		event.element.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed
+		provider.refreshExpandCollapseContext()
+		if (event.element.contextValue !== ContextBookmark.File) {
+			provider.saveBookmarkNodeState(event.element)
 		}
 	})
-	treeView.onDidExpandElement((event) => {
-		if (event) {
-			event.element.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
-			if (event.element.contextValue === ContextBookmark.Bookmark) {
-				provider.saveBookmarksToFile()
-			}
+	const expandListener = treeView.onDidExpandElement(event => {
+		event.element.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+		provider.refreshExpandCollapseContext()
+		if (event.element.contextValue !== ContextBookmark.File) {
+			provider.saveBookmarkNodeState(event.element)
 		}
 	})
 
-	// treeView.onDidChangeSelection((event) => {
-
-	// })
-
-	context.subscriptions.push(treeView)
+	context.subscriptions.push(treeView, collapseListener, expandListener)
 	return treeView
 }

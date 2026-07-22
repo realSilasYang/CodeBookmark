@@ -1,0 +1,54 @@
+name: Release VSIX
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Test, package, and publish GitHub release
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run test:integration
+      - name: Validate confirmed Marketplace publisher
+        shell: pwsh
+        env:
+          CONFIRMED_PUBLISHER: ${{ vars.VSCODE_MARKETPLACE_PUBLISHER }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CONFIRMED_PUBLISHER)) {
+            throw "Set the VSCODE_MARKETPLACE_PUBLISHER repository variable after registering the immutable Publisher ID."
+          }
+          $manifestPublisher = node -p "require('./package.json').publisher"
+          if ($env:CONFIRMED_PUBLISHER -cne $manifestPublisher) {
+            throw "Confirmed publisher '$env:CONFIRMED_PUBLISHER' does not match package publisher '$manifestPublisher'."
+          }
+      - name: Validate tag and build VSIX
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
+          }
+          npm run package:vsix -- --out "codebookmark-$version.vsix"
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          gh release create $env:GITHUB_REF_NAME "codebookmark-$version.vsix" `
+            --verify-tag `
+            --title "CodeBookmark $version" `
+            --generate-notes

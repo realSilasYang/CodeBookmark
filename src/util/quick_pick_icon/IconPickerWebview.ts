@@ -1,6 +1,39 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
+import { normalizeBookmarkIconName } from '../BookmarkIconName';
+import { logger } from '../Logger';
+
+interface IconDictionaryEntry {
+    id: string;
+    name: string;
+    keywords?: string[];
+}
+
+const ICON_DICTIONARY_ID_PATTERN = /^(status|arch|ui|fun|brand)_[a-z0-9][a-z0-9_-]*\.svg$/
+
+function isSafeDisplayText(value: unknown): value is string {
+    return typeof value === 'string'
+        && value.length > 0
+        && value.length <= 120
+        && !/[<>&"']/.test(value)
+        && !Array.from(value).some(character => character.charCodeAt(0) < 32)
+}
+
+function normalizedDefaultIcon(value: string | undefined): string | undefined {
+    if (value === undefined || value === '') return value;
+    return normalizeBookmarkIconName(value) || undefined;
+}
+
+export function shouldShowRestoreDefaultIcon(currentIcon: string | undefined, defaultIcon: string | undefined): boolean {
+    return defaultIcon !== undefined && currentIcon !== defaultIcon;
+}
+
+function recentIconIds(context: vscode.ExtensionContext): string[] {
+    const value = context.globalState.get<unknown>('codebookmark.recentIcons');
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
 
 export class IconPickerWebview {
     public static currentPanel: IconPickerWebview | undefined;
@@ -9,9 +42,19 @@ export class IconPickerWebview {
     private _disposables: vscode.Disposable[] = [];
     private _bookmarkId: string | undefined;
     private _currentIcon: string | undefined;
+    private _defaultIcon: string | undefined;
     private _onDidSelectIcon: (iconName: string, bookmarkId: string) => void;
+    private _disposed = false;
+    private _renderGeneration = 0;
 
-    public static createOrShow(context: vscode.ExtensionContext, bookmarkId: string, currentIcon: string, onDidSelectIcon: (iconName: string, bookmarkId: string) => void) {
+    public static createOrShow(
+        context: vscode.ExtensionContext,
+        bookmarkId: string,
+        currentIcon: string,
+        defaultIcon: string | undefined,
+        onDidSelectIcon: (iconName: string, bookmarkId: string) => void,
+    ) {
+        const safeDefaultIcon = normalizedDefaultIcon(defaultIcon);
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
@@ -19,6 +62,7 @@ export class IconPickerWebview {
         if (IconPickerWebview.currentPanel) {
             IconPickerWebview.currentPanel._bookmarkId = bookmarkId;
             IconPickerWebview.currentPanel._currentIcon = currentIcon;
+            IconPickerWebview.currentPanel._defaultIcon = safeDefaultIcon;
             IconPickerWebview.currentPanel._onDidSelectIcon = onDidSelectIcon;
             IconPickerWebview.currentPanel._update();
             IconPickerWebview.currentPanel._panel.reveal(column);
@@ -35,62 +79,88 @@ export class IconPickerWebview {
             }
         );
 
-        IconPickerWebview.currentPanel = new IconPickerWebview(panel, context, bookmarkId, currentIcon, onDidSelectIcon);
+        IconPickerWebview.currentPanel = new IconPickerWebview(panel, context, bookmarkId, currentIcon, safeDefaultIcon, onDidSelectIcon);
     }
 
-    private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext, bookmarkId: string, currentIcon: string, onDidSelectIcon: (iconName: string, bookmarkId: string) => void) {
+    private constructor(
+        panel: vscode.WebviewPanel,
+        context: vscode.ExtensionContext,
+        bookmarkId: string,
+        currentIcon: string,
+        defaultIcon: string | undefined,
+        onDidSelectIcon: (iconName: string, bookmarkId: string) => void,
+    ) {
         this._panel = panel;
         this._context = context;
         this._bookmarkId = bookmarkId;
         this._currentIcon = currentIcon;
+        this._defaultIcon = defaultIcon;
         this._onDidSelectIcon = onDidSelectIcon;
 
         this._update();
 
-        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+        this._panel.onDidDispose(() => this._disposeResources(), null, this._disposables);
 
         this._panel.webview.onDidReceiveMessage(
-            (message: any) => {
-                switch (message.command) {
-                    case 'selectIcon':
-                        this._addRecentIcon(message.iconName);
-                        if (this._bookmarkId) {
-                            this._onDidSelectIcon(message.iconName, this._bookmarkId);
-                        }
-                        this._panel.dispose();
-                        return;
-                    case 'removeRecentIcon':
-                        this._removeRecentIcon(message.iconName);
-                        return;
-                    case 'addRecentIcon':
-                        this._addRecentIcon(message.iconName);
-                        return;
-                }
+            (message: unknown) => {
+                void this._handleMessage(message).catch(error => {
+                    logger.error(`处理图标选择消息失败: ${error}`);
+                });
             },
             null,
             this._disposables
         );
     }
 
-    private _addRecentIcon(iconId: string) {
-        let recent = this._context.globalState.get<string[]>('codebookmark.recentIcons') || [];
-        recent = recent.filter(id => id !== iconId); // Remove if exists
-        recent.unshift(iconId); // Add to beginning
-        if (recent.length > 100) {
-            recent = recent.slice(0, 100); // Keep max 100
+    private async _handleMessage(message: unknown): Promise<void> {
+        if (typeof message !== 'object' || message === null) return;
+        const candidate = message as Record<string, unknown>;
+        if (typeof candidate.command !== 'string' || typeof candidate.iconName !== 'string') return;
+
+        const iconName = candidate.iconName;
+        const isKnownIcon = IconPickerWebview._cachedIconMap.has(iconName);
+        switch (candidate.command) {
+            case 'selectIcon':
+                if (iconName !== '' && !isKnownIcon) return;
+                if (iconName !== '') await this._addRecentIcon(iconName);
+                if (this._bookmarkId) this._onDidSelectIcon(iconName, this._bookmarkId);
+                this.dispose();
+                return;
+            case 'restoreDefaultIcon':
+                if (this._defaultIcon === undefined || iconName !== this._defaultIcon) return;
+                if (this._bookmarkId) this._onDidSelectIcon(this._defaultIcon, this._bookmarkId);
+                this.dispose();
+                return;
+            case 'removeRecentIcon':
+                if (isKnownIcon) await this._removeRecentIcon(iconName);
+                return;
+            case 'addRecentIcon':
+                if (isKnownIcon) await this._addRecentIcon(iconName);
+                return;
         }
-        this._context.globalState.update('codebookmark.recentIcons', recent);
     }
 
-    private _removeRecentIcon(iconId: string) {
-        let recent = this._context.globalState.get<string[]>('codebookmark.recentIcons') || [];
+    private async _addRecentIcon(iconId: string): Promise<void> {
+        let recent = recentIconIds(this._context);
+        recent = recent.filter(id => id !== iconId && IconPickerWebview._cachedIconMap.has(id));
+        recent.unshift(iconId);
+        await this._context.globalState.update('codebookmark.recentIcons', recent.slice(0, 100));
+    }
+
+    private async _removeRecentIcon(iconId: string): Promise<void> {
+        let recent = recentIconIds(this._context);
         recent = recent.filter(id => id !== iconId);
-        this._context.globalState.update('codebookmark.recentIcons', recent);
+        await this._context.globalState.update('codebookmark.recentIcons', recent);
     }
 
     public dispose() {
-        IconPickerWebview.currentPanel = undefined;
-        this._panel.dispose();
+        if (!this._disposed) this._panel.dispose();
+    }
+
+    private _disposeResources(): void {
+        if (this._disposed) return;
+        this._disposed = true;
+        if (IconPickerWebview.currentPanel === this) IconPickerWebview.currentPanel = undefined;
         while (this._disposables.length) {
             const x = this._disposables.pop();
             if (x) {
@@ -99,106 +169,109 @@ export class IconPickerWebview {
         }
     }
 
-    private _update() {
-        this._panel.webview.html = this._getHtmlForWebview();
+    private _update(): void {
+        const generation = ++this._renderGeneration;
+        if (!IconPickerWebview._cachedIconDict) {
+            this._panel.webview.html = '<!DOCTYPE html><html><body>正在加载图标…</body></html>';
+        }
+        void this._getHtmlForWebview().then(html => {
+            if (!this._disposed && generation === this._renderGeneration) this._panel.webview.html = html;
+        }).catch(error => {
+            logger.error(`加载图标选择器失败: ${error}`);
+            if (!this._disposed && generation === this._renderGeneration) {
+                this._panel.webview.html = '<!DOCTYPE html><html><body>无法加载图标资源。</body></html>';
+            }
+        });
     }
 
-    
-    private static _cachedIconDict: any[] | null = null;
-    private static _cachedTabsHtml: string = '';
-    private static _cachedPanelsHtml: string = '';
-    private static _cachedIconMap = new Map<string, any>();
+    private static _cachedIconDict: IconDictionaryEntry[] | null = null;
+    private static _cachedIconMap = new Map<string, IconDictionaryEntry>();
+    private static _iconDictionaryPromise: Promise<IconDictionaryEntry[]> | undefined;
 
-                private _getHtmlForWebview() {
+    private static loadIconDictionary(context: vscode.ExtensionContext): Promise<IconDictionaryEntry[]> {
+        if (this._cachedIconDict) return Promise.resolve(this._cachedIconDict);
+        if (!this._iconDictionaryPromise) {
+            const jsonPath = path.join(context.extensionPath, 'resources', 'icon_dictionary.json');
+            this._iconDictionaryPromise = fs.promises.readFile(jsonPath, 'utf8').then(content => {
+                const parsed: unknown = JSON.parse(content);
+                const icons = Array.isArray(parsed)
+                    ? parsed.filter((entry): entry is IconDictionaryEntry => {
+                        if (typeof entry !== 'object' || entry === null) return false;
+                        const icon = entry as Record<string, unknown>;
+                        return normalizeBookmarkIconName(icon.id) !== ''
+                            && ICON_DICTIONARY_ID_PATTERN.test(String(icon.id))
+                            && isSafeDisplayText(icon.name)
+                            && (icon.keywords === undefined || (Array.isArray(icon.keywords) && icon.keywords.every(isSafeDisplayText)));
+                    })
+                    : [];
+                this._cachedIconMap = new Map(icons.map(icon => [icon.id, icon]));
+                this._cachedIconDict = icons;
+                return icons;
+            }).finally(() => {
+                this._iconDictionaryPromise = undefined;
+            });
+        }
+        return this._iconDictionaryPromise;
+    }
+
+    private async _getHtmlForWebview(): Promise<string> {
         const baseUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'resources', 'custom_icons'));
         const fuseUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'resources', 'fuse.min.js'));
+        const nonce = crypto.randomBytes(16).toString('base64');
+        const iconDictionary = await IconPickerWebview.loadIconDictionary(this._context);
 
-        const recentIds = this._context.globalState.get<string[]>('codebookmark.recentIcons') || [];
+        const recentIds = recentIconIds(this._context);
         const baseUriStr = baseUri.toString();
 
         const iconSvg = (path: string) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sidebar-icon"><path d="${path}"/></svg>`;
 
-        // Preload and cache JSON statically
-        if (!IconPickerWebview._cachedIconDict) {
-            const jsonPath = path.join(this._context.extensionPath, 'resources', 'icon_dictionary.json');
-            IconPickerWebview._cachedIconDict = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-            
-            const groups: Record<string, any[]> = {
-                'status': [], 'arch': [], 'ui': [], 'fun': [], 'brand': []
-            };
-
-            IconPickerWebview._cachedIconDict!.forEach((icon: any) => {
-                IconPickerWebview._cachedIconMap.set(icon.id, icon);
-                if (icon.id.startsWith('status_')) groups['status'].push(icon);
-                else if (icon.id.startsWith('arch_')) groups['arch'].push(icon);
-                else if (icon.id.startsWith('ui_')) groups['ui'].push(icon);
-                else if (icon.id.startsWith('fun_')) groups['fun'].push(icon);
-                else if (icon.id.startsWith('brand_')) groups['brand'].push(icon);
-            });
-
-            const titleMap: Record<string, string> = {
-                'status': iconSvg('M22 12h-4l-3 9L9 3l-3 9H2') + ' 代码状态',
-                'arch': iconSvg('M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 12H2M12 2v20') + ' 核心架构',
-                'ui': iconSvg('M3 3h18v18H3zM3 9h18') + ' 界面资源',
-                'fun': iconSvg('M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z') + ' 趣味标签',
-                'brand': iconSvg('M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01') + ' 品牌徽标'
-            };
-
-            const baseUriStr = baseUri.toString();
-
-            ['status', 'arch', 'ui', 'fun', 'brand'].forEach((key, index) => {
-                if (groups[key].length === 0) return;
-                const activeClass = index === 0 ? 'active' : '';
-                IconPickerWebview._cachedTabsHtml += `<div class="tab ${activeClass}" data-target="panel-${key}">${titleMap[key]}</div>`;
-                
-                const innerGrid = groups[key].map((icon: any) => `
-                    <div class="icon-item-container" data-id="${icon.id}">
-                        <div class="icon-card" id="card-${key}-${icon.id}">
-                            <div class="add-recent-btn" onclick="addRecent(event, '${icon.id}')" title="添加到最近使用">📌</div>
-                            <div class="icon-content" data-icon-id="${icon.id}" data-keywords="${(icon.keywords || []).join(', ')}">
-                                <img class="icon-img" src="${baseUriStr}/${icon.id}" alt="${icon.name}" loading="lazy">
-                            </div>
-                        </div>
-                        <span class="icon-name">${icon.name.replace(/_/g, ' ')}</span>
-                    </div>
-                `).join('');
-
-                const hiddenClass = index === 0 ? '' : 'hidden';
-                IconPickerWebview._cachedPanelsHtml += `
-                    <div class="category-section ${hiddenClass}" id="panel-${key}">
-                        <div class="grid">
-                            ${innerGrid}
-                        </div>
-                    </div>
-                `;
-            });
-        }
+        const groups: Record<string, IconDictionaryEntry[]> = { status: [], arch: [], ui: [], fun: [], brand: [] };
+        for (const icon of iconDictionary) groups[icon.id.split('_', 1)[0]]?.push(icon);
+        const titleMap: Record<string, string> = {
+            status: iconSvg('M22 12h-4l-3 9L9 3l-3 9H2') + ' 代码状态',
+            arch: iconSvg('M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 12H2M12 2v20') + ' 核心架构',
+            ui: iconSvg('M3 3h18v18H3zM3 9h18') + ' 界面资源',
+            fun: iconSvg('M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z') + ' 趣味标签',
+            brand: iconSvg('M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01') + ' 品牌徽标',
+        };
+        const categoryKeys = ['status', 'arch', 'ui', 'fun', 'brand'].filter(key => groups[key].length > 0);
+        const categoryTabsHtml = categoryKeys.map((key, index) =>
+            `<div class="tab ${index === 0 ? 'active' : ''}" data-target="panel-${key}">${titleMap[key]}</div>`
+        ).join('');
+        const categoryPanelsHtml = categoryKeys.map((key, index) => `
+            <div class="category-section ${index === 0 ? '' : 'hidden'}" id="panel-${key}" data-category="${key}" data-rendered="0">
+                <div class="grid"></div>
+            </div>
+        `).join('');
 
         // Generate Recent Tab dynamically
         let recentInnerGrid = '';
+        const showRestoreDefault = shouldShowRestoreDefaultIcon(this._currentIcon, this._defaultIcon);
         
-        if (this._currentIcon && this._currentIcon !== '') {
+        if (showRestoreDefault) {
             recentInnerGrid += `
-                <div class="icon-item-container restore-default" data-id="">
-                    <div class="icon-card" style="border-color: #D8BA92; background: rgba(216, 186, 146, 0.1);" onclick="selectIcon('')">
+                <div class="icon-item-container restore-default" data-id="${this._defaultIcon}">
+                    <div class="icon-card">
                         <div class="icon-content">
-                            <span style="font-size: 24px; color: #D8BA92;">↩</span>
+                            <span>↩</span>
                         </div>
                     </div>
-                    <span class="icon-name" style="color: #D8BA92;">恢复默认</span>
+                    <span class="icon-name">恢复默认</span>
                 </div>
             `;
         }
 
-        const recentIcons = recentIds.map(id => IconPickerWebview._cachedIconMap.get(id)).filter(Boolean);
-        if (recentIcons.length === 0 && (!this._currentIcon || this._currentIcon === '')) {
+        const recentIcons = recentIds
+            .map(id => IconPickerWebview._cachedIconMap.get(id))
+            .filter((icon): icon is IconDictionaryEntry => icon !== undefined);
+        if (recentIcons.length === 0 && !showRestoreDefault) {
             recentInnerGrid = `<div class="empty-recent">暂无最近使用记录</div>`;
         } else {
             const baseUriStr = baseUri.toString();
-            recentInnerGrid += recentIcons.map((icon: any) => `
+            recentInnerGrid += recentIcons.map(icon => `
                 <div class="icon-item-container" data-id="${icon.id}">
                     <div class="icon-card" id="card-recent-${icon.id}">
-                        <div class="remove-btn" onclick="removeRecent(event, '${icon.id}')" title="移除">❌</div>
+                        <div class="remove-btn" data-action="remove-recent" data-icon-id="${icon.id}" title="移除">❌</div>
                         <div class="icon-content" data-icon-id="${icon.id}" data-keywords="${(icon.keywords || []).join(', ')}">
                             <img class="icon-img" src="${baseUriStr}/${icon.id}" alt="${icon.name}" loading="lazy">
                         </div>
@@ -219,30 +292,27 @@ export class IconPickerWebview {
 
         let finalTabsHtml = '';
         let initialPanelsHtml = '';
-        let deferredPanelsHtml = '';
-        if (recentIcons.length > 0) {
-            finalTabsHtml = recentTabHtml + `<hr class="sidebar-separator"/>` + IconPickerWebview._cachedTabsHtml.replace('class="tab active"', 'class="tab"');
-            initialPanelsHtml = recentPanelHtml;
-            deferredPanelsHtml = IconPickerWebview._cachedPanelsHtml.replace('class="category-section "', 'class="category-section hidden"');
+        if (recentIcons.length > 0 || showRestoreDefault) {
+            finalTabsHtml = recentTabHtml + `<hr class="sidebar-separator"/>` + categoryTabsHtml.replace('class="tab active"', 'class="tab"');
+            initialPanelsHtml = recentPanelHtml + categoryPanelsHtml.replace('class="category-section "', 'class="category-section hidden"');
         } else {
-            finalTabsHtml = IconPickerWebview._cachedTabsHtml;
-            const firstPanelEndIndex = IconPickerWebview._cachedPanelsHtml.indexOf('<div class="category-section hidden"');
-            if (firstPanelEndIndex > -1) {
-                initialPanelsHtml = IconPickerWebview._cachedPanelsHtml.substring(0, firstPanelEndIndex);
-                deferredPanelsHtml = IconPickerWebview._cachedPanelsHtml.substring(firstPanelEndIndex);
-            } else {
-                initialPanelsHtml = IconPickerWebview._cachedPanelsHtml;
-                deferredPanelsHtml = '';
-            }
+            finalTabsHtml = categoryTabsHtml;
+            initialPanelsHtml = categoryPanelsHtml;
         }
+
+        const iconDataJson = JSON.stringify(iconDictionary)
+            .replace(/</g, '\\u003c')
+            .replace(/>/g, '\\u003e')
+            .replace(/&/g, '\\u0026')
 
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${this._panel.webview.cspSource} data:; style-src ${this._panel.webview.cspSource} 'nonce-${nonce}'; script-src ${this._panel.webview.cspSource} 'nonce-${nonce}';">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>选择书签图标</title>
-                <style>
+                <style nonce="${nonce}">
                     html, body {
                         overflow: hidden;
                         margin: 0;
@@ -465,6 +535,20 @@ export class IconPickerWebview {
                         color: var(--vscode-descriptionForeground);
                         font-style: italic;
                     }
+                    .restore-default .icon-card {
+                        border-color: #D8BA92;
+                        background: rgba(216, 186, 146, 0.1);
+                    }
+                    .restore-default .icon-content span {
+                        color: #D8BA92;
+                        font-size: 24px;
+                    }
+                    .restore-default .icon-name {
+                        color: #D8BA92;
+                    }
+                    #empty-state {
+                        display: none;
+                    }
                     #search-results-panel {
                         display: none;
                     }
@@ -502,7 +586,7 @@ export class IconPickerWebview {
                         color: var(--vscode-textPreformat-foreground);
                     }
                 </style>
-                <script src="${fuseUri}"></script>
+                <script nonce="${nonce}" src="${fuseUri}"></script>
             </head>
             <body>
                 <div class="header">
@@ -513,7 +597,7 @@ export class IconPickerWebview {
                         <span class="brand-name">代码书签</span>
                     </div>
                     <div class="search-container">
-                        <input type="text" id="search" placeholder="在 ${IconPickerWebview._cachedIconDict?.length} 个代码书签图标中搜索 (支持中英双语检索)">
+                        <input type="text" id="search" disabled placeholder="在 ${iconDictionary.length} 个代码书签图标中搜索（支持中英双语检索）">
                     </div>
                 </div>
                 
@@ -527,19 +611,15 @@ export class IconPickerWebview {
                         <div id="search-results-panel" class="category-section">
                             <div class="grid" id="search-results-grid"></div>
                         </div>
-                        <div id="empty-state" class="empty-recent" style="display: none;">未找到匹配的图标</div>
+                        <div id="empty-state" class="empty-recent">未找到匹配的图标</div>
                     </div>
                 </div>
                 
-                <template id="deferred-panels">
-                    ${deferredPanelsHtml}
-                </template>
-
                 <div id="custom-tooltip"></div>
 
-                <script>
+                <script nonce="${nonce}">
                     const vscode = acquireVsCodeApi();
-                    const iconData = ${JSON.stringify(IconPickerWebview._cachedIconDict)};
+                    const iconData = ${iconDataJson};
                     
                     let fuse;
                     let tabs = document.querySelectorAll('.tab');
@@ -579,7 +659,7 @@ export class IconPickerWebview {
                                 const cardHtml = \`
                                     <div class="icon-item-container" data-id="\${iconId}">
                                         <div class="icon-card" id="card-recent-\${iconId}">
-                                            <div class="remove-btn" onclick="removeRecent(event, '\${iconId}')" title="移除">❌</div>
+                                            <div class="remove-btn" data-action="remove-recent" data-icon-id="\${iconId}" title="移除">❌</div>
                                             <div class="icon-content" data-icon-id="\${iconId}">
                                                 <img class="icon-img" src="${baseUriStr}/\${iconId}" loading="lazy">
                                             </div>
@@ -600,15 +680,40 @@ export class IconPickerWebview {
                     };
 
                     const baseUriStr = "${baseUriStr}";
+                    const categoryPageSize = 160;
+                    const categoryData = new Map();
+                    for (const icon of iconData) {
+                        const category = icon.id.split('_', 1)[0];
+                        const items = categoryData.get(category) || [];
+                        items.push(icon);
+                        categoryData.set(category, items);
+                    }
+
+                    function iconCardHtml(icon) {
+                        return \`
+                            <div class="icon-item-container" data-id="\${icon.id}">
+                                <div class="icon-card" id="card-\${icon.id}">
+                                    <div class="add-recent-btn" data-action="add-recent" data-icon-id="\${icon.id}" title="添加到最近使用">📌</div>
+                                    <div class="icon-content" data-icon-id="\${icon.id}" data-keywords="\${(icon.keywords || []).join(', ')}">
+                                        <img class="icon-img" src="\${baseUriStr}/\${icon.id}" alt="\${icon.name}" loading="lazy">
+                                    </div>
+                                </div>
+                                <span class="icon-name">\${icon.name.replace(/_/g, ' ')}</span>
+                            </div>
+                        \`;
+                    }
+
+                    function renderNextCategoryPage(panel) {
+                        if (!panel?.dataset.category) return;
+                        const items = categoryData.get(panel.dataset.category) || [];
+                        const rendered = Number(panel.dataset.rendered || 0);
+                        if (rendered >= items.length) return;
+                        const next = items.slice(rendered, rendered + categoryPageSize);
+                        panel.querySelector('.grid').insertAdjacentHTML('beforeend', next.map(iconCardHtml).join(''));
+                        panel.dataset.rendered = String(rendered + next.length);
+                    }
 
                     setTimeout(() => {
-                        const template = document.getElementById('deferred-panels');
-                        if (template && template.innerHTML.trim().length > 0) {
-                            gallery.insertAdjacentHTML('beforeend', template.innerHTML);
-                            template.remove();
-                            panels = document.querySelectorAll('.category-section:not(#search-results-panel)');
-                        }
-
                         fuse = new Fuse(iconData, {
                             keys: [
                                 { name: 'name', weight: 0.7 },
@@ -618,6 +723,7 @@ export class IconPickerWebview {
                             ignoreLocation: true,
                             useExtendedSearch: true
                         });
+                        renderNextCategoryPage(document.querySelector('.category-section:not(.hidden)[data-category]'));
                         searchInput.disabled = false;
                         searchInput.focus();
                     }, 10);
@@ -629,8 +735,16 @@ export class IconPickerWebview {
                             tab.classList.add('active');
                             panels.forEach(p => p.classList.add('hidden'));
                             const targetId = tab.getAttribute('data-target');
-                            document.getElementById(targetId).classList.remove('hidden');
+                            const targetPanel = document.getElementById(targetId);
+                            targetPanel.classList.remove('hidden');
+                            renderNextCategoryPage(targetPanel);
                         });
+                    });
+
+                    gallery.addEventListener('scroll', () => {
+                        if (document.body.classList.contains('search-mode')) return;
+                        if (gallery.scrollTop + gallery.clientHeight < gallery.scrollHeight - 240) return;
+                        renderNextCategoryPage(document.querySelector('.category-section:not(.hidden)[data-category]'));
                     });
 
                     searchInput.addEventListener('input', (e) => {
@@ -644,7 +758,7 @@ export class IconPickerWebview {
                         }
 
                         document.body.classList.add('search-mode');
-                        const results = fuse.search(query);
+                        const results = fuse.search(query, { limit: 200 });
                         
                         if (results.length === 0) {
                             searchResultsGrid.innerHTML = '';
@@ -659,7 +773,7 @@ export class IconPickerWebview {
                             return \`
                                 <div class="icon-item-container" data-id="\${icon.id}">
                                     <div class="icon-card">
-                                        <div class="add-recent-btn" onclick="addRecent(event, '\${icon.id}')" title="添加到最近使用">📌</div>
+                                        <div class="add-recent-btn" data-action="add-recent" data-icon-id="\${icon.id}" title="添加到最近使用">📌</div>
                                         <div class="icon-content" data-icon-id="\${icon.id}" data-keywords="\${(icon.keywords || []).join(', ')}">
                                             <img class="icon-img" src="${baseUriStr}/\${icon.id}" alt="\${icon.name}" loading="lazy">
                                         </div>
@@ -671,9 +785,23 @@ export class IconPickerWebview {
                     });
 
                     gallery.addEventListener('click', (e) => {
+                        const action = e.target.closest('[data-action]');
+                        if (action?.dataset.action === 'add-recent') {
+                            window.addRecent(e, action.dataset.iconId);
+                            return;
+                        }
+                        if (action?.dataset.action === 'remove-recent') {
+                            window.removeRecent(e, action.dataset.iconId);
+                            return;
+                        }
                         const card = e.target.closest('.icon-item-container');
                         if (card && !e.target.closest('.remove-btn') && !e.target.closest('.add-recent-btn')) {
-                            selectIcon(card.getAttribute('data-id'));
+                            const iconId = card.getAttribute('data-id');
+                            if (card.classList.contains('restore-default')) {
+                                vscode.postMessage({ command: 'restoreDefaultIcon', iconName: iconId });
+                            } else {
+                                selectIcon(iconId);
+                            }
                         }
                     });
 

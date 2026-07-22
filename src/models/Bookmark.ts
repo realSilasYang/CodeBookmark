@@ -1,37 +1,31 @@
-import * as os from 'os'
 import * as vscode from 'vscode'
-import { IconType, bookmarkIcon } from '../util/BookmarkIcon'
+import { normalizeBookmarkIconName } from '../util/BookmarkIconName'
+import { canonicalBookmarkPath } from '../util/BookmarkPath'
 import { Commands } from '../util/constants/Commands'
-import { fileUtils } from '../util/FileUtils'
 import { Helper } from '../util/Helper'
+import { createBookmarkId, createScriptId } from '../util/ScriptIdentity'
 
 
 import { BookmarkSet } from '../models/BookmarkSet'
 import path = require('path')
 import { ContextBookmark } from '../util/ContextValue'
+import {
+	CODE_MARKER_ICON,
+	type CodeMarkerMetadata,
+} from '../util/CodeMarkerScanner'
+import {
+	parseBookmarkJSON,
+	type BookmarkJSON,
+	type BookmarkParseState,
+	type ParsedBookmark,
+} from './BookmarkCodec'
+import { bookmarkLabelText } from './BookmarkLabel'
+import { refreshBookmarkTreeItem } from './BookmarkTreeItemPresentation'
 
+export { MAX_BOOKMARK_NODES } from './BookmarkCodec'
+export type { BookmarkJSON } from './BookmarkCodec'
 
-
-// export enum BookmarkType {
-// 	None = 0,
-// 	File = 1, // symbol-file
-// 	Folder = 2, // symbol-folder
-// 	Method = 3, // symbol-method
-// 	Call = 4, //symbol-class
-// 	Object = 5, // symbol-object
-// 	Class = 6,
-// 	Interface = 7,
-// 	Enum = 8, // symbol-enum
-// 	Array = 9,  // symbol-array
-// 	Variable = 10, // symbol-variable
-// }
-
-enum BookmarkParam {
-	StartLine = 0,
-	StartColumn = 1,
-	EndLine = 2,
-	EndColumn = 3,
-}
+export { bookmarkLabelText } from './BookmarkLabel'
 
 export class CursorIndex {
 	public line: number
@@ -48,119 +42,96 @@ export class CursorIndex {
 		return this.line === other.line && this.column === other.column
 	}
 
-	copy(): CursorIndex {
-		return new CursorIndex(this.line, this.column)
-	}
 }
 
 export class Bookmark extends vscode.TreeItem {
-	public Id!: string
+	private displaySignature: string | undefined
+	public id!: string
 	public icon!: string
 	public path!: string
 	public subs!: BookmarkSet
-	public isOpened?: boolean
-	public collapsible?: vscode.TreeItemCollapsibleState
+	public isPinned: boolean
 	public start!: CursorIndex
 	public end!: CursorIndex
 	public content?: string
+	public contextBefore?: string
+	public contextAfter?: string
+	public createdAt: number
 	public parent?: Bookmark
-	public command?: vscode.Command
+	public scriptId?: string
+	public codeMarker?: CodeMarkerMetadata
 
 	constructor(param?: {
-		Id?: string
-		contextValue?: string
+		id?: string
+		contextValue?: ContextBookmark
 		icon?: string
 		label?: string | vscode.TreeItemLabel
 		path?: string
-		column?: number
 		isInvalid?: boolean
 		subs?: BookmarkSet
 		content?: string
-		isOpened?: boolean
+		contextBefore?: string
+		contextAfter?: string
+		isPinned?: boolean
 		collapsible?: vscode.TreeItemCollapsibleState
 		parent?: Bookmark
 		start?: CursorIndex
 		end?: CursorIndex
+		createdAt?: number
+		scriptId?: string
+		codeMarker?: CodeMarkerMetadata
 	}) {
-		if (param?.contextValue === ContextBookmark.None) {
-			super(param?.label ?? '', vscode.TreeItemCollapsibleState.None)
-			this.icon = ''
-			this.path = ''
-			this.subs = new BookmarkSet()
-			this.start = new CursorIndex(0, 0)
-			this.end = new CursorIndex(0, 0)
-			this.contextValue = ContextBookmark.None
-			this.Id = Helper.createNewId()
+		const collapsible = Bookmark._handleCollapsible(param)
+		const labelText = bookmarkLabelText(param?.label).trim().replace(/\s+/g, ' ').slice(0, 1000)
+		if (param?.contextValue === ContextBookmark.File) {
+			const filePath = param.path ?? ''
+			super(path.basename(filePath), collapsible)
+		} else if (param?.contextValue === ContextBookmark.BookmarkInvalid) {
+			const label = Helper.formatLabelSpacing(labelText)
+			super({ label, highlights: [[0, label.length]] }, collapsible)
 		} else {
+			super(Helper.formatLabelSpacing(labelText), collapsible)
+		}
 
-			// get collapsible state
-			const collapsible = Bookmark._handleCollapsible(param)
-			////
-			if (param?.contextValue === ContextBookmark.File || param?.contextValue === ContextBookmark.Folder) {
-				const uri = fileUtils.relativeToUri(param?.path ?? '')
-				super(
-					uri,
-					collapsible
-				)
-				this.label = path.basename(uri.fsPath)
-			} else {
-				if (param?.contextValue === ContextBookmark.BookmarkInvalid) {
-					super({
-						label: Helper.formatLabelSpacing(`${param?.label}`.trim()),
-						highlights: [[0, Helper.formatLabelSpacing(`${param?.label}`.trim()).length]]
-					},
-						collapsible
-					)
+		this.id = param?.id || createBookmarkId()
+		this.createdAt = param?.createdAt ?? Date.now()
+		this.content = param?.content?.trim()
+		this.contextBefore = param?.contextBefore
+		this.contextAfter = param?.contextAfter
+		this.contextValue = param?.isInvalid
+			? ContextBookmark.BookmarkInvalid
+			: param?.contextValue ?? ContextBookmark.Bookmark
+		if (param?.isPinned && this.contextValue === ContextBookmark.Bookmark) {
+			this.contextValue = ContextBookmark.BookmarkPinned
+		}
+		this.start = param?.start ?? new CursorIndex(0, 0)
+		this.end = param?.end ?? new CursorIndex(0, 0)
+		this.parent = param?.parent
+		this.scriptId = param?.scriptId
+		this.codeMarker = param?.codeMarker
+		this.icon = normalizeBookmarkIconName(param?.icon)
+		this.path = param?.path ?? ''
+		this.subs = param?.subs ?? new BookmarkSet()
+		this.isPinned = param?.isPinned ?? false
+		this.refreshDisplayProps()
 
-				} else {
-					super(
-						Helper.formatLabelSpacing(`${param?.label}`.trim()),
-						collapsible
-					)
-				}
-			}
-			if (param?.Id && param?.Id !== '') {
-				this.Id = param?.Id
-			} else {
-				this.Id = Helper.createNewId()
-			}
-			this.content = param?.content?.trim()
-			
-			if (param?.isInvalid) {
-				this.contextValue = ContextBookmark.BookmarkInvalid
-			} else {
-				this.contextValue = param?.contextValue ?? ContextBookmark.Bookmark
-				if (param?.isOpened && this.contextValue === ContextBookmark.Bookmark) {
-					this.contextValue = ContextBookmark.BookmarkPinned
-				}
-			}
-			this.start = param?.start ?? new CursorIndex(0, 0)
-			this.end = param?.end ?? new CursorIndex(0, 0)
-			this.parent = param?.parent
-			
-			this.icon = param?.icon || '';
-			
-			this.path = param?.path ?? ''
-			this.subs = param?.subs ?? new BookmarkSet()
-			this.isOpened = param?.isOpened ?? false
-			this.refreshDisplayProps()
-
-			if (this.contextValue === ContextBookmark.Bookmark || this.contextValue === ContextBookmark.Watcher || this.contextValue === ContextBookmark.File || this.contextValue === ContextBookmark.BookmarkFolder) {
-				this.command = {
-					command: Commands.openBookmark, // Lệnh khi click vào item
-					title: 'Open Bookmark', // Tên lệnh
-					arguments: [this]
-				}
+		if (!this.isBookmarkInvalid) {
+			this.command = {
+				command: Commands.openBookmark,
+				title: 'Open Bookmark',
+				arguments: [this]
 			}
 		}
 	}
 
-	private static _handleCollapsible(param?: any): vscode.TreeItemCollapsibleState {
+	private static _handleCollapsible(param?: {
+		isPinned?: boolean
+		subs?: BookmarkSet
+		collapsible?: vscode.TreeItemCollapsibleState
+	}): vscode.TreeItemCollapsibleState {
 		let collapsible = vscode.TreeItemCollapsibleState.None
-		if (param?.isOpened) {
-			if (param?.isOpened === true) {
-				collapsible = vscode.TreeItemCollapsibleState.Expanded
-			}
+		if (param?.isPinned) {
+			collapsible = vscode.TreeItemCollapsibleState.Expanded
 		} else if (param?.subs?.size === 0) {
 			collapsible = vscode.TreeItemCollapsibleState.None
 		} else if (param?.collapsible) {
@@ -171,21 +142,14 @@ export class Bookmark extends vscode.TreeItem {
 		return collapsible
 	}
 
-	static _handleTooltipUri(uri: vscode.Uri): string {
-		if (uri.fsPath.startsWith(os.homedir())) {
-			return `~${uri.fsPath.slice(os.homedir().length)}`; // Replace home directory with ~
-		}
-		return ''
-	}
-
 	get level(): number {
-		if (this.contextValue === ContextBookmark.File || this.contextValue === ContextBookmark.Folder || this.contextValue === ContextBookmark.Watcher) {
+		if (this.contextValue === ContextBookmark.File) {
 			return 0;
 		}
 		let lvl = 1;
 		let curr = this.parent;
 		while (curr) {
-			if (curr.contextValue !== ContextBookmark.File && curr.contextValue !== ContextBookmark.Folder && curr.contextValue !== ContextBookmark.Watcher) {
+			if (curr.contextValue !== ContextBookmark.File) {
 				lvl++;
 			}
 			curr = curr.parent;
@@ -194,207 +158,77 @@ export class Bookmark extends vscode.TreeItem {
 	}
 
 	public refreshDisplayProps() {
-		if (this.contextValue === ContextBookmark.Bookmark || this.contextValue === ContextBookmark.BookmarkPinned) {
-			this.contextValue = this.isOpened ? ContextBookmark.BookmarkPinned : ContextBookmark.Bookmark;
-		}
-
-		if (!this.isDirectory) {
-			this.description = ''; // Clear description
-			this.resourceUri = undefined;
-
-			if (this.subs.size === 0) {
-				this.collapsibleState = vscode.TreeItemCollapsibleState.None;
-			} else {
-				this.collapsibleState = this.isOpened ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed;
-			}
-		}
-
-		this._handleTooltip();
-
-		if (this.contextValue === ContextBookmark.None && this.Id === 'No Watcher') {
-			this.iconPath = bookmarkIcon.getIcon(IconType.watcher)
-			return
-		}
-		if (this.isBookmarkInvalid) {
-			this.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'))
-			return
-		}
-		if (this.contextValue === ContextBookmark.Watcher) {
-			if (this.isOpened) {
-				this.iconPath = new vscode.ThemeIcon('eye', new vscode.ThemeColor('charts.green'))
-			} else {
-				this.iconPath = new vscode.ThemeIcon('eye')
-			}
-			return
-		}
-		if (this.contextValue === ContextBookmark.File) {
-			this.iconPath = new vscode.ThemeIcon('file', new vscode.ThemeColor('codebookmark.color.fileNode'))
-			return
-		}
-		
-		const lvl = this.level;
-		const hasSubs = this.subs.size > 0;
-
-		if (this.isOpened) {
-			this.iconPath = new vscode.ThemeIcon('folder-opened', new vscode.ThemeColor('charts.green'));
-		} else if (this.icon === '') {
-			if (hasSubs) {
-				if (lvl === 1) {
-					this.iconPath = new vscode.ThemeIcon('bookmark', new vscode.ThemeColor('codebookmark.color.Lvl1Orange'));
-				} else if (lvl === 2) {
-					this.iconPath = new vscode.ThemeIcon('bookmark', new vscode.ThemeColor('codebookmark.color.Lvl2Blue'));
-				} else {
-					this.iconPath = new vscode.ThemeIcon('folder');
-				}
-			} else {
-				this.iconPath = new vscode.ThemeIcon('bookmark');
-			}
-		} else if (this.icon !== '') {
-			this.iconPath = bookmarkIcon.getCustomIcon(this.icon as string);
-		}
+		this.displaySignature = refreshBookmarkTreeItem(this, this.displaySignature)
 	}
 
 	// Json local
-	public toJSON(): any {
+	public toJSON(): BookmarkJSON {
 		return {
-			id: this.Id,
-			label: this.label,
+			id: this.id,
+			createdAt: this.createdAt,
+			label: bookmarkLabelText(this.label),
 			path: this.path,
-			line: this.start.line,
-			opened: this.collapsibleState,
-			// Persist the pin flag explicitly. `opened` above stores the tree collapsible state
-			// (a VS Code enum) — it is NOT the pin flag, despite the ambiguous name. Without this
-			// field the pinned state was lost on every reload / undo / redo.
-			pinned: this.isOpened === true,
+			collapsibleState: this.collapsibleState ?? vscode.TreeItemCollapsibleState.None,
+			pinned: this.isPinned,
 			content: this.content,
+			contextBefore: this.contextBefore,
+			contextAfter: this.contextAfter,
 			iconName: this.icon,
 			isInvalid: this.contextValue === ContextBookmark.BookmarkInvalid,
 			subs: Array.from(this.subs).map(sub => sub.toJSON()),
 			params: `${this.start.line},${this.start.column},${this.end.line},${this.end.column}`,
+			codeMarker: this.codeMarker,
 		}
 	}
-	public static fromJSON(data: any): Bookmark {
+	private static fromParsedJSON(data: ParsedBookmark): Bookmark {
 		const subs = new BookmarkSet()
-		if (data.subs && data.subs.length > 0) {
-			for (const subItem of data.subs) {
-				subs.add(this.fromJSON(subItem))
-			}
-		}
-
-		// Robust params parse: tolerate missing/short/legacy `params` instead of crashing.
-		// Fall back to the legacy `line` field for the start line when params is absent.
-		const rawParams = typeof data.params === 'string' ? data.params.split(',').map(Number) : [];
-		const num = (i: number, fallback = 0) => (Number.isFinite(rawParams[i]) ? rawParams[i] : fallback);
-		const legacyLine = Number.isFinite(data.line) ? data.line : 0;
-		const startLine = num(BookmarkParam.StartLine, legacyLine);
-		const startCol = num(BookmarkParam.StartColumn, 0);
-		const endLine = num(BookmarkParam.EndLine, startLine);
-		const endCol = num(BookmarkParam.EndColumn, startCol);
-
-		const parsedIcon: string = data.iconName || '';
-
-		// Restore the pin flag (see toJSON). Nodes reaching fromJSON are always real bookmarks
-		// nested under a File node — File/Folder containers are constructed directly, not via JSON.
-		const pinned = data.pinned === true;
-
+		for (const child of data.subs) subs.add(this.fromParsedJSON(child))
 		const parent = new Bookmark({
-			Id: data.id,
+			id: data.id,
 			label: data.label,
 			path: data.path,
 			content: data.content,
-			collapsible: data.opened,
-			icon: parsedIcon,
-			subs: subs,
-			start: new CursorIndex(startLine, startCol),
-			end: new CursorIndex(endLine, endCol),
+			contextBefore: data.contextBefore,
+			contextAfter: data.contextAfter,
+			collapsible: data.collapsibleState as vscode.TreeItemCollapsibleState,
+			icon: data.iconName,
+			subs,
+			start: new CursorIndex(data.startLine, data.startColumn),
+			end: new CursorIndex(data.endLine, data.endColumn),
 			isInvalid: data.isInvalid,
-			isOpened: pinned,
+			isPinned: data.pinned,
+			createdAt: data.createdAt,
+			codeMarker: data.codeMarker,
 		})
-		for (const bm of subs) {
-			bm.parent = parent
-		}
+		for (const child of subs) child.parent = parent
 		parent.subs = subs
 		return parent
 	}
 
-
-	public compareIndex(other: Bookmark): boolean {
-		return this.path === other.path && this.start.line === other.start.line
+	public static fromJSON(data: unknown, depth = 0, state: BookmarkParseState = { count: 0 }): Bookmark {
+		return this.fromParsedJSON(parseBookmarkJSON(data, depth, state))
 	}
 
-	public equals(other: Bookmark | undefined): boolean {
-		if (!other) return false
-		return this.Id === other.Id
-	}
-
-	public copyWith(param?: {
-		Id?: string
-		label?: string | vscode.TreeItemLabel
-		path?: string
-		icon?: string
-		subs?: BookmarkSet
-		content?: string
-		isOpened?: boolean
-		collapsibleState?: vscode.TreeItemCollapsibleState
-		parent?: Bookmark
-		contextValue?: ContextBookmark
-		start?: CursorIndex
-		end?: CursorIndex
-	}): Bookmark {
+	public createContainingFileNode(): Bookmark {
+		const scriptId = createScriptId()
+		const canonicalPath = canonicalBookmarkPath(this.path)
+		this.path = canonicalPath
 		return new Bookmark({
-			Id: param?.Id ?? this.Id,
-			label: param?.label ?? this.label,
-			path: param?.path ?? this.path,
-			subs: param?.subs ?? this.subs,
-			icon: param?.icon ?? this.icon,
-			content: param?.content ?? this.content,
-			isOpened: param?.isOpened ?? this.isOpened,
-			collapsible: param?.collapsibleState ?? this.collapsibleState,
-			parent: param?.parent ?? this.parent,
-			contextValue: param?.contextValue ?? this.contextValue,
-			start: param?.start ?? this.start,
-			end: param?.end ?? this.end,
+			id: `file_${scriptId}`,
+			label: canonicalPath,
+			path: canonicalPath,
+			scriptId,
+			contextValue: ContextBookmark.File,
+			collapsible: vscode.TreeItemCollapsibleState.Expanded,
+			createdAt: this.createdAt,
 		})
 	}
 
-	public getParent(bookmarks: Array<Bookmark>): Bookmark | null {
-		for (const bm of bookmarks) {
-			const parent = this._findParent(bm, this)
-			if (parent) {
-				return parent
-			}
-		}
-		return null
-	}
 
-	private _handleTooltip() {
-		if (this.isDirectory) {
-			if (this.resourceUri) this.tooltip = Bookmark._handleTooltipUri(this.resourceUri)
-		} else {
-			const tooltipContent = new vscode.MarkdownString();
-			tooltipContent.supportThemeIcons = true
-			tooltipContent.appendMarkdown(`#### $(tag) ${this.label} &nbsp;&nbsp; $(debug-line-by-line) ${this.start.line + 1}\n`)
-			if (this.subs.size > 0) {
-				tooltipContent.appendMarkdown(`$(type-hierarchy-sub) **${this.subs.size}**\n`)
-			}
-			tooltipContent.appendCodeblock(this.content ?? '', path.extname(this.path).split('.').pop())
-			this.tooltip = tooltipContent
-		}
+	public equals(other: Bookmark | undefined): boolean {
+		if (!other) return false
+		return this.id === other.id
 	}
-
-	private _findParent(parent: Bookmark, child: Bookmark): Bookmark | null {
-		if (parent.subs.has(child)) {
-			return parent
-		}
-		for (const subElement of parent.subs) {
-			const found = this._findParent(subElement, child)
-			if (found) {
-				return found
-			}
-		}
-		return null
-	}
-
 	isChildOf(bookmarks: BookmarkSet): boolean {
 		for (const bm of bookmarks) {
 			if (bm.subs.has(this)) {
@@ -409,27 +243,19 @@ export class Bookmark extends vscode.TreeItem {
 		return false
 	}
 
-	hasSub(bookmarks: BookmarkSet): boolean {
-		const size = bookmarks.findBookmark(this)?.subs?.size ?? 0
-		return size > 0
-	}
-
 	get isFile(): boolean {
 		return this.contextValue === ContextBookmark.File
 	}
-	get isFolder(): boolean {
-		return this.contextValue === ContextBookmark.Folder
-	}
-	get isDirectory(): boolean {
-		return this.isFile || this.isFolder
-	}
-	get isWatcher(): boolean {
-		return this.contextValue === ContextBookmark.Watcher
-	}
-	get isBookmark(): boolean {
-		return this.contextValue === ContextBookmark.Bookmark
-	}
 	get isBookmarkInvalid(): boolean {
 		return this.contextValue === ContextBookmark.BookmarkInvalid
+	}
+	get isCodeMarker(): boolean {
+		return this.codeMarker !== undefined
+	}
+	get defaultIconName(): string {
+		return this.isCodeMarker ? CODE_MARKER_ICON : ''
+	}
+	get isUsingDefaultIcon(): boolean {
+		return this.icon === this.defaultIconName
 	}
 }

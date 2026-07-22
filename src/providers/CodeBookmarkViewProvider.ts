@@ -1,38 +1,290 @@
 import * as vscode from 'vscode'
 import { Commands } from '../util/constants/Commands'
 import { fileUtils } from '../util/FileUtils'
-import { Helper } from '../util/Helper'
 import { logger } from '../util/Logger'
 
 import { IconPickerWebview } from '../util/quick_pick_icon/IconPickerWebview'
-import { Bookmark, CursorIndex } from '../models/Bookmark'
-import { LinePath } from '../models/LinePath'
+import { fileChangeFingerprints } from '../util/FileChangeFingerprint'
+import { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
-import { bookmarkRepository } from '../repository/BookmarkRepository'
-import { SortModeBookmark } from '../models/ViewMode'
+import { bookmarkRepository, type ScriptRelocationChange } from '../repository/BookmarkRepository'
 import fs = require('fs')
 import * as path from 'path'
-import { ContextBookmark } from '../util/ContextValue'
+import { ContextBookmark, isBookmarkItemContext } from '../util/ContextValue'
 import { ExtensionConfig } from '../config/ExtensionConfig'
-import { undoManager } from './UndoManager'
-import { AIService } from '../util/AIService'
+import { undoManager, type CapturedUndoState } from './UndoManager'
+import { storageRootState } from '../util/StorageRootState'
+import { transferStorageRoot } from '../repository/StorageRootTransfer'
+import { bookmarkPathKey } from '../util/BookmarkPath'
+import { LanguageCommentProfileRegistry } from '../util/LanguageCommentProfiles'
+import {
+	isExcludedSourceRelativePath,
+	SOURCE_SCAN_EXCLUDE_GLOB,
+} from '../util/SourceFilePolicy'
+import { performanceMonitor } from '../util/PerformanceMonitor'
+import type { UndoAction } from '../util/UndoActions'
+import type { ViewTransitionState } from '../util/ViewTransition'
+import { publishViewTransition } from './ViewTransitionPublisher'
+import { runViewLoadPipeline } from './ViewLoadPipeline'
+import { runBackgroundEnhancements } from './BackgroundEnhancementRunner'
+import { SerialTaskQueue } from '../util/SerialTaskQueue'
+import {
+	normalizedAbsolutePath,
+} from '../util/AbsolutePath'
+import { ViewLoadSession } from './ViewLoadSession'
+import { finalizeViewLoad } from './ViewLoadFinalizer'
+import { ensureStorageRootActive } from './StorageRootActivator'
+import {
+	prepareBookmarkView as runBookmarkViewPreparation,
+	type PreparedBookmarkView,
+	type WorkspaceOrderSnapshot,
+} from './BookmarkViewPreparation'
+import { commitBookmarkView } from './BookmarkViewCommitter'
+import { readWorkspaceOrderForView as loadWorkspaceOrderForView } from './WorkspaceOrderViewLoader'
+import { reloadExternalBookmarkFiles as runExternalBookmarkReload } from './ExternalBookmarkReloadRunner'
+import {
+	synchronizeCodeMarkersInDocument as runCodeMarkerDocumentSync,
+	synchronizeCodeMarkersForUris as runCodeMarkerUriSync,
+	synchronizeOpenCodeMarkerDocuments as runOpenCodeMarkerSync,
+	type CodeMarkerDocumentSyncPort,
+} from './CodeMarkerDocumentSync'
+import { scanWorkspaceCodeMarkers as runWorkspaceCodeMarkerScan } from './WorkspaceCodeMarkerScanRunner'
+import { reloadCodeMarkerLanguageProfiles as runCodeMarkerLanguageReload } from './CodeMarkerLanguageReloadRunner'
+import { AITaskRegistry } from './AITaskRegistry'
+import { visitAISourceFilesInFolder } from '../util/AISourceFolderScanner'
+import {
+	AIFolderPresenceCache,
+	bookmarkPathPresenceSignature,
+	type AIFolderBookmarkPresence,
+} from './AIFolderPresenceCache'
+import { AIWorkflowGuard } from './AIWorkflowGuard'
+import {
+	runGenerateBookmarksForFile,
+	runOptimizeBookmarksForFile,
+	type AIGenerationMode,
+	type AISingleFileWorkflowPort,
+} from './AISingleFileWorkflowRunner'
+import {
+	runGenerateBookmarksForFolder,
+	runOptimizeBookmarksForFolder,
+	type AIFolderWorkflowPort,
+	type AIFolderWorkflowTarget,
+} from './AIFolderWorkflowRunner'
+import { BookmarkIdleViewCoordinator } from './BookmarkIdleViewCoordinator'
+import {
+	runOptimizeSelectedBookmarks,
+	type AISelectedBookmarksWorkflowPort,
+} from './AISelectedBookmarksWorkflowRunner'
+import {
+	runForceAddBookmark,
+	runForceDeleteBookmark,
+	runToggleBookmark,
+	type ManualBookmarkWorkflowPort,
+} from './ManualBookmarkWorkflowRunner'
+import {
+	runChangeBookmarkIcons,
+	runRenameBookmark,
+	runRestoreDefaultBookmarkIcons,
+	runTogglePinnedBookmark,
+	runUpdateBookmarkPosition,
+	runUpdateBookmarkPositionAndRename,
+	type BookmarkEditingWorkflowPort,
+} from './BookmarkEditingWorkflowRunner'
+import {
+	hasInvalidBookmarks,
+	runClearInvalidBookmarks,
+	runDeleteBookmarks,
+	type BookmarkDeletionWorkflowPort,
+} from './BookmarkDeletionWorkflowRunner'
+import {
+	BOOKMARK_TREE_MIME_TYPE,
+	publishExpandCollapseContext,
+	runBookmarkTreeDrag,
+	runBookmarkTreeDrop,
+	runExpandFolderTreeView,
+	runSearchBookmarksInActiveFile,
+	runSelectBookmarkSortMode,
+	runToggleExpandCollapse,
+	sortBookmarkTreeItems,
+	type BookmarkTreeInteractionPort,
+} from './BookmarkTreeInteractionRunner'
+import {
+	BookmarkSaveCoordinator,
+	type BookmarkSaveCoordinatorPort,
+} from './BookmarkSaveCoordinator'
+import {
+	runImportBookmarkConfiguration,
+	type BookmarkImportWorkflowPort,
+} from './BookmarkImportWorkflowRunner'
+import {
+	BookmarkViewRefreshCoordinator,
+	type BookmarkViewRefreshPort,
+} from './BookmarkViewRefreshCoordinator'
+import {
+	BookmarkStoragePathWorkflowRunner,
+	type BookmarkStoragePathWorkflowPort,
+} from './BookmarkStoragePathWorkflowRunner'
+import {
+	applyRepositoryRelocations as applySourceRepositoryRelocations,
+	runDeletedSourcePath,
+	runRenamedSourcePath,
+	type SourcePathChangeWorkflowPort,
+} from './SourcePathChangeWorkflowRunner'
+import {
+	runBookmarkHistoryOperation,
+	type BookmarkHistoryWorkflowPort,
+} from './BookmarkHistoryWorkflowRunner'
+import {
+	CodeMarkerSyncLifecycle,
+	type CodeMarkerSyncLifecyclePort,
+} from './CodeMarkerSyncLifecycle'
+import {
+	BookmarkContextCoordinator,
+	type BookmarkContextFailureKind,
+	type BookmarkContextPort,
+} from './BookmarkContextCoordinator'
+import {
+	InlineBookmarkDecorationCoordinator,
+	type InlineBookmarkDecorationPort,
+} from './InlineBookmarkDecorationCoordinator'
+import {
+	BookmarkTreeDataProjection,
+	type BookmarkTreeDataProjectionPort,
+} from './BookmarkTreeDataProjection'
+import {
+	BookmarkTreeViewLifecycle,
+	type BookmarkTreeViewLifecyclePort,
+} from './BookmarkTreeViewLifecycle'
+import {
+	BookmarkConfigWatcherCoordinator,
+	type BookmarkConfigWatcherFailureKind,
+	type BookmarkConfigWatcherPort,
+} from './BookmarkConfigWatcherCoordinator'
+import {
+	BookmarkDocumentChangeCoordinator,
+	type BookmarkDocumentChangePort,
+} from './BookmarkDocumentChangeCoordinator'
+import {
+	CodeMarkerSnapshotCoordinator,
+	type CodeMarkerSnapshotPort,
+} from './CodeMarkerSnapshotCoordinator'
+import {
+	CodeMarkerSourceReader,
+	type CodeMarkerSourceReaderPort,
+} from './CodeMarkerSourceReader'
 
-export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookmark>, vscode.TreeDragAndDropController<Bookmark> {
+const LAST_STORAGE_ROOT_KEY = 'codebookmark.lastStorageRoot'
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error)
+}
+
+const MAX_BACKGROUND_CODE_MARKER_FILES = 2_000
+const CODE_MARKER_SCAN_CONCURRENCY = 4
+const TREE_RENDER_SETTLE_MS = 16
+
+export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookmark>, vscode.TreeDragAndDropController<Bookmark>, vscode.Disposable {
 	private _onDidChangeTreeData: vscode.EventEmitter<Bookmark | undefined | null | void> = new vscode.EventEmitter<Bookmark | undefined | null | void>()
 	readonly onDidChangeTreeData: vscode.Event<Bookmark | undefined | null | void> = this._onDidChangeTreeData.event
 
-	dropMimeTypes = ['application/vnd.code.tree.codebookmarkCodeBookmark']
-	dragMimeTypes = ['text/uri-list']
-
-	private hasBookmark = false
+	readonly dropMimeTypes = [BOOKMARK_TREE_MIME_TYPE]
+	readonly dragMimeTypes = [BOOKMARK_TREE_MIME_TYPE]
 
 	public codeBookmarks = new BookmarkSet()
 	private workspaceOrderCache: string[] | null = null;
-	private fileNodesCache = new Map<string, Bookmark>();
+	private readonly bookmarkTreeDataProjection = new BookmarkTreeDataProjection<Bookmark, vscode.Uri>()
+	private readonly bookmarkTreeViewLifecycle =
+		new BookmarkTreeViewLifecycle<vscode.TreeView<Bookmark>, vscode.TextEditor, Bookmark, BookmarkSet>()
 	private _pathIndex: Map<string, Bookmark[]> | null = null;
 
 	public invalidatePathIndex() {
 		this._pathIndex = null;
+	}
+
+	private currentScopeUri(): vscode.Uri | undefined {
+		return this.currentScopeFilePath ? vscode.Uri.file(this.currentScopeFilePath) : undefined
+	}
+
+	private absoluteBookmarkPath(bookmarkPath: string): string {
+		return fileUtils.relativeToAbsolute(bookmarkPath, this.currentScopeUri())
+	}
+
+	private readonly bookmarkTreeDataProjectionPortAdapter: BookmarkTreeDataProjectionPort<Bookmark, vscode.Uri> = {
+		rootItems: () => this.codeBookmarks.values,
+		findItem: item => this.codeBookmarks.findBookmark(item),
+		childrenOf: item => item.subs.values,
+		parentOf: item => item.parent,
+		isFile: item => item.isFile,
+		itemPath: item => item.path,
+		resourceUri: item => item.resourceUri,
+		setResourceUri: (item, uri) => { item.resourceUri = uri },
+		createResourceUri: absolutePath => vscode.Uri.file(absolutePath),
+		absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
+		relativeBookmarkPath: absolutePath => fileUtils.absoluteToRelative(absolutePath),
+		isWorkspaceScope: () => this.currentStorageScope?.startsWith('workspace:') === true,
+		currentScopeFilePath: () => this.currentScopeFilePath,
+		workspaceOrder: () => this.workspaceOrderCache,
+		setWorkspaceOrder: order => { this.workspaceOrderCache = order },
+		persistWorkspaceOrder: order => {
+			const folder = fileUtils.getGlobalBookmarkFolder(true, this.currentScopeUri())
+			if (!folder) return
+			const orderFile = path.join(folder, '_workspace_order.json')
+			void fileUtils.writeJsonFileAsync(orderFile, order).then(success => {
+				if (!success) logger.showWarningMessage('无法保存工作区文件排序，请检查书签存储路径权限。')
+			})
+		},
+		sortItems: items => sortBookmarkTreeItems(items),
+		refreshItem: item => item.refreshDisplayProps(),
+		resolveTreePopulation: () => this.resolvePendingTreePopulation(this.viewLoadGeneration),
+	}
+
+	private bookmarkTreeDataProjectionPort(): BookmarkTreeDataProjectionPort<Bookmark, vscode.Uri> {
+		return this.bookmarkTreeDataProjectionPortAdapter
+	}
+
+	private readonly bookmarkTreeViewLifecyclePortAdapter: BookmarkTreeViewLifecyclePort<
+		vscode.TreeView<Bookmark>,
+		vscode.TextEditor,
+		Bookmark,
+		BookmarkSet
+	> = {
+		isDisposed: () => this.disposed,
+		currentTreeView: () => this.treeView,
+		setLoadingMessage: treeView => { treeView.message = '正在加载书签…' },
+		reportSlowInitialLoad: warningMs =>
+			logger.error(`书签初始化已超过 ${warningMs / 1000} 秒；扩展已正常启动，数据仍在后台加载。`),
+		setSlowLoadingMessage: treeView => { treeView.message = '书签加载时间较长，仍在后台继续…' },
+		clearInitialLoadMessage: treeView => { treeView.message = undefined },
+		reportInitialLoadFailure: error => logger.error(`初始化书签视图失败: ${errorMessage(error)}`),
+		setInitialLoadFailureMessage: treeView => {
+			treeView.message = '书签初始化失败，请查看“CodeBookmark”输出。'
+		},
+		isWorkspaceScope: () => this.currentStorageScope?.startsWith('workspace:') === true,
+		currentViewLoadGeneration: () => this.viewLoadGeneration,
+		treeVisible: () => this.treeView?.visible === true,
+		bookmarkPathForEditor: editor => fileUtils.absoluteToRelative(editor.document.uri.fsPath),
+		hasFileNode: bookmarkPath => this.bookmarkTreeDataProjection.hasFileNode(bookmarkPath),
+		fileNode: bookmarkPath => this.bookmarkTreeDataProjection.fileNode(bookmarkPath),
+		activeEditorMatches: editor => {
+			const activeUri = vscode.window.activeTextEditor?.document.uri
+			return activeUri?.scheme === 'file'
+				&& normalizedAbsolutePath(activeUri.fsPath) === normalizedAbsolutePath(editor.document.uri.fsPath)
+		},
+		treeViewAvailable: () => this.treeView !== undefined,
+		currentBookmarkState: () => this.codeBookmarks,
+		findBookmark: bookmark => this.codeBookmarks.findBookmark(bookmark),
+		revealNode: node => {
+			void this.treeView?.reveal(node, { expand: true, select: false, focus: false })
+		},
+	}
+
+	private bookmarkTreeViewLifecyclePort(): BookmarkTreeViewLifecyclePort<
+		vscode.TreeView<Bookmark>,
+		vscode.TextEditor,
+		Bookmark,
+		BookmarkSet
+	> {
+		return this.bookmarkTreeViewLifecyclePortAdapter
 	}
 
 	public getBookmarksByPath(pathStr: string): Bookmark[] {
@@ -40,11 +292,12 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			this._pathIndex = new Map();
 			const buildIndex = (bms: BookmarkSet) => {
 				for (const b of bms.values) {
-					if (b.path && !b.isDirectory && !b.isWatcher) {
-						let arr = this._pathIndex!.get(b.path);
+					if (b.path && !b.isFile) {
+						const key = bookmarkPathKey(b.path)
+						let arr = this._pathIndex!.get(key);
 						if (!arr) {
 							arr = [];
-							this._pathIndex!.set(b.path, arr);
+							this._pathIndex!.set(key, arr);
 						}
 						arr.push(b);
 					}
@@ -55,22 +308,452 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			};
 			buildIndex(this.codeBookmarks);
 		}
-		return this._pathIndex.get(pathStr) || [];
+		return this._pathIndex.get(bookmarkPathKey(pathStr)) || [];
 	}
 
 	private context: vscode.ExtensionContext
-	private viewCodeBookmark: vscode.TreeView<Bookmark> | undefined
+	private readonly bookmarkContextCoordinator = new BookmarkContextCoordinator<vscode.Uri>()
+	private readonly inlineBookmarkDecorationCoordinator =
+		new InlineBookmarkDecorationCoordinator<vscode.TextEditor, Bookmark, vscode.DecorationOptions>()
+	private readonly inlineBookmarkDecorationPortAdapter: InlineBookmarkDecorationPort<
+		vscode.TextEditor,
+		Bookmark,
+		vscode.DecorationOptions
+	> = {
+		isEligible: editor =>
+			editor.document.uri.scheme === 'file' && this.uriMatchesCurrentScope(editor.document.uri),
+		labelsEnabled: () => ExtensionConfig.inlineLabel,
+		documentKey: editor => editor.document.uri.toString(),
+		documentVersion: editor => editor.document.version,
+		cursorLine: editor => editor.selection.active.line,
+		candidatesForEditor: editor =>
+			this.getBookmarksByPath(fileUtils.absoluteToRelative(editor.document.uri.fsPath)),
+		candidateLine: bookmark => bookmark.start.line,
+		candidateLabel: bookmark => bookmark.label,
+		isInvalidCandidate: bookmark => bookmark.contextValue === ContextBookmark.BookmarkInvalid,
+		createDecoration: (editor, line, label) => {
+			const lineEnd = editor.document.lineAt(line).range.end
+			return {
+				range: new vscode.Range(lineEnd.line, lineEnd.character, lineEnd.line, lineEnd.character),
+				renderOptions: {
+					after: { contentText: `  • ${label}` },
+				},
+			}
+		},
+		setDecorations: (editor, decorations) =>
+			editor.setDecorations(this._inlineLabelDecorationType, decorations),
+	}
+	private readonly aiFolderPresence = new AIFolderPresenceCache()
 
-	private _initPromise: Promise<void>;
-	private _resolveInit!: () => void;
-	private runningAITasks: Set<string> = new Set();
+	private setContextValue(key: string, value: unknown): Promise<void> {
+		return this.bookmarkContextCoordinator.setContextValue(key, value, this.bookmarkContextPort())
+	}
+
+	private activeTabFileUri(): vscode.Uri | undefined {
+		const input = vscode.window.tabGroups?.activeTabGroup?.activeTab?.input
+		if (input instanceof vscode.TabInputText) {
+			return input.uri.scheme === 'file' ? input.uri : undefined
+		}
+		if (input instanceof vscode.TabInputTextDiff) {
+			if (input.modified.scheme === 'file') return input.modified
+			return input.original.scheme === 'file' ? input.original : undefined
+		}
+		return undefined
+	}
+
+	private hasOpenFileTab(): boolean {
+		return (vscode.window.tabGroups?.all ?? []).some(group => group.tabs.some(tab => {
+			const input = tab.input
+			if (input instanceof vscode.TabInputText) return input.uri.scheme === 'file'
+			if (input instanceof vscode.TabInputTextDiff) {
+				return input.original.scheme === 'file' || input.modified.scheme === 'file'
+			}
+			return false
+		}))
+	}
+
+	private workspaceFolderRootForCurrentScope(): string | undefined {
+		const folders = (vscode.workspace.workspaceFolders ?? [])
+			.filter(folder => folder.uri.scheme === 'file')
+		if (folders.length === 0) return undefined
+		if (this.currentStorageScope?.startsWith('workspace:')) {
+			const currentFolder = folders.find(folder =>
+				`workspace:${normalizedAbsolutePath(folder.uri.fsPath)}` === this.currentStorageScope)
+			if (currentFolder) return currentFolder.uri.fsPath
+		}
+		return folders[0].uri.fsPath
+	}
+
+	private readonly bookmarkContextPortAdapter: BookmarkContextPort<vscode.Uri> = {
+		setContext: (key, value) => vscode.commands.executeCommand('setContext', key, value),
+		activeEditorFileUri: () => {
+			const uri = vscode.window.activeTextEditor?.document.uri
+			return uri?.scheme === 'file' ? uri : undefined
+		},
+		activeTabFileUri: () => this.activeTabFileUri(),
+		workspaceFolderDirectory: () => this.workspaceFolderRootForCurrentScope(),
+		isCurrentScope: uri => this.uriMatchesCurrentScope(uri),
+		filePath: uri => uri.fsPath,
+		currentBookmarkCount: () => this.codeBookmarks.size,
+		hasBookmarksForUri: uri =>
+			this.getBookmarksByPath(fileUtils.absoluteToRelative(uri.fsPath)).length > 0,
+		folderBookmarkPresence: directory => this.folderBookmarkPresence(directory),
+		reportFailure: (kind, error) => this.reportBookmarkContextFailure(kind, error),
+	}
+
+	private bookmarkContextPort(): BookmarkContextPort<vscode.Uri> {
+		return this.bookmarkContextPortAdapter
+	}
+
+	private reportBookmarkContextFailure(kind: BookmarkContextFailureKind, error: unknown): void {
+		const messages: Record<BookmarkContextFailureKind, string> = {
+			'active-editor': '更新活动编辑器命令状态失败',
+			'active-tab': '更新活动标签页上下文失败',
+			'presence': '更新书签显示上下文失败',
+			'previous-ai-folder': '上一次 AI 菜单上下文更新失败',
+			'ai-folder-state': '更新 AI 文件夹菜单状态失败',
+			'ai-folder-update': '更新 AI 菜单上下文失败',
+		}
+		logger.error(`${messages[kind]}: ${errorMessage(error)}`)
+	}
+
+	private inlineBookmarkDecorationPort(): InlineBookmarkDecorationPort<
+		vscode.TextEditor,
+		Bookmark,
+		vscode.DecorationOptions
+	> {
+		return this.inlineBookmarkDecorationPortAdapter
+	}
+
+	private readonly aiTaskRegistry = new AITaskRegistry()
+	private readonly aiWorkflowGuard = new AIWorkflowGuard({
+		currentStorageScope: () => this.currentStorageScope,
+		bookmarksForPath: pathRel => this.getBookmarksByPath(pathRel),
+	})
+	private reconciliationAttemptedPaths = new Set<string>()
+	private readonly codeMarkerSnapshotCoordinator = new CodeMarkerSnapshotCoordinator<vscode.Uri>()
+	private readonly codeMarkerSourceReader = new CodeMarkerSourceReader<vscode.TextDocument, vscode.Uri>()
+	private readonly codeMarkerSyncLifecycle = new CodeMarkerSyncLifecycle<vscode.Uri, vscode.Disposable>()
+	private readonly bookmarkDocumentChangeCoordinator =
+		new BookmarkDocumentChangeCoordinator<vscode.TextDocument, vscode.Uri, BookmarkSet>()
+	private readonly languageCommentProfiles = new LanguageCommentProfileRegistry()
+	private readonly viewLoads = new ViewLoadSession()
+	private readonly viewRefreshCoordinator = new BookmarkViewRefreshCoordinator()
+	private readonly viewPreparationQueue = new SerialTaskQueue()
+	private get viewLoadGeneration(): number {
+		return this.viewLoads.generation
+	}
+
+	private get loadingViewGeneration(): number | undefined {
+		return this.viewLoads.loadingGeneration
+	}
+
+	public onSourceFilesChanged(): void {
+		this.aiFolderPresence.invalidateSourceFiles()
+		this.bookmarkContextCoordinator.invalidateAIFolderContext()
+		this.reconciliationAttemptedPaths.clear()
+		this.codeMarkerSyncLifecycle.invalidateWorkspaceScanScope()
+		this.scheduleWorkspaceCodeMarkerScan()
+		void this.queueBookmarkPresenceContexts()
+	}
+
+	private cancelPendingPathWork(absolutePath: string): void {
+		const bookmarkPath = fileUtils.absoluteToRelative(absolutePath)
+		this.bookmarkDocumentChangeCoordinator.cancelBookmarkPath(bookmarkPath)
+		this.codeMarkerSyncLifecycle.cancelPath(absolutePath)
+	}
+
+	private sourcePathChangeWorkflowPort(): SourcePathChangeWorkflowPort {
+		return {
+			isDisposed: () => this.disposed,
+			bookmarks: () => this.codeBookmarks,
+			currentStorageScope: () => this.currentStorageScope,
+			setCurrentStorageScope: scope => { this.currentStorageScope = scope },
+			currentScopeFilePath: () => this.currentScopeFilePath,
+			setCurrentScopeFilePath: filePath => { this.currentScopeFilePath = filePath },
+			workspaceOrder: () => this.workspaceOrderCache,
+			setWorkspaceOrder: order => { this.workspaceOrderCache = order },
+			absoluteToRelative: absolutePath => fileUtils.absoluteToRelative(absolutePath),
+			absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
+			storageScopeForAbsolutePath: absolutePath => this.storageScopeForUri(vscode.Uri.file(absolutePath)),
+			cancelPendingPathWork: absolutePath => this.cancelPendingPathWork(absolutePath),
+			relocateUndoPath: (oldScope, newScope, oldBookmarkPath, newBookmarkPath, oldAbsolutePath, newAbsolutePath) =>
+				undoManager.relocatePath(
+					oldScope,
+					newScope,
+					oldBookmarkPath,
+					newBookmarkPath,
+					oldAbsolutePath,
+					newAbsolutePath,
+				),
+			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),
+			refreshDecoration: () => this.refreshDecoration(),
+			refresh: storageScope => this.refresh(undefined, storageScope, true),
+			reloadActiveTab: forceReloadDisk => this.reloadActiveTab(forceReloadDisk),
+			invalidatePathIndex: () => this.invalidatePathIndex(),
+			clearFileNodeCache: () => this.bookmarkTreeDataProjection.clearFileNodeCache(),
+			fireTreeChanged: () => this._onDidChangeTreeData.fire(),
+			sourceFilesChanged: () => this.onSourceFilesChanged(),
+		}
+	}
+
+	/**
+	 * Apply repository-level rebinding to the in-memory tree.  File-system
+	 * providers can report a move as delete + create, so the repository may
+	 * update the durable script binding without going through onRenameDirectory.
+	 * Keeping this bridge here prevents a subsequent in-memory save from putting
+	 * the old path back on disk.
+	 */
+	async applyRepositoryRelocations(changes: readonly ScriptRelocationChange[]): Promise<void> {
+		return applySourceRepositoryRelocations(changes, this.sourcePathChangeWorkflowPort())
+	}
+
+	private documentLines(document: vscode.TextDocument): string[] {
+		return Array.from({ length: document.lineCount }, (_, line) => document.lineAt(line).text)
+	}
+
+	private readonly codeMarkerSnapshotPortAdapter: CodeMarkerSnapshotPort<vscode.Uri> = {
+		isFileUri: uri => uri.scheme === 'file',
+		isCurrentScope: uri => this.uriMatchesCurrentScope(uri),
+		filePath: uri => uri.fsPath,
+		relativeBookmarkPath: absolutePath => fileUtils.absoluteToRelative(absolutePath),
+		bookmarks: () => this.codeBookmarks,
+		profileFor: (languageId, filePath) => this.languageCommentProfiles.profileFor(languageId, filePath),
+		warnFileTruncated: (filePath, limit) =>
+			logger.showWarningMessage(`脚本 ${path.basename(filePath)} 中的 TODO/FIXME/BUG 超过 ${limit} 个，仅同步前 ${limit} 个以避免书签配置异常膨胀。`),
+		warnFileCapacityLimited: filePath =>
+			logger.showWarningMessage(`脚本 ${path.basename(filePath)} 的手动书签与自动标记已达到 10000 个节点上限；为保证配置可读取，未继续生成其余 TODO/FIXME/BUG 书签。`),
+		warnWorkspaceDiscoveryTruncated: (_scope, maxFiles) =>
+			logger.showWarningMessage(`当前工作区脚本超过 ${maxFiles} 个；后台仅扫描前 ${maxFiles} 个，其他脚本会在打开或编辑时自动同步 TODO/FIXME/BUG。`),
+		invalidatePathIndex: () => this.invalidatePathIndex(),
+		saveBookmarks: absolutePaths => this.saveBookmarksToFile(absolutePaths),
+		refreshDecorations: () => this.refreshDecoration(),
+	}
+
+	private codeMarkerSnapshotPort(): CodeMarkerSnapshotPort<vscode.Uri> {
+		return this.codeMarkerSnapshotPortAdapter
+	}
+
+	private readonly codeMarkerSourceReaderPortAdapter: CodeMarkerSourceReaderPort<
+		vscode.TextDocument,
+		vscode.Uri
+	> = {
+		openDocuments: () => vscode.workspace.textDocuments,
+		documentUri: document => document.uri,
+		isFileUri: uri => uri.scheme === 'file',
+		filePath: uri => uri.fsPath,
+		sameFilePath: (left, right) => normalizedAbsolutePath(left) === normalizedAbsolutePath(right),
+		documentLines: document => this.documentLines(document),
+		documentLanguage: document => document.languageId,
+		profilesInitialized: () => this.languageCommentProfiles.isInitialized,
+		supportsFile: filePath => this.languageCommentProfiles.supportsFile(filePath),
+		statFile: async filePath => {
+			const stat = await fs.promises.stat(filePath)
+			return { isFile: stat.isFile(), size: stat.size }
+		},
+		readTextFile: filePath => fs.promises.readFile(filePath, 'utf8'),
+	}
+
+	private codeMarkerSourceReaderPort(): CodeMarkerSourceReaderPort<vscode.TextDocument, vscode.Uri> {
+		return this.codeMarkerSourceReaderPortAdapter
+	}
+
+	private isExcludedCodeMarkerUri(uri: vscode.Uri): boolean {
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri)
+		if (!workspaceFolder) return false
+		const relative = path.relative(workspaceFolder.uri.fsPath, uri.fsPath)
+		return isExcludedSourceRelativePath(relative)
+	}
+
+	private removeCodeMarkersForUri(uri: vscode.Uri): boolean {
+		return this.codeMarkerSnapshotCoordinator.removeMarkers(uri, this.codeMarkerSnapshotPort())
+	}
+
+	private async codeMarkerSourceIsMissing(uri: vscode.Uri): Promise<boolean> {
+		try {
+			return !(await fs.promises.stat(uri.fsPath)).isFile()
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code
+			return code === 'ENOENT' || code === 'ENOTDIR'
+		}
+	}
+
+	private synchronizeCodeMarkerSnapshot(
+		uri: vscode.Uri,
+		lines: readonly string[],
+		languageId?: string,
+	) {
+		return this.codeMarkerSnapshotCoordinator.synchronizeSnapshot(
+			uri,
+			lines,
+			languageId,
+			this.codeMarkerSnapshotPort(),
+		)
+	}
+
+	private persistCodeMarkerChanges(changedPaths: readonly string[]): void {
+		this.codeMarkerSnapshotCoordinator.persistChanges(changedPaths, this.codeMarkerSnapshotPort())
+	}
+
+	private readonly codeMarkerDocumentSyncPortAdapter: CodeMarkerDocumentSyncPort<
+		vscode.TextDocument,
+		vscode.Uri
+	> = {
+		initializeLanguageProfiles: () => this.languageCommentProfiles.initialize(),
+		currentGeneration: () => this.viewLoadGeneration,
+		isFileUri: uri => uri.scheme === 'file',
+		isCurrentScope: uri => this.uriMatchesCurrentScope(uri),
+		documentUri: document => document.uri,
+		documentLines: document => this.documentLines(document),
+		documentLanguage: document => document.languageId,
+		readSource: uri => this.readCodeMarkerFile(uri),
+		synchronizeSnapshot: (uri, lines, languageId) => this.synchronizeCodeMarkerSnapshot(uri, lines, languageId),
+		persistChanges: paths => this.persistCodeMarkerChanges(paths.map(uri => uri.fsPath)),
+	}
+
+	private codeMarkerDocumentSyncPort(): CodeMarkerDocumentSyncPort<vscode.TextDocument, vscode.Uri> {
+		return this.codeMarkerDocumentSyncPortAdapter
+	}
+
+	private createCodeMarkerSyncLifecyclePort(): CodeMarkerSyncLifecyclePort<vscode.Uri, vscode.Disposable> {
+		return {
+			isFileUri: uri => uri.scheme === 'file',
+			isExcluded: uri => this.isExcludedCodeMarkerUri(uri),
+			profilesInitialized: () => this.languageCommentProfiles.isInitialized,
+			supportsFile: filePath => this.languageCommentProfiles.supportsFile(filePath),
+			filePath: uri => uri.fsPath,
+			currentViewGeneration: () => this.viewLoadGeneration,
+			isCurrentScope: uri => this.uriMatchesCurrentScope(uri),
+			removeMarkers: uri => this.removeCodeMarkersForUri(uri),
+			persistRemovedMarkers: uri => this.persistCodeMarkerChanges([uri.fsPath]),
+			synchronizeUris: uris => this.syncCodeMarkersForUris(uris),
+			reportFileSyncFailure: (uri, error) =>
+				logger.error(`同步脚本 TODO/FIXME/BUG 失败（${uri.fsPath}）: ${errorMessage(error)}`),
+			canWatchFiles: () => typeof vscode.workspace.createFileSystemWatcher === 'function',
+			discoveryGlobs: () => this.languageCommentProfiles.discoveryGlobs(),
+			watchFilePattern: (glob, onCreate, onChange, onDelete) => {
+				const watcher = vscode.workspace.createFileSystemWatcher(glob)
+				return [
+					watcher.onDidCreate(onCreate),
+					watcher.onDidChange(onChange),
+					watcher.onDidDelete(onDelete),
+					watcher,
+				]
+			},
+			reportWatcherFailure: (glob, error) =>
+				logger.error(`无法监听语言文件模式 ${glob}: ${errorMessage(error)}`),
+			loadingViewGeneration: () => this.loadingViewGeneration,
+			currentStorageScope: () => this.currentStorageScope,
+			runWorkspaceScan: (scope, generation) => this.scanWorkspaceCodeMarkers(scope, generation),
+			reportWorkspaceScanFailure: error =>
+				logger.error(`后台扫描 TODO/FIXME/BUG 失败: ${errorMessage(error)}`),
+		}
+	}
+
+	private readonly codeMarkerSyncLifecyclePortAdapter: CodeMarkerSyncLifecyclePort<
+		vscode.Uri,
+		vscode.Disposable
+	> = this.createCodeMarkerSyncLifecyclePort()
+
+	private codeMarkerSyncLifecyclePort(): CodeMarkerSyncLifecyclePort<vscode.Uri, vscode.Disposable> {
+		return this.codeMarkerSyncLifecyclePortAdapter
+	}
+
+	public async syncCodeMarkersInDocument(document: vscode.TextDocument): Promise<boolean> {
+		return runCodeMarkerDocumentSync(document, this.codeMarkerDocumentSyncPort())
+	}
+
+	private async readCodeMarkerFile(uri: vscode.Uri, allowLargeFile = false): Promise<{ lines: string[], languageId?: string } | undefined> {
+		return this.codeMarkerSourceReader.read(uri, allowLargeFile, this.codeMarkerSourceReaderPort())
+	}
+
+	public async syncCodeMarkersForUris(uris: readonly vscode.Uri[]): Promise<void> {
+		await runCodeMarkerUriSync(uris, this.codeMarkerDocumentSyncPort())
+	}
+
+	public scheduleCodeMarkerFileSync(uri: vscode.Uri, deleted = false): void {
+		this.codeMarkerSyncLifecycle.scheduleFileSync(uri, deleted, this.codeMarkerSyncLifecyclePort())
+	}
+
+	private setupCodeMarkerFileWatchers(): void {
+		this.codeMarkerSyncLifecycle.setupFileWatchers(this.codeMarkerSyncLifecyclePort())
+	}
+
+	private async reloadCodeMarkerLanguageProfiles(): Promise<void> {
+		const viewGeneration = this.viewLoadGeneration
+		await runCodeMarkerLanguageReload({
+			reloadLanguageProfiles: () => this.languageCommentProfiles.reload(),
+			isCurrent: () => !this.disposed && viewGeneration === this.viewLoadGeneration,
+			setupFileWatchers: () => this.setupCodeMarkerFileWatchers(),
+			resetWorkspaceScanScope: () => this.codeMarkerSyncLifecycle.invalidateWorkspaceScanScope(),
+			synchronizeOpenDocuments: () => this.synchronizeOpenCodeMarkerDocuments(),
+			scheduleWorkspaceScan: () => this.scheduleWorkspaceCodeMarkerScan(),
+		})
+	}
+
+	private async synchronizeOpenCodeMarkerDocuments(): Promise<void> {
+		runOpenCodeMarkerSync(vscode.workspace.textDocuments, this.codeMarkerDocumentSyncPort())
+	}
+
+	private fileNodeHasCodeMarkers(fileNode: Bookmark): boolean {
+		return this.codeMarkerSnapshotCoordinator.fileNodeHasCodeMarkers(fileNode)
+	}
+
+	private scheduleWorkspaceCodeMarkerScan(): void {
+		this.codeMarkerSyncLifecycle.scheduleWorkspaceScan(this.codeMarkerSyncLifecyclePort())
+	}
+
+	private async scanWorkspaceCodeMarkers(scope: string, generation: number): Promise<void> {
+		const scopeUri = this.currentScopeUri()
+		const workspaceFolder = scopeUri ? vscode.workspace.getWorkspaceFolder(scopeUri) : undefined
+		await runWorkspaceCodeMarkerScan(scope, generation, MAX_BACKGROUND_CODE_MARKER_FILES, CODE_MARKER_SCAN_CONCURRENCY, {
+			startMeasurement: () => performanceMonitor.start(),
+			canDiscoverFiles: () => typeof vscode.workspace.findFiles === 'function' && typeof vscode.RelativePattern === 'function',
+			workspaceFolder: () => workspaceFolder,
+			discoveryGlobs: () => this.languageCommentProfiles.discoveryGlobs(),
+			findFiles: async (folder, glob, limit) => vscode.workspace.findFiles(
+				new vscode.RelativePattern(folder, glob),
+				SOURCE_SCAN_EXCLUDE_GLOB,
+				limit,
+			),
+			uriKey: uri => normalizedAbsolutePath(uri.fsPath),
+			isCurrent: (candidateScope, candidateGeneration) => candidateGeneration === this.codeMarkerSyncLifecycle.currentWorkspaceScanGeneration
+				&& this.currentStorageScope === candidateScope,
+			warnDiscoveryTruncated: candidateScope => {
+				this.codeMarkerSnapshotCoordinator.warnWorkspaceDiscoveryTruncated(
+					candidateScope,
+					MAX_BACKGROUND_CODE_MARKER_FILES,
+					this.codeMarkerSnapshotPort(),
+				)
+			},
+			existingMarkerCandidates: () => this.codeBookmarks.values
+				.filter(fileNode => fileNode.isFile && this.fileNodeHasCodeMarkers(fileNode))
+				.map(fileNode => ({
+					uri: vscode.Uri.file(this.absoluteBookmarkPath(fileNode.path)),
+					knownMarkerFile: true,
+				})),
+			scopeForUri: uri => this.storageScopeForUri(uri),
+			isExcluded: uri => this.isExcludedCodeMarkerUri(uri),
+			readSource: (uri, knownMarkerFile) => this.readCodeMarkerFile(uri, knownMarkerFile),
+			synchronize: (uri, source) => this.synchronizeCodeMarkerSnapshot(uri, source.lines, source.languageId),
+			removeMarkers: uri => this.removeCodeMarkersForUri(uri),
+			sourceIsMissing: uri => this.codeMarkerSourceIsMissing(uri),
+			markCompleted: candidateScope => this.codeMarkerSyncLifecycle.markWorkspaceScanCompleted(candidateScope),
+			persistChanges: paths => this.persistCodeMarkerChanges(paths.map(uri => uri.fsPath)),
+			measure: (startedAt, files, changedFiles) => performanceMonitor.measure('workspace-code-marker-scan', startedAt, {
+				files,
+				changedFiles,
+			}),
+			reportDiscoveryFailure: (glob, error) => logger.error(`无法按语言文件模式扫描 ${glob}: ${errorMessage(error)}`),
+		})
+	}
 
 	public constructor(context: vscode.ExtensionContext) {
 		this.context = context
-
-		this._initPromise = new Promise(resolve => {
-			this._resolveInit = resolve;
-		});
+		const extensionChangeListener = vscode.extensions.onDidChange(() => {
+			void this.reloadCodeMarkerLanguageProfiles()
+				.catch(error => logger.error(`刷新语言注释配置失败: ${errorMessage(error)}`))
+		})
 
 		// Create decoration type for inline ghost text (bookmark label at end of line)
 		this._inlineLabelDecorationType = vscode.window.createTextEditorDecorationType({
@@ -80,1613 +763,1073 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				textDecoration: 'none; opacity: 0.85; margin-left: 2ch; font-size: 90%; font-family: "LXGW WenKai", "霞鹜文楷", sans-serif;'
 			}
 		});
+		context.subscriptions.push(this._inlineLabelDecorationType, extensionChangeListener)
+		context.subscriptions.push(this)
 	}
 
 	public treeView?: vscode.TreeView<Bookmark>;
 
 	// Inline ghost text decoration
 	private _inlineLabelDecorationType: vscode.TextEditorDecorationType;
-	private _cursorDisposable?: vscode.Disposable;
 
-	async init(treeView: vscode.TreeView<Bookmark>) {
+	init(treeView: vscode.TreeView<Bookmark>): void {
 		this.treeView = treeView;
-		treeView.onDidChangeSelection((event) => {
-			const hasSelection = event.selection && event.selection.length > 0 && event.selection.some(e => e.contextValue === ContextBookmark.Bookmark || e.contextValue === ContextBookmark.BookmarkPinned);
-			vscode.commands.executeCommand('setContext', 'codebookmark.hasSelection', hasSelection);
+		const selectionListener = treeView.onDidChangeSelection((event) => {
+			const hasSelection = event.selection && event.selection.length > 0 && event.selection.some(e => isBookmarkItemContext(e.contextValue));
+			void this.setContextValue('codebookmark.hasSelection', hasSelection)
+				.catch(error => logger.error(`更新书签选择上下文失败: ${errorMessage(error)}`));
 		});
 
 		// Setup cursor change listener for inline ghost text
-		this._cursorDisposable = vscode.window.onDidChangeTextEditorSelection(e => {
+		const cursorListener = vscode.window.onDidChangeTextEditorSelection(e => {
 			this.updateInlineDecoration(e.textEditor);
 		});
-		vscode.window.onDidChangeActiveTextEditor(editor => {
+		const editorListener = vscode.window.onDidChangeActiveTextEditor(editor => {
 			if (editor) {
 				this.updateInlineDecoration(editor);
 			}
+			const editorFileUri = editor?.document.uri.scheme === 'file'
+				? editor.document.uri
+				: undefined
+			this.bookmarkContextCoordinator.handleActiveEditorChanged(
+				editorFileUri,
+				editor !== undefined,
+				this.bookmarkContextPort(),
+			)
+			void this.synchronizeIdleView()
+				.catch(error => logger.error(`同步无活动脚本时的书签视图失败: ${errorMessage(error)}`))
 		});
+		const tabListener = vscode.window.tabGroups.onDidChangeTabs(() => {
+			this.bookmarkContextCoordinator.handleTabsChanged(this.bookmarkContextPort())
+			void this.synchronizeIdleView()
+				.catch(error => logger.error(`同步脚本标签页变化后的书签视图失败: ${errorMessage(error)}`))
+		})
+		this.context.subscriptions.push(selectionListener, cursorListener, editorListener, tabListener)
 
-		await this.initViewEditor()
-		this._resolveInit()
+		// TreeDataProvider registration is already complete at this point. Disk access is
+		// deliberately detached from extension activation so a slow/network storage root
+		// can never make VS Code time out activation or leave getChildren() unresolved.
+		this.bookmarkTreeViewLifecycle.startInitialLoad(treeView, this.bookmarkTreeViewLifecyclePort())
+
+		void this.initViewEditor()
+			.then(() => {
+				if (this.bookmarkContextCoordinator.contextValue(Commands.varBookmarkLoaded) === true) {
+					this.finishInitialLoad()
+				}
+			})
+			.catch(error => this.finishInitialLoad(error))
+	}
+
+	private finishInitialLoad(error?: unknown): void {
+		this.bookmarkTreeViewLifecycle.finishInitialLoad(error, this.bookmarkTreeViewLifecyclePort())
 	}
 
 	getParent(element: Bookmark): Bookmark | undefined {
-		return element.parent
+		return this.bookmarkTreeDataProjection.parent(element, this.bookmarkTreeDataProjectionPort())
 	}
 
-	async getChildren(element?: Bookmark): Promise<Bookmark[]> {
+	private standaloneRootBookmarks(): Bookmark[] {
+		return this.bookmarkTreeDataProjection.standaloneRoots(this.bookmarkTreeDataProjectionPort())
+	}
+
+	getChildren(element?: Bookmark): Bookmark[] {
 		try {
-			return await this._getChildrenInternal(element);
-		} catch (e: any) {
-			logger.error('Error in getChildren: ' + e.message + '\n' + e.stack);
+			return this._getChildrenInternal(element);
+		} catch (error: unknown) {
+			const details = error instanceof Error ? error.stack ?? error.message : String(error)
+			logger.error(`Error in getChildren: ${details}`);
 			return [];
 		}
 	}
 
-	async _getChildrenInternal(element?: Bookmark): Promise<Bookmark[]> {
-		await this._initPromise;
-		if (this.codeBookmarks.size === 0) return []
-		
-		let items: Bookmark[];
-		if (element) {
-			items = Array.from(element.subs.values);
-		} else {
-			if (fileUtils.isWorkspaceMode()) {
-				const paths = new Set<string>();
-				const fileNodesByPath = new Map<string, Bookmark>();
-				this.fileNodesCache.clear();
-				
-				for (const child of this.codeBookmarks.values) {
-					if (child.contextValue === ContextBookmark.File && child.path) {
-						paths.add(child.path);
-						fileNodesByPath.set(child.path, child);
-						this.fileNodesCache.set(child.path, child);
-					}
-				}
-				
-				const folder = fileUtils.getGlobalBookmarkFolder(this.context, true);
-				if (!this.workspaceOrderCache) {
-					this.workspaceOrderCache = [];
-					if (folder) {
-						try {
-							const orderFile = path.join(folder, '_workspace_order.json');
-							if (fs.existsSync(orderFile)) {
-								const content = await fs.promises.readFile(orderFile, 'utf8');
-								const parsed = JSON.parse(content);
-								this.workspaceOrderCache = Array.isArray(parsed) ? parsed : [];
-							}
-						} catch {}
-					}
-				}
-				
-				const orderedPaths = (Array.isArray(this.workspaceOrderCache) ? this.workspaceOrderCache : []).filter(p => paths.has(p));
-				const orderedSet = new Set(orderedPaths);
-				let hasChanges = false;
-				for (const p of paths) {
-					if (!orderedSet.has(p)) {
-						orderedPaths.push(p);
-						orderedSet.add(p);
-						hasChanges = true;
-					}
-				}
-				
-				if (hasChanges && folder) {
-					this.workspaceOrderCache = orderedPaths;
-					const orderFile = path.join(folder, '_workspace_order.json');
-					fs.promises.writeFile(orderFile, JSON.stringify(orderedPaths)).catch(() => {});
-				}
-				
-				items = orderedPaths.map(p => fileNodesByPath.get(p)).filter((n): n is Bookmark => n !== undefined);
-				for (const fileNode of items) {
-					if (!fileNode.resourceUri && fileNode.path) {
-						fileNode.resourceUri = vscode.Uri.file(fileUtils.relativeToAbsolute(fileNode.path));
-					}
-				}
-
-			} else {
-			// Non-workspace mode: return file nodes as top-level items
-			items = Array.from(this.codeBookmarks.values).filter(child => child.contextValue === ContextBookmark.File);
-		}
-		}
-
-		if (SortModeBookmark.mode !== SortModeBookmark.Custom) {
-			items = [...items].sort((a, b) => {
-				switch (SortModeBookmark.mode) {
-					case SortModeBookmark.TimeAsc: return a.Id.localeCompare(b.Id);
-					case SortModeBookmark.TimeDesc: return b.Id.localeCompare(a.Id);
-					case SortModeBookmark.LineAsc: {
-						const pathCmp = a.path.localeCompare(b.path);
-						if (pathCmp !== 0) return pathCmp;
-						return (a.start?.line || 0) - (b.start?.line || 0);
-					}
-					case SortModeBookmark.LineDesc: {
-						const pathCmp = b.path.localeCompare(a.path);
-						if (pathCmp !== 0) return pathCmp;
-						return (b.start?.line || 0) - (a.start?.line || 0);
-					}
-					default: return 0;
-				}
-			});
-		}
-
-		return items;
+	private _getChildrenInternal(element?: Bookmark): Bookmark[] {
+		return this.bookmarkTreeDataProjection.children(element, this.bookmarkTreeDataProjectionPort())
 	}
 
 	getTreeItem(element: Bookmark): vscode.TreeItem {
-		if (element.contextValue === ContextBookmark.None) {
-			return element
-		}
-		if (element.resourceUri === undefined && element.path && (element.contextValue === ContextBookmark.File || element.contextValue === ContextBookmark.Folder)) {
-			// Ensure resourceUri is lazily initialized for file nodes to get VSCode native decorations (like file icons and error badges)
-			element.resourceUri = vscode.Uri.file(fileUtils.relativeToAbsolute(element.path));
-		}
-		element.refreshDisplayProps();
-		return element
+		return this.bookmarkTreeDataProjection.treeItem(element, this.bookmarkTreeDataProjectionPort())
 	}
 
 	// Drag-and-Drop
 	handleDrag(source: Bookmark[], treeDataTransfer: vscode.DataTransfer): void {
-		for (const i of source) {
-			if (i.contextValue === ContextBookmark.None) {
-				return
-			}
-			if (i.isBookmarkInvalid) {
-				logger.showWarningMessage('请编辑失效的书签')
-				return
-			}
-		}
-
-		treeDataTransfer.set('application/vnd.code.tree.bookmark', new vscode.DataTransferItem(source))
+		runBookmarkTreeDrag(source, treeDataTransfer)
 	}
 
 	async handleDrop(target: Bookmark | undefined, treeDataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): Promise<void> {
-		this.onHandleDrop(target, treeDataTransfer)
+		return runBookmarkTreeDrop(target, treeDataTransfer, this.bookmarkTreeInteractionPort())
+	}
+	private readonly configWatcherCoordinator = new BookmarkConfigWatcherCoordinator<WorkspaceOrderSnapshot>()
+	private readonly idleViewCoordinator = new BookmarkIdleViewCoordinator()
+	private disposed = false
 
+	private synchronizeIdleView(): Promise<void> {
+		return this.idleViewCoordinator.handle({
+			hasActiveFileEditor: () => vscode.window.activeTextEditor?.document.uri.scheme === 'file',
+			hasOpenFileTab: () => this.hasOpenFileTab(),
+			workspaceRoot: () => this.workspaceFolderRootForCurrentScope(),
+			workspaceScope: workspaceRoot => this.storageScopeForUri(vscode.Uri.file(workspaceRoot)),
+			currentStorageScope: () => this.currentStorageScope,
+			currentScopeFilePath: () => this.currentScopeFilePath,
+			currentBookmarkCount: () => this.codeBookmarks.size,
+			refresh: (storageScope, forceReloadDisk) =>
+				this.refresh(undefined, storageScope, forceReloadDisk),
+			queuePresenceContexts: () => this.queueBookmarkPresenceContexts(),
+		})
 	}
 
-	async onHandleDrop(target: Bookmark | undefined, treeDataTransfer: vscode.DataTransfer, extCall: boolean = false) {
-		undoManager.saveState(this.codeBookmarks, 'drag');
-		if (SortModeBookmark.mode !== SortModeBookmark.Custom) {
-			SortModeBookmark.mode = SortModeBookmark.Custom;
-			vscode.window.showInformationMessage('检测到拖拽操作，已自动切换回“自定义排序”模式。');
+	private async reloadExternalBookmarkFiles(fileNames: readonly string[]): Promise<void> {
+		const scope = this.currentStorageScope
+		const generation = this.viewLoadGeneration
+		const signal = this.viewLoadSignal(generation)
+		await runExternalBookmarkReload(fileNames, scope, this.currentScopeFilePath, generation, signal, {
+			enqueue: (candidateGeneration, operation) => this.enqueueViewPreparation(candidateGeneration, operation),
+			readBookmarks: (activePaths, filenames, candidateSignal) => bookmarkRepository.readBookmarksFromFile(
+				[...activePaths],
+				[...filenames],
+				candidateSignal,
+			),
+			isCurrent: (candidateScope, candidateGeneration) => !this.disposed
+				&& candidateScope === this.currentStorageScope
+				&& candidateGeneration === this.viewLoadGeneration,
+			currentBookmarks: () => this.codeBookmarks,
+			clearExternalBookmarkCaches: () => {
+				this.bookmarkTreeDataProjection.clearFileNodeCache()
+				this.invalidatePathIndex()
+			},
+			publishTransition: (transition, candidateGeneration) => this.publishCommittedViewTransition(transition, candidateGeneration),
+			refreshDecorations: () => this.refreshDecoration(false, false),
+		})
+	}
+
+	private rebasePendingSavesToCurrentTree(): void {
+		this.saveCoordinator.rebasePendingSaves([...this.codeBookmarks.values])
+	}
+
+	private setupConfigWatcher(generation = this.viewLoadGeneration): Promise<void> {
+		return this.configWatcherCoordinator.setup(generation, this.configWatcherCoordinatorPort())
+	}
+
+	private configWatcherCoordinatorPort(): BookmarkConfigWatcherPort<WorkspaceOrderSnapshot> {
+		return {
+			isDisposed: () => this.disposed,
+			currentGeneration: () => this.viewLoadGeneration,
+			currentScope: () => this.currentStorageScope,
+			watchDirectories: () => {
+				const scriptFolder = fileUtils.getScriptStoreFolder()
+				const scopeUri = this.currentScopeUri()
+				const workspaceFolder = fileUtils.isWorkspaceMode(scopeUri)
+					? fileUtils.getGlobalBookmarkFolder(true, scopeUri)
+					: null
+				return { scriptFolder, workspaceFolder }
+			},
+			isSaving: () => this.saveCoordinator.isSaving,
+			collectExternalChanges: directory => fileChangeFingerprints.collectExternalChanges(directory),
+			hasExternalChange: (directory, filename) =>
+				fileChangeFingerprints.hasExternalChange(directory, filename),
+			sameDirectory: (left, right) => normalizedAbsolutePath(left) === normalizedAbsolutePath(right),
+			readWorkspaceOrder: (scope, generation) => this.readWorkspaceOrderForView(
+				this.codeBookmarks,
+				scope,
+				this.currentScopeFilePath,
+				this.viewLoadSignal(generation),
+			),
+			applyWorkspaceOrder: (snapshot, scope, generation) => {
+				this.workspaceOrderCache = snapshot.order
+				this._onDidChangeTreeData.fire()
+				this.persistWorkspaceOrderSnapshot(snapshot, scope, generation)
+			},
+			reloadExternalBookmarkFiles: fileNames => this.reloadExternalBookmarkFiles(fileNames),
+			rebasePendingSaves: () => this.rebasePendingSavesToCurrentTree(),
+			isDirectory: async directory => {
+				try { return (await fs.promises.stat(directory)).isDirectory() } catch { return false }
+			},
+			rememberDirectory: directory => fileChangeFingerprints.rememberDirectory(directory),
+			watchDirectory: (directory, onFileChange, onError) => {
+				const watcher = fs.watch(directory, (_eventType, rawFilename) => {
+					onFileChange(rawFilename === null ? null : rawFilename.toString())
+				})
+				watcher.on('error', onError)
+				return watcher
+			},
+			reportFailure: (kind, error, directory) =>
+				this.reportConfigWatcherFailure(kind, error, directory),
 		}
+	}
 
-		const transferItem = treeDataTransfer.get('application/vnd.code.tree.bookmark')
-		if (!transferItem) {
-			return
-		}
-
-		const sourceItems = transferItem.value as Bookmark[];
-		const isFileDrag = sourceItems.some(b => b.contextValue === ContextBookmark.File);
-
-		if (isFileDrag) {
-			const sourcePaths = sourceItems.filter(b => b.contextValue === ContextBookmark.File).map(b => b.path);
-			if (sourcePaths.length === 0) return;
-
-			const folder = fileUtils.getGlobalBookmarkFolder(this.context, true);
-			let savedOrder: string[] = this.workspaceOrderCache || [];
-
-			const currentPaths = new Set<string>();
-			for (const child of this.codeBookmarks.values) {
-				if (child.path) currentPaths.add(child.path);
-			}
-			const currentPathsArray = Array.from(currentPaths);
-			
-			savedOrder = savedOrder.filter(p => currentPaths.has(p));
-			currentPathsArray.forEach(p => {
-				if (!savedOrder.includes(p)) savedOrder.push(p);
-			});
-
-			const sourcePath = sourcePaths[0];
-			const targetPath = target?.contextValue === ContextBookmark.File ? target.path : undefined;
-
-			savedOrder = savedOrder.filter(p => p !== sourcePath);
-			if (targetPath) {
-				const targetIdx = savedOrder.indexOf(targetPath);
-				if (targetIdx >= 0) {
-					savedOrder.splice(targetIdx, 0, sourcePath);
-				} else {
-					savedOrder.push(sourcePath);
-				}
-			} else {
-				savedOrder.push(sourcePath);
-			}
-
-			if (folder) {
-				this.workspaceOrderCache = savedOrder;
-				const orderFile = path.join(folder, '_workspace_order.json');
-				fs.promises.writeFile(orderFile, JSON.stringify(savedOrder)).catch(() => {
-					logger.error(`Failed to write workspace drag order`);
-				});
-			}
-			this._onDidChangeTreeData.fire();
-			return;
-		}
-
-		if (target && target.contextValue === ContextBookmark.File) {
-			vscode.window.showInformationMessage('暂不支持跨文件移动书签。');
-			return;
-		}
-
-		const source = new BookmarkSet(transferItem.value)
-		for (const bookmark of source) {
-			if (bookmark.equals(target)) {
+	private reportConfigWatcherFailure(
+		kind: BookmarkConfigWatcherFailureKind,
+		error: unknown,
+		directory?: string,
+	): void {
+		switch (kind) {
+			case 'delayed-processing':
+				logger.error(`延迟处理书签配置变更失败: ${errorMessage(error)}`)
 				return
-			}
-		}
-		if (!target) {
-			if (this.codeBookmarks.moveGroupToNode(source, undefined)) {
-				this.saveBookmarksToFile()
-				this.refreshDecoration()
-			}
-			return;
-		}
-
-		if (target.isOpened) {
-			if (this.codeBookmarks.moveGroupToNode(source, target)) {
-				this.saveBookmarksToFile()
-				if (!extCall) this.expandFolderTreeView(target)
-				this.refreshDecoration()
-			}
-		} else {
-			if (this.codeBookmarks.changeIndexNode(source, target)) {
-				this.saveBookmarksToFile()
-				if (!extCall) this.expandFolderTreeView(target)
-				this.refreshDecoration()
-			}
-		}
-	}
-	private configWatchers: fs.FSWatcher[] = [];
-
-	private setupConfigWatcher() {
-		try {
-			const globalFolder = fileUtils.getGlobalBookmarkFolder(this.context, false);
-			const workspaceFolder = fileUtils.isWorkspaceMode() ? fileUtils.getGlobalBookmarkFolder(this.context, true) : null;
-
-			this.configWatchers.forEach(w => w.close());
-			this.configWatchers = [];
-
-			let debounceTimer: NodeJS.Timeout | undefined;
-
-			const watchDir = (dir: string | null) => {
-				if (!dir || !fs.existsSync(dir)) return;
-				const watcher = fs.watch(dir, (eventType, filename) => {
-					if (filename && filename.endsWith('.json')) {
-						if (debounceTimer) clearTimeout(debounceTimer)
-						debounceTimer = setTimeout(() => {
-							if (Date.now() < this.ignoreWatchUntil || this.saveRequests.size > 0) return;
-							this.reloadActiveTab(true)
-						}, 500)
-					}
-				});
-				this.configWatchers.push(watcher);
-			};
-
-			watchDir(globalFolder);
-			if (workspaceFolder && workspaceFolder !== globalFolder) {
-				watchDir(workspaceFolder);
-			}
-
-		} catch (e) {
-			logger.error('Failed to setup config watcher: ' + e)
+			case 'processing':
+				logger.error(`处理书签配置变更失败: ${errorMessage(error)}`)
+				return
+			case 'classification':
+				logger.error(`比对书签配置变更失败（${directory}）: ${errorMessage(error)}`)
+				return
+			case 'setup':
+				logger.error('Failed to setup config watcher: ' + error)
+				return
+			case 'watcher':
+				logger.error(`书签配置监听器失败（${directory}）: ${errorMessage(error)}`)
 		}
 	}
 
-	async initViewEditor() {
+	private async initializeBackgroundEnhancements(
+		languageProfilesReady: Promise<void>,
+		scope: string | undefined,
+		viewGeneration: number,
+	): Promise<void> {
+		const startedAt = performanceMonitor.start()
+		await runBackgroundEnhancements(languageProfilesReady, scope, viewGeneration, startedAt, {
+			isCurrent: (candidateScope, candidateGeneration) => !this.disposed
+				&& candidateScope !== undefined
+				&& this.currentStorageScope === candidateScope
+				&& this.viewLoadGeneration === candidateGeneration,
+			setupCodeMarkerFileWatchers: () => this.setupCodeMarkerFileWatchers(),
+			synchronizeOpenCodeMarkerDocuments: () => this.synchronizeOpenCodeMarkerDocuments(),
+			scheduleWorkspaceCodeMarkerScan: () => this.scheduleWorkspaceCodeMarkerScan(),
+			reportFailure: error => logger.error(`后台书签增强初始化失败: ${errorMessage(error)}`),
+			measure: (started, candidateScope) => performanceMonitor.measure('bookmark-view-background-enhancement', started, {
+				scope: candidateScope ?? 'none',
+				bookmarks: this.codeBookmarks.size,
+			}),
+		})
+	}
+
+	private enqueueViewPreparation<T>(generation: number, operation: () => Promise<T>): Promise<T | undefined> {
+		return this.viewPreparationQueue.run(async () => {
+			if (generation !== this.viewLoadGeneration || this.disposed) return undefined
+			return operation()
+		})
+	}
+
+	private beginViewLoad(): number {
+		this.bookmarkTreeViewLifecycle.resolvePopulation()
+		return this.viewLoads.begin()
+	}
+
+	private viewLoadSignal(generation: number): AbortSignal | undefined {
+		return this.viewLoads.signalFor(generation)
+	}
+
+	async initViewEditor(
+		scopePathOverride?: string,
+		preserveLoadedContext = false,
+		generation = this.beginViewLoad(),
+		expectedScope?: string,
+	): Promise<void> {
+		const initializationStartedAt = performanceMonitor.start()
+		const languageProfilesReady = this.languageCommentProfiles.initialize()
+		if (generation !== this.viewLoadGeneration || this.disposed) return
+		this.viewLoads.markLoading(generation)
 		try {
-			ExtensionConfig.ensureGlobalStoragePathConfigured()
-			this.setupConfigWatcher()
-			await this.getBookmarksLocal()
+			if (!preserveLoadedContext) await this.setContextValue(Commands.varBookmarkLoaded, false)
+			await this.setContextValue(Commands.varBookmarkLoadFailed, false)
 		} catch (error) {
-			logger.error(error)
+			logger.error(`设置书签加载状态失败: ${errorMessage(error)}`)
 		}
-		
-		// 严防死守：确保 varHasBookmark 的渲染绝对早于 varBookmarkLoaded，避免“暂无书签”闪烁
-		const newHasBookmark = !(this.codeBookmarks.size === 0);
-		if (newHasBookmark !== this.hasBookmark) {
-			this.hasBookmark = newHasBookmark;
-			await vscode.commands.executeCommand('setContext', Commands.varHasBookmark, this.hasBookmark);
-		}
-		await vscode.commands.executeCommand('setContext', Commands.varBookmarkLoaded, true);
-
-		this.refreshDecoration()
+		const signal = this.viewLoadSignal(generation)
+		const pipeline = await runViewLoadPipeline(generation, {
+			isCurrent: () => generation === this.viewLoadGeneration && !this.disposed,
+			enqueue: operation => this.enqueueViewPreparation(generation, operation),
+			ensureStorageRoot: () => this.ensureActiveStorageRoot(),
+			prepare: () => this.prepareBookmarkView(scopePathOverride, expectedScope, signal),
+			empty: () => this.emptyPreparedBookmarkView(scopePathOverride, expectedScope),
+			commit: next => this.commitPreparedBookmarkView(next),
+			publish: (next, candidateGeneration) => this.publishCommittedViewTransition(next, candidateGeneration),
+			reportFailure: error => logger.error(`加载书签数据失败: ${errorMessage(error)}`),
+		})
+		if (pipeline.cancelled) return
+		await finalizeViewLoad({
+			generation,
+			preserveLoadedContext,
+			initializationStartedAt,
+			storageReady: pipeline.storageReady,
+			prepared: pipeline.prepared,
+			transition: pipeline.transition,
+			loadFailure: pipeline.loadFailure,
+		}, {
+			isCurrent: candidateGeneration => candidateGeneration === this.viewLoadGeneration && !this.disposed,
+			setLoadFailedContext: failed => this.setContextValue(Commands.varBookmarkLoadFailed, failed),
+			setLoadedContext: () => this.setContextValue(Commands.varBookmarkLoaded, true),
+			reportContextFailure: error => logger.error(`结束书签加载状态失败: ${errorMessage(error)}`),
+			refreshDecorations: () => this.refreshDecoration(false, false),
+			saveAllBookmarks: () => this.saveAllBookmarksToFile(),
+			persistWorkspaceOrder: (prepared, candidateGeneration) => this.persistWorkspaceOrderSnapshot({
+				order: prepared.workspaceOrder,
+				filePath: prepared.workspaceOrderFilePath,
+				needsPersist: prepared.workspaceOrderNeedsPersist,
+			}, prepared.storageScope, candidateGeneration),
+			startConfigWatcher: candidateGeneration => {
+				void this.setupConfigWatcher(candidateGeneration)
+					.catch(error => logger.error(`设置书签配置监听器失败: ${errorMessage(error)}`))
+			},
+			// Disk-backed bookmark data is the core startup path. Language profiles and
+			// marker reconciliation can run after the tree becomes interactive.
+			startBackgroundEnhancements: candidateGeneration => {
+				void this.initializeBackgroundEnhancements(
+					languageProfilesReady,
+					this.currentStorageScope,
+					candidateGeneration,
+				)
+			},
+			closeConfigWatchers: () => this.configWatcherCoordinator.closeWatchers(),
+			finishLoading: candidateGeneration => this.viewLoads.finishLoading(candidateGeneration),
+			measure: (startedAt, failed) => performanceMonitor.measure('bookmark-view-initialization', startedAt, {
+				bookmarks: this.codeBookmarks.size,
+				heapMiB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+				failed,
+			}),
+			finishInitialLoad: error => this.finishInitialLoad(error),
+		})
 	}
 
-	refreshDecoration() {
-		if ((this.codeBookmarks.size === 0) === this.hasBookmark) {
-			this.hasBookmark = !(this.codeBookmarks.size === 0)
-			vscode.commands.executeCommand('setContext', Commands.varHasBookmark, this.hasBookmark)
-		}
-		vscode.commands.executeCommand('setContext', Commands.varCanUndo, undoManager.canUndo())
-		vscode.commands.executeCommand('setContext', Commands.varCanRedo, undoManager.canRedo())
-		vscode.commands.executeCommand('setContext', 'bookmarks.var.bookmark.hasInvalid', this.checkHasInvalidBookmarks(this.codeBookmarks));
+	private async ensureActiveStorageRoot(): Promise<boolean> {
+		return ensureStorageRootActive({
+			rememberedRoot: () => this.context.globalState.get<string>(LAST_STORAGE_ROOT_KEY),
+			ensureConfigured: () => ExtensionConfig.ensureGlobalStoragePathConfigured(),
+			configuredRoot: () => ExtensionConfig.resolveStoragePath(),
+			activeRoot: () => storageRootState.root,
+			rootExists: root => fs.existsSync(root),
+			sameRoot: (left, right) => normalizedAbsolutePath(left) === normalizedAbsolutePath(right),
+			transferRoot: async (source, target) => { await transferStorageRoot(source, target) },
+			activateRoot: root => storageRootState.activate(root),
+			rememberRoot: async root => { await this.context.globalState.update(LAST_STORAGE_ROOT_KEY, root) },
+			warnRememberedFallback: () => logger.showWarningMessage('当前书签存储路径无效，已继续使用上次验证成功的目录。'),
+			reportTransferFailure: error => logger.error(`启动时转移书签存储目录失败: ${errorMessage(error)}`),
+			showTransferFailure: error => {
+				void vscode.window.showErrorMessage(`目标书签存储目录尚未启用，已继续使用来源目录：${errorMessage(error)}`)
+			},
+		})
+	}
+
+	refreshDecoration(fireTree = true, updatePresence = true) {
+		this.inlineBookmarkDecorationCoordinator.invalidate()
+		this.invalidatePathIndex()
+		if (updatePresence) void this.queueBookmarkPresenceContexts()
+		this.refreshExpandCollapseContext()
+		undoManager.setActiveScope(this.currentStorageScope)
+		void this.setContextValue('bookmarks.var.bookmark.hasInvalid', hasInvalidBookmarks(this.codeBookmarks))
+			.catch(error => logger.error(`更新书签命令上下文失败: ${errorMessage(error)}`))
 		
-		this.invalidatePathIndex(); // Clear index whenever tree data changes
-		this._onDidChangeTreeData.fire()
+		if (fireTree) this._onDidChangeTreeData.fire()
 
 		// Refresh inline ghost text for current editor
 		const editor = vscode.window.activeTextEditor;
-		let activeFileHasBookmark = false;
 		if (editor) {
-			const path = fileUtils.absoluteToRelative(editor.document.uri.fsPath);
-			const bookmarks = this.codeBookmarks.getBookmarksWithPath(new BookmarkSet(), path);
-			activeFileHasBookmark = bookmarks.size > 0;
 			this.updateInlineDecoration(editor);
 		}
-		vscode.commands.executeCommand('setContext', 'codebookmark.activeFileHasBookmark', activeFileHasBookmark);
 	}
 
-	/**
-	 * Update inline ghost text decoration: show bookmark label at end of cursor line.
-	 * Only renders on the line where the cursor currently sits.
-	 */
+	private queueBookmarkPresenceContexts(): Promise<void> {
+		return this.bookmarkContextCoordinator.queuePresenceContexts(this.bookmarkContextPort())
+	}
+
 	public updateInlineDecoration(editor: vscode.TextEditor) {
-		if (!this._inlineLabelDecorationType) return;
-
-		if (!ExtensionConfig.inlineLabel) {
-			editor.setDecorations(this._inlineLabelDecorationType, []);
-			return;
-		}
-
-		const cursorLine = editor.selection.active.line;
-		const rePath = fileUtils.absoluteToRelative(editor.document.uri.fsPath);
-		const bookmarks = this.getBookmarksByPath(rePath);
-
-		const decorations: vscode.DecorationOptions[] = [];
-
-		for (const bm of bookmarks) {
-			if (bm.start.line === cursorLine && bm.label && bm.contextValue !== ContextBookmark.BookmarkInvalid) {
-				const lineRange = editor.document.lineAt(cursorLine).range;
-				decorations.push({
-					range: new vscode.Range(
-						lineRange.end.line,
-						lineRange.end.character,
-						lineRange.end.line,
-						lineRange.end.character
-					),
-					renderOptions: {
-						after: {
-							contentText: `  • ${bm.label}`,
-						}
-					}
-				});
-				break; // Only show the first bookmark label on this line
-			}
-		}
-
-		editor.setDecorations(this._inlineLabelDecorationType, decorations);
+		this.inlineBookmarkDecorationCoordinator.update(editor, this.inlineBookmarkDecorationPort())
 	}
 
-	deleteBookmarksData(id: string) {
+	private findBookmarkById(id: string, bookmarks: readonly Bookmark[] = this.codeBookmarks.values): Bookmark | undefined {
+		for (const bookmark of bookmarks) {
+			if (bookmark.id === id) return bookmark
+			const nested = this.findBookmarkById(id, bookmark.subs.values)
+			if (nested) return nested
+		}
+		return undefined
+	}
+
+	private bookmarkContainsCodeMarker(bookmark: Bookmark): boolean {
+		return bookmark.isCodeMarker || bookmark.subs.values.some(child => this.bookmarkContainsCodeMarker(child))
+	}
+
+	private warnProtectedCodeMarkers(count: number): void {
+		vscode.window.showWarningMessage(
+			count === 1
+				? 'TODO/FIXME/BUG 书签由源码标记自动管理，不可删除。'
+				: `选中的 ${count} 个 TODO/FIXME/BUG 书签由源码标记自动管理，不可删除。`,
+		)
+	}
+
+	private deleteBookmarksData(id: string): boolean {
+		const bookmark = this.findBookmarkById(id)
+		if (!bookmark || this.bookmarkContainsCodeMarker(bookmark)) return false
 		this.codeBookmarks.deleteBookmark(id)
+		return true
 	}
 
-	moveChildrenToParentWhenDelete(bookmark: Bookmark): boolean {
-		const subs = this.codeBookmarks.findBookmark(bookmark)?.subs
-		const out = this.codeBookmarks.findParentBookmark(bookmark)
-		if (subs) {
-			if (this.codeBookmarks.moveGroupToNode(subs, out)) {
-				this.deleteBookmarksData(bookmark.Id)
-				this.saveBookmarksToFile()
-				this.refreshDecoration()
-				return true
-			}
-		}
-		return false
+	private undoWorkspaceOrder(): string[] | null {
+		if (!this.currentStorageScope?.startsWith('workspace:')) return null
+		return [...(this.workspaceOrderCache ?? this.codeBookmarks.values
+			.filter(bookmark => bookmark.isFile)
+			.map(bookmark => bookmark.path))]
 	}
 
-	async forceAddBookmark(editor: vscode.TextEditor) {
-		const selections = editor.selections;
-		if (selections.length <= 1) {
-			// Single cursor: original interactive flow
-			const defaultLabel = Helper.getLabelFromSelected(editor)
-			
-			const label = await vscode.window.showInputBox({ prompt: '请输入书签标签', value: `${defaultLabel}` })
-			if (label === undefined || label === null) return
-			if (label.trim() === '') {
-				logger.showWarningMessage('标签不能为空')
-				return
-			}
-			const filePath = fileUtils.absoluteToRelative(editor.document.uri.fsPath)
-			const startPosition = editor.selection.start;
-			const endPosition = editor.selection.end;
-			let content = ''
-			
-			if (startPosition.isEqual(endPosition)) {
-				content = editor.document.lineAt(startPosition.line).text
-			} else {
-				const selection = new vscode.Selection(startPosition, endPosition)
-				content = editor.document.getText(selection)
-			}
-			const newBookmark = new Bookmark({
-				path: filePath,
-				label: label,
-				content: content,
-				start: new CursorIndex(startPosition.line, startPosition.character),
-				end: new CursorIndex(endPosition.line, endPosition.character),
-			})
+	private saveUndoState(action: UndoAction): void {
+		undoManager.saveState(this.codeBookmarks, action, this.currentStorageScope, this.undoWorkspaceOrder())
+	}
 
-			undoManager.saveState(this.codeBookmarks, 'add');
-			const pinBm = this.codeBookmarks.addNewBookmark(newBookmark)
-			if (pinBm) {
-				this.expandFolderTreeView(pinBm)
-			}
+	private captureUndoState(workspaceOrder = this.undoWorkspaceOrder()): CapturedUndoState {
+		return undoManager.captureState(this.codeBookmarks, this.currentStorageScope, workspaceOrder)
+	}
 
-			this.saveBookmarksToFile()
-			this.refreshDecoration()
-		} else {
-			// Multi-cursor: batch add bookmarks for all cursor lines with distinct names
-			const uniqueSelections = [];
-			const processedLines = new Set<number>();
-			for (const sel of selections) {
-				if (processedLines.has(sel.start.line)) continue;
-				processedLines.add(sel.start.line);
-				uniqueSelections.push(sel);
-			}
+	private commitUndoState(captured: CapturedUndoState, action: UndoAction): boolean {
+		return undoManager.commitState(captured, this.codeBookmarks, action, this.undoWorkspaceOrder())
+	}
 
-			const defaultLabels = uniqueSelections.map(sel => {
-				if (sel.isEmpty) {
-					return editor.document.lineAt(sel.start.line).text.trim().substring(0, 30) || '未命名';
-				} else {
-					return editor.document.getText(sel).trim().substring(0, 30) || '未命名';
-				}
-			});
-
-			const prefillValue = defaultLabels.join(' │ ');
-
-			const labelString = await vscode.window.showInputBox({ 
-				prompt: `请输入 ${uniqueSelections.length} 个书签标签（已启用隐写术分隔符“│”）`, 
-				value: prefillValue 
-			});
-			if (labelString === undefined || labelString === null) return;
-			
-			const labelParts = labelString.split('│').map(s => s.trim());
-
-			const filePath = fileUtils.absoluteToRelative(editor.document.uri.fsPath);
-			undoManager.saveState(this.codeBookmarks, 'add');
-
-			for (let i = 0; i < uniqueSelections.length; i++) {
-				const sel = uniqueSelections[i];
-				const line = sel.start.line;
-				const content = editor.document.lineAt(line).text;
-				
-				let label = labelParts[i];
-				if (!label || label === '') {
-					label = defaultLabels[i] || '未命名';
-				}
-
-				const newBookmark = new Bookmark({
-					path: filePath,
-					label: label,
-					content: content,
-					start: new CursorIndex(line, sel.start.character),
-					end: new CursorIndex(sel.end.line, sel.end.character),
-				});
-				this.codeBookmarks.addNewBookmark(newBookmark);
-			}
-
-			this.saveBookmarksToFile();
-			this.refreshDecoration();
-			logger.showMessage(`已为 ${uniqueSelections.length} 个光标位置批量添加了分别命名的书签。`);
+	private aiSingleFileWorkflowPort(): AISingleFileWorkflowPort {
+		return {
+			absoluteToRelative: filePath => fileUtils.absoluteToRelative(filePath),
+			storageScopeForUri: uri => this.storageScopeForUri(uri),
+			taskRegistry: this.aiTaskRegistry,
+			workflowGuard: this.aiWorkflowGuard,
+			bookmarksForPath: pathRel => this.getBookmarksByPath(pathRel),
+			documentLines: document => this.documentLines(document),
+			deleteBookmark: id => this.deleteBookmarksData(id),
+			addBookmark: bookmark => { this.codeBookmarks.addNewBookmark(bookmark) },
+			saveUndoState: action => this.saveUndoState(action),
+			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),
+			refreshDecoration: () => this.refreshDecoration(),
+			findBookmark: bookmark => this.codeBookmarks.findBookmark(bookmark),
+			assignAIIcons: () => ExtensionConfig.aiAssignIcons,
 		}
 	}
 
-	private processAIBookmark(aiBm: any, document: vscode.TextDocument, pathRel: string, parent?: Bookmark): Bookmark | null {
-		const line = typeof aiBm.line === 'number' ? aiBm.line : parseInt(aiBm.line) || 0;
-		
-		let safeLine = line;
-
-		// Correct hallucinated line numbers by searching the exact content in the document
-		if (aiBm.content && typeof aiBm.content === 'string') {
-			const targetText = aiBm.content.trim();
-			if (targetText.length > 5) { // Only search if text is reasonably long
-				let foundLine = -1;
-				const maxLines = document.lineCount;
-				for (let offset = 0; offset < maxLines; offset++) {
-					const checkUp = line - offset;
-					const checkDown = line + offset;
-					
-					if (checkUp >= 0 && checkUp < maxLines) {
-						if (document.lineAt(checkUp).text.includes(targetText)) {
-							foundLine = checkUp;
-							break;
-						}
-					}
-					if (checkDown >= 0 && checkDown < maxLines) {
-						if (document.lineAt(checkDown).text.includes(targetText)) {
-							foundLine = checkDown;
-							break;
-						}
-					}
-				}
-				if (foundLine !== -1) {
-					safeLine = foundLine;
-				}
-			}
-		}
-
-		if (safeLine >= document.lineCount) safeLine = document.lineCount - 1;
-		if (safeLine < 0) safeLine = 0;
-
-		const lineText = document.lineAt(safeLine).text;
-		
-		let newId = aiBm.id;
-		if (!newId || typeof newId !== 'string') newId = Helper.createNewId();
-
-		let openedState = vscode.TreeItemCollapsibleState.None;
-		const isOpened = false;
-		if (aiBm.opened === 2) {
-			openedState = vscode.TreeItemCollapsibleState.Expanded;
-			// We do NOT set isOpened = true here because that makes it the default target container (green icon)
-		} else if (aiBm.opened === 1) {
-			openedState = vscode.TreeItemCollapsibleState.Collapsed;
-		}
-
-		let parsedParams: number[] = [];
-		if (typeof aiBm.params === 'string') {
-			parsedParams = aiBm.params.split(',').map(Number);
-		}
-		
-		let startCol = 0;
-		let endCol = lineText.length;
-		
-		if (parsedParams.length === 5) {
-			startCol = parsedParams[2] || 0;
-			endCol = parsedParams[4] || lineText.length;
-		} else if (parsedParams.length === 4) {
-			startCol = parsedParams[1] || 0;
-			endCol = parsedParams[3] || lineText.length;
-		}
-
-		const newBookmark = new Bookmark({
-			Id: newId,
-			path: pathRel,
-			label: aiBm.label || 'AI 生成书签',
-			content: lineText,
-			icon: aiBm.iconName || '',
-			start: new CursorIndex(safeLine, startCol),
-			end: new CursorIndex(safeLine, endCol),
-			isOpened: isOpened,
-			collapsible: openedState,
-			parent: parent
-		});
-
-		if (aiBm.subs && Array.isArray(aiBm.subs)) {
-			for (const sub of aiBm.subs) {
-				const childBm = this.processAIBookmark(sub, document, pathRel, newBookmark);
-				if (childBm) {
-					newBookmark.subs.add(childBm);
-				}
-			}
-		}
-		
-		// Force expanded state for any bookmark with subs as requested, but ensure it's not a container
-		if (newBookmark.subs.size > 0) {
-			newBookmark.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-			newBookmark.isOpened = false;
-		}
-
-		return newBookmark;
-	}
-
-	
-	async generateBookmarksWithAI(editor: vscode.TextEditor, mode: 'append' | 'overwrite' | 'skip_existing') {
-		const document = editor.document;
-		const codeContent = document.getText();
-		const pathRel = fileUtils.absoluteToRelative(document.uri.fsPath);
-
-		if (this.runningAITasks.has(pathRel)) {
-			vscode.window.showWarningMessage('当前文件已有 AI 任务正在运行，请稍候再试。');
-			return;
-		}
-		this.runningAITasks.add(pathRel);
-
-		const existingBookmarksSet = this.codeBookmarks.getBookmarksWithPath(new BookmarkSet(), pathRel);
-		const existingBookmarks = existingBookmarksSet.values;
-
-		if (mode === 'skip_existing' && existingBookmarks.length > 0) {
-			vscode.window.showInformationMessage('当前文件已有书签，根据模式已跳过生成。');
-			this.runningAITasks.delete(pathRel);
-			return;
-		}
-
-		vscode.window.withProgress({
-			location: vscode.ProgressLocation.Notification,
-			title: 'AI 智能代码书签提取运行中...',
-			cancellable: true
-		}, async (progress, token) => {
-			let statusDisposable: vscode.Disposable | undefined;
-			try {
-				const aiBookmarks = await AIService.generateBookmarks(codeContent, document.uri.fsPath, (msg: string) => {
-					if (statusDisposable) statusDisposable.dispose();
-					statusDisposable = vscode.window.setStatusBarMessage(`AI: ${msg}`);
-				}, token);
-				
-				if (token.isCancellationRequested) return;
-
-				if (!aiBookmarks || aiBookmarks.length === 0) {
-					vscode.window.showInformationMessage('AI 未能发现需要添加书签的核心逻辑。');
-					return;
-				}
-
-				if (statusDisposable) statusDisposable.dispose();
-				statusDisposable = vscode.window.setStatusBarMessage('AI: 正在将智能书签落盘保存...');
-				
-				undoManager.saveState(this.codeBookmarks, 'ai');
-
-				if (mode === 'overwrite') {
-					for (const eb of existingBookmarks) {
-						if (eb.Id) {
-							this.deleteBookmarksData(eb.Id);
-						}
-					}
-				}
-				
-				let count = 0;
-				for (const aiBm of aiBookmarks) {
-					const newBookmark = this.processAIBookmark(aiBm, document, pathRel);
-					if (newBookmark) {
-						this.codeBookmarks.addNewBookmark(newBookmark);
-						count++;
-					}
-				}
-
-				this.saveBookmarksToFile([document.uri.fsPath]);
-				this._onDidChangeTreeData.fire();
-				this.refreshDecoration();
-				vscode.window.showInformationMessage(`AI 分析完成，成功生成并处理了 ${count} 个主级书签！`);
-				
-			} catch (err: any) {
-				if (err.message && err.message.includes('主动取消')) {
-					vscode.window.showInformationMessage('已取消 AI 书签生成任务。');
-				} else {
-					vscode.window.showErrorMessage(`AI 书签生成失败：${err.message}`);
-				}
-			} finally {
-				if (statusDisposable) statusDisposable.dispose();
-				this.runningAITasks.delete(pathRel);
-			}
-		});
-	}
-
-	async optimizeBookmarksWithAI(editor: vscode.TextEditor) {
-		const document = editor.document;
-		const codeContent = document.getText();
-		const pathRel = fileUtils.absoluteToRelative(document.uri.fsPath);
-
-		if (this.runningAITasks.has(pathRel)) {
-			vscode.window.showWarningMessage('当前文件已有 AI 任务正在运行，请稍候再试。');
-			return;
-		}
-		
-		const existingBookmarksSet = this.codeBookmarks.getBookmarksWithPath(new BookmarkSet(), pathRel);
-		const existingBookmarks = existingBookmarksSet.values;
-
-		if (existingBookmarks.length === 0) {
-			vscode.window.showInformationMessage('当前文件没有可以优化的书签。');
-			return;
-		}
-
-		this.runningAITasks.add(pathRel);
-
-		vscode.window.withProgress({
-			location: vscode.ProgressLocation.Notification,
-			title: 'AI 书签标签优化运行中...',
-			cancellable: true
-		}, async (progress, token) => {
-			let statusDisposable: vscode.Disposable | undefined;
-			try {
-				const optimizedList = await AIService.optimizeBookmarkTitles(codeContent, document.uri.fsPath, existingBookmarks, (msg: string) => {
-					if (statusDisposable) statusDisposable.dispose();
-					statusDisposable = vscode.window.setStatusBarMessage(`AI: ${msg}`);
-				}, token);
-				
-				if (token.isCancellationRequested) return;
-
-				if (!optimizedList || optimizedList.length === 0) {
-					vscode.window.showInformationMessage('AI 未返回任何有效的标签更新。');
-					return;
-				}
-
-				if (statusDisposable) statusDisposable.dispose();
-				statusDisposable = vscode.window.setStatusBarMessage('AI: 正在应用优化后的标签...');
-
-				let fileHasChanges = false;
-				undoManager.saveState(this.codeBookmarks, 'ai-optimize');
-
-				for (const opt of optimizedList) {
-					if (opt.id && opt.new_label) {
-						const bm = this.codeBookmarks.findBookmark(new Bookmark({ Id: opt.id }));
-						if (bm) {
-							bm.label = Helper.formatLabelSpacing(opt.new_label);
-							fileHasChanges = true;
-						}
-					}
-				}
-
-				if (fileHasChanges) {
-					this.saveBookmarksToFile([document.uri.fsPath]);
-					this._onDidChangeTreeData.fire();
-					this.refreshDecoration();
-					vscode.window.showInformationMessage('AI 标签优化完成！');
-				} else {
-					vscode.window.showInformationMessage('AI 标签优化完成，但没有内容改变。');
-				}
-				
-			} catch (err: any) {
-				if (err.message && err.message.includes('主动取消')) {
-					vscode.window.showInformationMessage('已取消 AI 标签优化任务。');
-				} else {
-					vscode.window.showErrorMessage(`AI 标签优化失败：${err.message}`);
-				}
-			} finally {
-				if (statusDisposable) statusDisposable.dispose();
-				this.runningAITasks.delete(pathRel);
-			}
-		});
-	}
-
-	async getScriptFilesInFolder(dirPath: string, token: vscode.CancellationToken): Promise<string[]> {
-		const files: string[] = [];
-		const allowedExts = ['.js', '.ts', '.jsx', '.tsx', '.vue', '.py', '.java', '.go', '.cpp', '.c', '.cs', '.php', '.rb', '.rs', '.swift', '.kt'];
-		
-		async function traverse(currentPath: string) {
-			if (token.isCancellationRequested) return;
-			const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
-			for (const entry of entries) {
-				if (token.isCancellationRequested) return;
-				const fullPath = path.join(currentPath, entry.name);
-				if (entry.isDirectory()) {
-					if (entry.name !== 'node_modules' && entry.name !== '.git' && entry.name !== 'dist' && entry.name !== 'build' && entry.name !== 'out') {
-						await traverse(fullPath);
-					}
-				} else if (entry.isFile()) {
-					const ext = path.extname(entry.name).toLowerCase();
-					if (allowedExts.includes(ext)) {
-						files.push(fullPath);
-					}
-				}
-			}
-		}
-		
-		await traverse(dirPath);
-		return files;
-	}
-
-	async generateBookmarksForFolderWithAI(editor: vscode.TextEditor, mode: 'append' | 'overwrite' | 'skip_existing') {
-		const dirPath = path.dirname(editor.document.uri.fsPath);
-		
-		const dummyTokenSource = new vscode.CancellationTokenSource();
-		const filesToProcess = await this.getScriptFilesInFolder(dirPath, dummyTokenSource.token);
-		
-		if (filesToProcess.length === 0) {
-			vscode.window.showInformationMessage('未在当前文件夹及其子目录中找到支持的脚本文件。');
-			return;
-		}
-
-		if (filesToProcess.length > 10) {
-			const confirm = await vscode.window.showWarningMessage(`当前文件夹（包含子目录）共扫描到 ${filesToProcess.length} 个脚本文件，批量处理可能需要较长时间并大量消耗 AI API 的额度。确定要继续吗？`,
-				{ modal: true },
-				'确定'
-			);
-			if (confirm !== '确定') {
-				return;
-			}
-		}
-
-		await vscode.window.withProgress({
-			location: vscode.ProgressLocation.Notification,
-			title: 'AI 批量智能提取书签运行中...',
-			cancellable: true
-		}, async (progress, token) => {
-			let totalCount = 0;
-			let fileCount = 0;
-			let failedFilesCount = 0;
-			const changedPaths: string[] = [];
-			let statusDisposable: vscode.Disposable | undefined;
-			let hasSavedUndoState = false;
-
-			for (const filePath of filesToProcess) {
-				const pathRel = fileUtils.absoluteToRelative(filePath);
-				if (this.runningAITasks.has(pathRel)) {
-					vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`);
-					continue;
-				}
-				
-				let codeContent = '';
-				try {
-					codeContent = (await fs.promises.readFile(filePath, 'utf8')).toString();
-				} catch {
-					vscode.window.showErrorMessage(`无法读取文件源码: ${filePath}`);
-					continue;
-				}
-
-				this.runningAITasks.add(pathRel);
-				fileCount++;
-				progress.report({ message: `(${fileCount}/${filesToProcess.length}) 正在提取: ${path.basename(filePath)}` });
-
-				try {
-					const existingBookmarksSet = this.codeBookmarks.getBookmarksWithPath(new BookmarkSet(), pathRel);
-					const existingBookmarks = existingBookmarksSet.values;
-
-					if (mode === 'skip_existing' && existingBookmarks.length > 0) {
-						this.runningAITasks.delete(pathRel);
-						continue;
-					}
-
-					const aiBookmarks = await AIService.generateBookmarks(codeContent, filePath, (msg: string) => {
-						if (statusDisposable) statusDisposable.dispose();
-						statusDisposable = vscode.window.setStatusBarMessage(`AI: ${msg}`);
-					}, token);
-					
-					if (token.isCancellationRequested) {
-						this.runningAITasks.delete(pathRel);
-						break;
-					}
-
-					if (aiBookmarks && aiBookmarks.length > 0) {
-						let fileHasChanges = false;
-						const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-
-						if (!hasSavedUndoState) {
-							undoManager.saveState(this.codeBookmarks, 'ai');
-							hasSavedUndoState = true;
-						}
-
-						if (mode === 'overwrite') {
-							for (const eb of existingBookmarks) {
-								if (eb.Id) {
-									this.deleteBookmarksData(eb.Id);
-									fileHasChanges = true;
-								}
-							}
-						}
-
-						for (const aiBm of aiBookmarks) {
-							const newBookmark = this.processAIBookmark(aiBm, document, pathRel);
-							if (newBookmark) {
-								this.codeBookmarks.addNewBookmark(newBookmark);
-								fileHasChanges = true;
-								totalCount++;
-							}
-						}
-
-						if (fileHasChanges) {
-							changedPaths.push(filePath);
-						}
-					}
-				} catch (err: any) {
-					failedFilesCount++;
-					if (err.message && (err.message.includes('401') || err.message.includes('API Key'))) {
-						vscode.window.showErrorMessage(`接口验证失败，请检查 API Key 配置: ${err.message}`);
-						this.runningAITasks.delete(pathRel);
-						break; // Fatal error, abort batch
-					}
-					logger.error(`[AI Batch Generate] Failed for ${pathRel}: ${err.message}`);
-				} finally {
-					this.runningAITasks.delete(pathRel);
-				}
-			}
-
-			if (changedPaths.length > 0) {
-				this.saveBookmarksToFile(changedPaths);
-				this._onDidChangeTreeData.fire();
-				this.refreshDecoration();
-				const failMsg = failedFilesCount > 0 ? `（有 ${failedFilesCount} 个文件处理失败）` : '';
-				vscode.window.showInformationMessage(`文件夹 AI 处理完成，在 ${changedPaths.length} 个文件中生成了 ${totalCount} 个书签！${failMsg}`);
-			} else if (!token.isCancellationRequested) {
-				const failMsg = failedFilesCount > 0 ? `（其中 ${failedFilesCount} 个文件处理失败）` : '';
-				vscode.window.showInformationMessage(`AI 处理完毕，没有生成新的书签。${failMsg}`);
-			}
-			if (statusDisposable) statusDisposable.dispose();
-		});
-	}
-
-	async optimizeBookmarksForFolderWithAI(editor: vscode.TextEditor) {
-		const dirPath = path.dirname(editor.document.uri.fsPath);
-		
-		const dummyTokenSource = new vscode.CancellationTokenSource();
-		const files = await this.getScriptFilesInFolder(dirPath, dummyTokenSource.token);
-		
-		if (files.length === 0) {
-			vscode.window.showInformationMessage('未在当前文件夹及其子目录中找到支持的脚本文件。');
-			return;
-		}
-
-		if (files.length > 10) {
-			const confirm = await vscode.window.showWarningMessage(`当前文件夹（包含子目录）共扫描到 ${files.length} 个脚本文件，批量处理可能需要较长时间并大量消耗 AI API 的额度。确定要继续吗？`,
-				{ modal: true },
-				'确定'
-			);
-			if (confirm !== '确定') {
-				return;
-			}
-		}
-
-		await vscode.window.withProgress({
-			location: vscode.ProgressLocation.Notification,
-			title: 'AI 正在扫描文件夹中的书签...',
-			cancellable: true
-		}, async (progress, token) => {
-			let totalCount = 0;
-			let fileCount = 0;
-			let failedFilesCount = 0;
-			const changedPaths: string[] = [];
-			let statusDisposable: vscode.Disposable | undefined;
-			let hasSavedUndoState = false;
-
-			for (const filePath of files) {
-				const pathRel = fileUtils.absoluteToRelative(filePath);
-				if (this.runningAITasks.has(pathRel)) {
-					vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`);
-					continue;
-				}
-
-				const existingBookmarksSet = this.codeBookmarks.getBookmarksWithPath(new BookmarkSet(), pathRel);
-				const existingBookmarks = existingBookmarksSet.values;
-
-				if (existingBookmarks.length === 0) {
-					continue; // skip files without bookmarks
-				}
-				
-				let codeContent = '';
-				try {
-					codeContent = (await fs.promises.readFile(filePath, 'utf8')).toString();
-				} catch {
-					vscode.window.showErrorMessage(`无法读取文件源码: ${filePath}`);
-					continue;
-				}
-
-				this.runningAITasks.add(pathRel);
-				fileCount++;
-				progress.report({ message: `(${fileCount}/${files.length}) 正在优化: ${path.basename(filePath)}` });
-
-				try {
-					const optimizedList = await AIService.optimizeBookmarkTitles(codeContent, filePath, existingBookmarks, (msg: string) => {
-						if (statusDisposable) statusDisposable.dispose();
-						statusDisposable = vscode.window.setStatusBarMessage(`AI: ${msg}`);
-					}, token);
-					
-					if (token.isCancellationRequested) {
-						this.runningAITasks.delete(pathRel);
-						break;
-					}
-
-					if (optimizedList && optimizedList.length > 0) {
-						let fileHasChanges = false;
-						
-						if (!hasSavedUndoState) {
-							undoManager.saveState(this.codeBookmarks, 'ai-optimize');
-							hasSavedUndoState = true;
-						}
-
-						for (const opt of optimizedList) {
-							if (opt.id && opt.new_label) {
-								const bm = this.codeBookmarks.findBookmark(new Bookmark({ Id: opt.id }));
-								if (bm) {
-									bm.label = Helper.formatLabelSpacing(opt.new_label);
-									fileHasChanges = true;
-									totalCount++;
-								}
-							}
-						}
-
-						if (fileHasChanges) {
-							changedPaths.push(filePath);
-						}
-					}
-				} catch (err: any) {
-					failedFilesCount++;
-					if (err.message && (err.message.includes('401') || err.message.includes('API Key'))) {
-						vscode.window.showErrorMessage(`接口验证失败，请检查 API Key 配置: ${err.message}`);
-						this.runningAITasks.delete(pathRel);
-						break; // Fatal error, abort batch
-					}
-					logger.error(`[AI Batch Optimize] Failed for ${pathRel}: ${err.message}`);
-				} finally {
-					this.runningAITasks.delete(pathRel);
-				}
-			}
-
-			if (changedPaths.length > 0) {
-				this.saveBookmarksToFile(changedPaths);
-				this._onDidChangeTreeData.fire();
-				this.refreshDecoration();
-				const failMsg = failedFilesCount > 0 ? `（有 ${failedFilesCount} 个文件处理失败）` : '';
-				vscode.window.showInformationMessage(`文件夹 AI 优化完成，在 ${changedPaths.length} 个文件中重命名了 ${totalCount} 个书签！${failMsg}`);
-			} else if (!token.isCancellationRequested) {
-				const failMsg = failedFilesCount > 0 ? `（其中 ${failedFilesCount} 个文件处理失败）` : '';
-				vscode.window.showInformationMessage(`AI 处理完毕，没有更新任何书签。${failMsg}`);
-			}
-			if (statusDisposable) statusDisposable.dispose();
-		});
-	}
-
-	public async optimizeSelectedBookmarksWithAI(bm?: Bookmark, selectedBookmarks?: Bookmark[]) {
-		let targets: Bookmark[] = [];
-		if (selectedBookmarks && selectedBookmarks.length > 1) {
-			targets = selectedBookmarks;
-		} else if (this.treeView && this.treeView.selection.length > 1) {
-			const isBmInSelection = bm ? this.treeView.selection.some(s => s.Id === bm.Id) : true;
-			if (isBmInSelection) {
-				targets = [...this.treeView.selection];
-			} else {
-				targets = [bm!];
-			}
-		} else {
-			const target = bm || (this.treeView?.selection.length ? this.treeView.selection[0] : undefined);
-			if (target) targets.push(target);
-		}
-
-		if (targets.length === 0) return;
-
-		const bookmarksToOptimize = targets.filter(b => b.contextValue === ContextBookmark.Bookmark || b.contextValue === ContextBookmark.BookmarkPinned);
-		if (bookmarksToOptimize.length === 0) {
-			vscode.window.showInformationMessage('选中的项不包含可优化的书签。');
-			return;
-		}
-
-		const groupedByPath = new Map<string, Bookmark[]>();
-		for (const bm of bookmarksToOptimize) {
-			const filePath = fileUtils.relativeToAbsolute(bm.path);
-			if (!groupedByPath.has(filePath)) {
-				groupedByPath.set(filePath, []);
-			}
-			groupedByPath.get(filePath)!.push(bm);
-		}
-
-
-
-		let hasSavedUndoState = false;
-
-		for (const [filePath, bookmarks] of groupedByPath.entries()) {
-			const pathRel = fileUtils.absoluteToRelative(filePath);
-			if (this.runningAITasks.has(pathRel)) {
-				vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`);
-				continue;
-			}
-			
-			let fileContent = '';
-			try {
-				fileContent = (await fs.promises.readFile(filePath, 'utf8')).toString();
-			} catch {
-				vscode.window.showErrorMessage(`无法读取文件源码: ${filePath}`);
-				continue;
-			}
-
-			this.runningAITasks.add(pathRel);
-			try {
-				await vscode.window.withProgress({
-					location: vscode.ProgressLocation.Notification,
-					title: `AI 正在优化 ${path.basename(filePath)} 中的 ${bookmarks.length} 个书签标签...`,
-					cancellable: true
-				}, async (progress, token) => {
-					let statusDisposable: vscode.Disposable | undefined;
-					try {
-						const optimizedList = await AIService.optimizeBookmarkTitles(fileContent, filePath, bookmarks, (msg: string) => {
-							if (statusDisposable) statusDisposable.dispose();
-							statusDisposable = vscode.window.setStatusBarMessage(`AI: ${msg}`);
-						}, token);
-
-						let count = 0;
-						if (optimizedList && optimizedList.length > 0) {
-							for (const opt of optimizedList) {
-								if (opt.id && opt.new_label) {
-									const bm = this.codeBookmarks.findBookmark(new Bookmark({ Id: opt.id }));
-									if (bm) {
-										if (!hasSavedUndoState) {
-											undoManager.saveState(this.codeBookmarks, 'ai-optimize');
-											hasSavedUndoState = true;
-										}
-										bm.label = Helper.formatLabelSpacing(opt.new_label);
-										count++;
-
-									}
-								}
-							}
-							
-							if (count > 0) {
-								this.saveBookmarksToFile([filePath]);
-								this.refreshDecoration();
-								this.refresh();
-								vscode.window.showInformationMessage(`成功优化了 ${count} 个选中书签的标签！`);
-							} else {
-								vscode.window.showInformationMessage('AI 未能返回任何有效的标签更新。');
-							}
-						}
-					} finally {
-						if (statusDisposable) statusDisposable.dispose();
-					}
-				});
-			} catch (error: any) {
-				if (error.message && error.message.includes('已取消')) {
-					vscode.window.showInformationMessage(`已取消 AI 选中书签优化任务：${path.basename(filePath)}`);
-				} else {
-					vscode.window.showErrorMessage(`AI 优化选中书签失败：${error}`);
-				}
-			} finally {
-				this.runningAITasks.delete(pathRel);
-			}
+	private aiFolderWorkflowPort(): AIFolderWorkflowPort {
+		return {
+			...this.aiSingleFileWorkflowPort(),
+			currentStorageScope: () => this.currentStorageScope,
 		}
 	}
 
+	private aiSelectedBookmarksWorkflowPort(): AISelectedBookmarksWorkflowPort {
+		return {
+			...this.aiFolderWorkflowPort(),
+			absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
+			resolveTargets: (bookmark, selectedBookmarks) => this.resolveTargets(bookmark, selectedBookmarks),
+		}
+	}
 
-	private isExpanded = false;
+	private manualBookmarkWorkflowPort(): ManualBookmarkWorkflowPort {
+		return {
+			absoluteToRelative: filePath => fileUtils.absoluteToRelative(filePath),
+			updateBookmarkContextAnchors: (bookmark, document) => fileUtils.updateBookmarkContextAnchors(bookmark, document),
+			bookmarksForPath: pathRel => this.getBookmarksByPath(pathRel),
+			findBookmarkById: id => this.findBookmarkById(id),
+			bookmarkContainsCodeMarker: bookmark => this.bookmarkContainsCodeMarker(bookmark),
+			warnProtectedCodeMarkers: count => this.warnProtectedCodeMarkers(count),
+			deleteBookmark: id => this.deleteBookmarksData(id),
+			addBookmark: bookmark => this.codeBookmarks.addNewBookmark(bookmark),
+			saveUndoState: action => this.saveUndoState(action),
+			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),
+			refreshDecoration: () => this.refreshDecoration(),
+			expandPinnedContainer: bookmark => { void this.expandFolderTreeView(bookmark) },
+		}
+	}
+
+	private bookmarkEditingWorkflowPort(): BookmarkEditingWorkflowPort {
+		return {
+			resolveTargets: (bookmark, selectedBookmarks) => this.resolveTargets(bookmark, selectedBookmarks),
+			findBookmark: bookmark => this.codeBookmarks.findBookmark(bookmark),
+			temporaryFolder: () => fileUtils.getGlobalBookmarkFolder(),
+			registerDisposables: (...disposables) => { this.context.subscriptions.push(...disposables) },
+			absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
+			canUpdateBookmarkInEditor: (bookmark, editor) => this.canUpdateBookmarkInEditor(bookmark, editor),
+			updateBookmarkContextAnchors: (bookmark, document) => fileUtils.updateBookmarkContextAnchors(bookmark, document),
+			showIconPicker: (initialIcon, defaultIcon, onDidSelectIcon) => {
+				IconPickerWebview.createOrShow(
+					this.context,
+					'batch_change_icon',
+					initialIcon,
+					defaultIcon,
+					iconName => onDidSelectIcon(iconName),
+				)
+			},
+			pinBookmark: bookmark => this.codeBookmarks.pinBookmark(bookmark),
+			publishTreeChange: bookmark => this._onDidChangeTreeData.fire(bookmark),
+			revealPinnedBookmarkLater: bookmark => this.revealPinnedBookmarkLater(bookmark),
+			saveUndoState: action => this.saveUndoState(action),
+			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),
+			refreshDecoration: () => this.refreshDecoration(),
+		}
+	}
+
+	private bookmarkDeletionWorkflowPort(): BookmarkDeletionWorkflowPort {
+		return {
+			bookmarks: () => this.codeBookmarks,
+			resolveTargets: (bookmark, selectedBookmarks) => this.resolveTargets(bookmark, selectedBookmarks),
+			findBookmark: bookmark => this.codeBookmarks.findBookmark(bookmark),
+			bookmarkContainsCodeMarker: bookmark => this.bookmarkContainsCodeMarker(bookmark),
+			warnProtectedCodeMarkers: count => this.warnProtectedCodeMarkers(count),
+			deleteBookmark: id => this.deleteBookmarksData(id),
+			absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
+			saveUndoState: action => this.saveUndoState(action),
+			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),
+			refreshDecoration: () => this.refreshDecoration(),
+		}
+	}
+
+	private bookmarkTreeInteractionPort(): BookmarkTreeInteractionPort {
+		return {
+			bookmarks: () => this.codeBookmarks,
+			workspaceOrder: () => this.workspaceOrderCache,
+			persistWorkspaceOrder: async order => {
+				const folder = fileUtils.getGlobalBookmarkFolder(true, this.currentScopeUri())
+				if (!folder) return
+				this.workspaceOrderCache = order
+				const orderFile = path.join(folder, '_workspace_order.json')
+				if (!await fileUtils.writeJsonFileAsync(orderFile, order)) {
+					logger.showWarningMessage('无法保存工作区文件排序，请检查书签存储路径权限。')
+				}
+			},
+			absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
+			absoluteToRelative: filePath => fileUtils.absoluteToRelative(filePath),
+			bookmarksForPath: bookmarkPath => this.getBookmarksByPath(bookmarkPath),
+			captureUndoState: workspaceOrder => this.captureUndoState(workspaceOrder),
+			commitUndoState: (captured, action) => this.commitUndoState(captured, action),
+			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),
+			refreshDecoration: () => this.refreshDecoration(),
+			fireTreeChanged: () => this._onDidChangeTreeData.fire(),
+			expansionRoots: () => this.currentStorageScope?.startsWith('workspace:')
+				? this.codeBookmarks.values
+				: this.standaloneRootBookmarks(),
+			getChildren: bookmark => this.getChildren(bookmark),
+			defaultExpandLevel: () => ExtensionConfig.defaultExpandLevel,
+			treeViewAvailable: () => this.treeView !== undefined,
+			revealTreeItem: (bookmark, options) => this.treeView?.reveal(bookmark, options),
+			setExpandCollapseContext: expanded => this.setContextValue(Commands.varIsExpanded, expanded),
+		}
+	}
+
+	async forceAddBookmark(editor: vscode.TextEditor): Promise<void> {
+		return runForceAddBookmark(editor, this.manualBookmarkWorkflowPort())
+	}
+	async generateBookmarksWithAI(editor: vscode.TextEditor, mode: AIGenerationMode): Promise<void> {
+		return runGenerateBookmarksForFile(editor, mode, this.aiSingleFileWorkflowPort())
+	}
+
+	async optimizeBookmarksWithAI(editor: vscode.TextEditor): Promise<void> {
+		return runOptimizeBookmarksForFile(editor, this.aiSingleFileWorkflowPort())
+	}
+
+	private async folderBookmarkPresence(dirPath: string): Promise<AIFolderBookmarkPresence> {
+		return this.aiFolderPresence.getPresence(
+			dirPath,
+			bookmarkPathPresenceSignature(this.codeBookmarks.values),
+			async () => {
+				const presence = {
+					hasBookmarkedScript: false,
+					hasUnbookmarkedScript: false,
+				}
+				await visitAISourceFilesInFolder(dirPath, filePath => {
+					const relativePath = fileUtils.absoluteToRelative(filePath)
+					if (this.getBookmarksByPath(relativePath).length === 0) {
+						presence.hasUnbookmarkedScript = true
+					} else {
+						presence.hasBookmarkedScript = true
+					}
+					return presence.hasBookmarkedScript && presence.hasUnbookmarkedScript
+				})
+				return presence
+			},
+		)
+	}
+
+	private async aiFolderWorkflowTarget(): Promise<AIFolderWorkflowTarget> {
+		const editor = vscode.window.activeTextEditor?.document.uri.scheme === 'file'
+			? vscode.window.activeTextEditor
+			: undefined
+		if (editor) {
+			await this.ensureEditorScope(editor)
+			return {
+				directory: path.dirname(editor.document.uri.fsPath),
+				storageScope: this.storageScopeForUri(editor.document.uri),
+			}
+		}
+
+		const directory = this.workspaceFolderRootForCurrentScope()
+		if (!directory) throw new Error('请先打开文件夹或工作区。')
+		const storageScope = this.storageScopeForUri(vscode.Uri.file(directory))
+		await this.refresh(undefined, storageScope)
+		return { directory, storageScope }
+	}
+
+	async generateBookmarksForFolderWithAI(mode: AIGenerationMode): Promise<void> {
+		return runGenerateBookmarksForFolder(
+			await this.aiFolderWorkflowTarget(),
+			mode,
+			this.aiFolderWorkflowPort(),
+		)
+	}
+
+	async optimizeBookmarksForFolderWithAI(): Promise<void> {
+		return runOptimizeBookmarksForFolder(
+			await this.aiFolderWorkflowTarget(),
+			this.aiFolderWorkflowPort(),
+		)
+	}
+
+	private resolveTargets(bm?: Bookmark, selectedBookmarks?: Bookmark[]): Bookmark[] {
+		if (selectedBookmarks && selectedBookmarks.length > 1) return [...selectedBookmarks]
+
+		const selection = this.treeView?.selection ?? []
+		if (selection.length > 1) {
+			if (!bm || selection.some(item => item.id === bm.id)) return [...selection]
+			return [bm]
+		}
+
+		const target = bm ?? selection[0]
+		return target ? [target] : []
+	}
+
+	public async optimizeSelectedBookmarksWithAI(
+		bookmark?: Bookmark,
+		selectedBookmarks?: Bookmark[],
+	): Promise<void> {
+		return runOptimizeSelectedBookmarks(
+			bookmark,
+			selectedBookmarks,
+			this.aiSelectedBookmarksWorkflowPort(),
+		)
+	}
+
+	public refreshExpandCollapseContext(): void {
+		publishExpandCollapseContext(this.bookmarkTreeInteractionPort())
+	}
+
 	async toggleExpandCollapse() {
-		if (this.isExpanded) {
-			await this._collapseAll();
-			this.isExpanded = false;
-		} else {
-			const roots = await this.getChildren();
-			const expandRecursive = async (items: any[]) => {
-				for (const item of items) {
-					try { await this.treeView?.reveal(item, { expand: true, select: false, focus: false }); } catch {}
-					const children = await this.getChildren(item);
-					if (children.length > 0) {
-						await expandRecursive(children);
-					}
-				}
-			};
-			await expandRecursive(roots);
-			this.isExpanded = true;
-		}
-		vscode.commands.executeCommand('setContext', 'codebookmark.var.isExpanded', this.isExpanded);
+		return runToggleExpandCollapse(this.bookmarkTreeInteractionPort())
 	}
 
-	async expandFolderTreeView(bookmark: any) {
-		if (this.treeView) {
-			try {
-				await this.treeView.reveal(bookmark, { select: true, focus: false, expand: true });
-			} catch {}
-		}
+	async expandFolderTreeView(bookmark: Bookmark) {
+		return runExpandFolderTreeView(bookmark, this.bookmarkTreeInteractionPort())
 	}
 
-	private smartTrackTimer: NodeJS.Timeout | undefined;
+	private readonly bookmarkDocumentChangePortAdapter: BookmarkDocumentChangePort<
+		vscode.TextDocument,
+		vscode.Uri,
+		BookmarkSet
+	> = {
+		isFileDocument: document => document.uri.scheme === 'file',
+		documentUri: document => document.uri,
+		isCurrentScope: uri => this.uriMatchesCurrentScope(uri),
+		filePath: uri => uri.fsPath,
+		relativeBookmarkPath: absolutePath => fileUtils.absoluteToRelative(absolutePath),
+		currentViewGeneration: () => this.viewLoadGeneration,
+		currentBookmarkState: () => this.codeBookmarks,
+		bookmarkCount: bookmarkPath => this.getBookmarksByPath(bookmarkPath).length,
+		relocateBookmarks: (bookmarkState, bookmarkPath, uri) =>
+			fileUtils.readContentBookmarkInFile(bookmarkState, true, bookmarkPath, uri),
+		documentLines: document => this.documentLines(document),
+		documentLanguage: document => document.languageId,
+		synchronizeCodeMarkers: (uri, lines, languageId) =>
+			this.synchronizeCodeMarkerSnapshot(uri, lines, languageId),
+		persistCodeMarkerChanges: absolutePaths => this.persistCodeMarkerChanges(absolutePaths),
+		saveBookmarks: absolutePaths => this.saveBookmarksToFile(absolutePaths),
+		refreshDecorations: () => this.refreshDecoration(),
+		reportFailure: error => logger.error(`书签位置跟踪失败: ${errorMessage(error)}`),
+	}
+
+	private bookmarkDocumentChangePort(): BookmarkDocumentChangePort<
+		vscode.TextDocument,
+		vscode.Uri,
+		BookmarkSet
+	> {
+		return this.bookmarkDocumentChangePortAdapter
+	}
 
 	changeContentFile(event: vscode.TextDocumentChangeEvent) {
-		if (event.contentChanges.length === 0 || event.document.uri.scheme !== 'file') {
-			return;
-		}
-
-		// Capture path at event time to avoid race condition with editor switch
-		const docFsPath = event.document.uri.fsPath;
-		const pathRel = fileUtils.absoluteToRelative(docFsPath);
-
-		if (this.smartTrackTimer) {
-			clearTimeout(this.smartTrackTimer);
-		}
-
-		this.smartTrackTimer = setTimeout(async () => {
-			const bookmarks = this.getBookmarksByPath(pathRel);
-			if (bookmarks.length === 0) return;
-
-			// Authoritative content-fingerprint re-anchor.
-			//
-			// We deliberately do NOT pre-shift line numbers from `contentChanges` here: the debounce
-			// collapses multiple rapid edits into only the final change event, so any incremental line
-			// math would be stale and would merely pollute the anchor line used for proximity snapping.
-			//
-			// Instead the sticky engine reads the FINAL document state and relocates every bookmark of
-			// this file purely by its content fingerprint (nearest exact match to the original line).
-			// This is immune to dropped intermediate events and handles cut / paste / multi-line moves.
-			// It also refreshes the fingerprint on in-line edits and only invalidates a bookmark when
-			// BOTH its position and its fingerprint are gone. Scoped to the edited file to bound cost.
-			const relocated = await fileUtils.readContentBookmarkInFile(this.codeBookmarks, true, false, pathRel);
-
-			if (relocated > 0) {
-				this.saveBookmarksToFile([docFsPath]);
-				this.refreshDecoration();
-			}
-		}, 300);
+		this.bookmarkDocumentChangeCoordinator.handleChange(
+			event.document,
+			event.contentChanges.length > 0,
+			this.bookmarkDocumentChangePort(),
+		)
 	}
 
-	async forceDeleteBookmark(editor: vscode.TextEditor) {
-		const processedLines = new Set<number>();
-		let hasChange = false;
-
-		for (const sel of editor.selections) {
-			const lineNumber = sel.start.line;
-			if (processedLines.has(lineNumber)) continue;
-			processedLines.add(lineNumber);
-
-			const lines = this.getLinePaths(editor, this.codeBookmarks);
-			const linePath = lines.get(lineNumber);
-			if (linePath) {
-				if (!hasChange) {
-					undoManager.saveState(this.codeBookmarks, 'delete');
-				}
-				for (const id of linePath.ids) {
-					this.deleteBookmarksData(id);
-					hasChange = true;
-				}
-			}
-		}
-
-		if (hasChange) {
-			this.saveBookmarksToFile([editor.document.uri.fsPath]);
-			this.refreshDecoration();
-		}
+	async forceDeleteBookmark(editor: vscode.TextEditor): Promise<void> {
+		return runForceDeleteBookmark(editor, this.manualBookmarkWorkflowPort())
 	}
 
-	async toggleBookmark(editor: vscode.TextEditor) {
-		const processedLines = new Set<number>();
-		let anyAdded = false;
-		let anyDeleted = false;
-
-		for (const sel of editor.selections) {
-			const lineNumber = sel.start.line;
-			if (processedLines.has(lineNumber)) continue;
-			processedLines.add(lineNumber);
-
-			const lines = this.getLinePaths(editor, this.codeBookmarks);
-			const count = lines.get(lineNumber);
-
-			if (count) {
-				if (!anyDeleted && !anyAdded) {
-					undoManager.saveState(this.codeBookmarks, 'delete');
-				}
-				for (const id of count.ids) {
-					this.deleteBookmarksData(id);
-				}
-				anyDeleted = true;
-			} else {
-				anyAdded = true;
-			}
-		}
-
-		if (anyAdded) {
-			if (processedLines.size === 1 || !anyDeleted) {
-				await this.forceAddBookmark(editor);
-				return;
-			}
-		}
-
-		if (anyDeleted) {
-			this.saveBookmarksToFile([editor.document.uri.fsPath]);
-			this.refreshDecoration();
-		}
-	}
-
-	private async _collapseAll() {
-		// 利用 VS Code 内置命令折叠当前视图的所有节点
-		// 需要先聚焦到我们的 treeView
-		await vscode.commands.executeCommand(`${Commands.codeBookmarkViewName}.focus`);
-		await vscode.commands.executeCommand('list.collapseAll');
-	}
-
-	getLinePaths(editor: vscode.TextEditor, _setBookmark: BookmarkSet): Map<number, LinePath> {
-		const path = fileUtils.absoluteToRelative(editor.document.uri.fsPath)
-		const bookmarks = this.getBookmarksByPath(path)
-		const lines = new Map<number, LinePath>([])
-		for (const bookmark of bookmarks) {
-			const c = lines.get(bookmark.start.line)
-			if (c) {
-				c.ids.push(bookmark.Id)
-				// lines.set is not needed since the array reference is mutated
-			} else {
-				lines.set(bookmark.start.line, new LinePath(path, bookmark.start.line, bookmark.Id))
-			}
-		}
-		return lines
+	async toggleBookmark(editor: vscode.TextEditor): Promise<void> {
+		return runToggleBookmark(editor, this.manualBookmarkWorkflowPort())
 	}
 	// **************** file
-	private ignoreWatchUntil = 0;
-	private saveRequests: Map<string, Bookmark[]> = new Map();
-	private timerSave = setTimeout(() => {
-		if (this.saveRequests.size > 0) {
-			this.ignoreWatchUntil = Date.now() + 1500;
-			const firstPath = Array.from(this.saveRequests.keys())[0];
-			let isWorkspace = fileUtils.isWorkspaceMode();
-			if (firstPath) {
-				isWorkspace = fileUtils.isWorkspaceMode(vscode.Uri.file(firstPath));
-			}
+	private currentScopeFilePath: string | undefined;
+	private readonly saveCoordinator = new BookmarkSaveCoordinator(this.bookmarkSaveCoordinatorPort())
+	private readonly storagePathWorkflow = new BookmarkStoragePathWorkflowRunner()
 
-			if (isWorkspace) {
-				const dummyTree = new BookmarkSet();
-				const latestBms = Array.from(this.saveRequests.values()).pop();
-				dummyTree.values = latestBms || [];
-				bookmarkRepository.saveBookmarksToFile(this.context, dummyTree, firstPath ? [firstPath] : []);
-			} else {
-				for (const [fsPath, bms] of this.saveRequests.entries()) {
-					const dummyTree = new BookmarkSet();
-					dummyTree.values = bms;
-					bookmarkRepository.saveBookmarksToFile(this.context, dummyTree, [fsPath]);
+	private bookmarkSaveCoordinatorPort(): BookmarkSaveCoordinatorPort {
+		return {
+			ensureStorageRoot: () => {
+				if (!storageRootState.root) {
+					if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return undefined
+					storageRootState.activate(ExtensionConfig.resolveStoragePath())
 				}
-			}
-			this.saveRequests.clear();
-		}
-	}, 500);
-	saveBookmarksToFile(paths?: string[]) {
-		if (paths && paths.length > 0) {
-			for (const p of paths) {
-				this.saveRequests.set(p, [...this.codeBookmarks.values]);
-			}
-			this.timerSave.refresh();
-			return;
-		}
-
-		const editor = vscode.window.activeTextEditor;
-		if (editor && editor.document.uri.scheme === 'file') {
-			this.saveRequests.set(editor.document.uri.fsPath, [...this.codeBookmarks.values]);
-			this.timerSave.refresh();
-		} else {
-			const allPaths = new Set(this.codeBookmarks.values.map(b => fileUtils.relativeToAbsolute(b.path)));
-			for (const p of allPaths) {
-				this.saveRequests.set(p, [...this.codeBookmarks.values]);
-			}
-			this.timerSave.refresh();
+				return storageRootState.root
+			},
+			currentBookmarks: () => this.codeBookmarks.values,
+			activeFilePathInCurrentScope: () => {
+				const editor = vscode.window.activeTextEditor
+				return editor?.document.uri.scheme === 'file' && this.uriMatchesCurrentScope(editor.document.uri)
+					? editor.document.uri.fsPath
+					: undefined
+			},
+			currentScopeFilePath: () => this.currentScopeFilePath,
+			setCurrentScopeFilePath: filePath => { this.currentScopeFilePath = filePath },
+			absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
+			workspaceKeyForPath: filePath => {
+				const uri = vscode.Uri.file(filePath)
+				if (!fileUtils.isWorkspaceMode(uri)) return undefined
+				return normalizedAbsolutePath(fileUtils.workspaceRoot(uri))
+			},
+			saveSnapshot: async (bookmarks, filePath, storageRoot, dirtyPaths) => {
+				const snapshot = new BookmarkSet()
+				snapshot.values = bookmarks
+				return bookmarkRepository.saveBookmarksToFile(snapshot, [filePath], storageRoot, dirtyPaths)
+			},
 		}
 	}
 
-	async getBookmarksLocal() {
-		const editor = vscode.window.activeTextEditor;
-		const isWorkspace = editor ? fileUtils.isWorkspaceMode(editor.document.uri) : fileUtils.isWorkspaceMode();
-
-		if (!this.forceNextLoad && isWorkspace && this.currentModeIsWorkspace === true) {
-			return;
-		}
-		this.forceNextLoad = false;
-		this.currentModeIsWorkspace = isWorkspace;
-
-		const activePaths = editor ? [editor.document.uri.fsPath] : [];
-		const arr = await bookmarkRepository.readBookmarksFromFile(this.context, activePaths)
-
-		// 1. Preserve pinned state BEFORE clearing the current state
-		const pinnedIds = new Set<string>();
-		const preservePinned = (bms: Bookmark[]) => {
-			for (const bm of bms) {
-				if (bm.isOpened) pinnedIds.add(bm.Id);
-				if (bm.subs.size > 0) preservePinned(Array.from(bm.subs.values));
-			}
-		};
-		preservePinned(Array.from(this.codeBookmarks.values));
-
-		// 2. Clear current bookmarks
-		this.codeBookmarks.clear()
-
-		// 3. Process new bookmarks from file
-		for (const bm of arr) {
-			if (bm.path === '') {
-				bm.path = editor ? fileUtils.absoluteToRelative(editor.document.uri.fsPath) : '';
-			} else if (path.isAbsolute(bm.path)) {
-				// Compatibility: If a single-script config (which used absolute paths) is dropped into a workspace config,
-				// convert it to relative path so it matches the current workspace.
-				bm.path = fileUtils.absoluteToRelative(bm.path);
-			}
-		}
-
-		// 4. Add the processed bookmarks to the tree
-		this.codeBookmarks.addAll(arr)
-
-		const restorePinned = (bms: Bookmark[]) => {
-			for (const bm of bms) {
-				if (pinnedIds.has(bm.Id)) {
-					bm.isOpened = true;
-					bm.contextValue = ContextBookmark.BookmarkPinned;
-					bm.refreshDisplayProps();
-				}
-				if (bm.subs.size > 0) restorePinned(Array.from(bm.subs.values));
-			}
-		};
-		restorePinned(Array.from(this.codeBookmarks.values));
-
-		this._onDidChangeTreeData.fire()
-		await this.readBookmarksContent()
-		if (editor) {
-			this.refreshDecoration()
+	private bookmarkImportWorkflowPort(): BookmarkImportWorkflowPort {
+		return {
+			ensureEditorScope: editor => this.ensureEditorScope(editor),
+			absoluteToRelative: filePath => fileUtils.absoluteToRelative(filePath),
+			bookmarksForPath: bookmarkPath => this.getBookmarksByPath(bookmarkPath),
+			storageScopeForUri: uri => this.storageScopeForUri(uri),
+			runImportTransaction: operation => this.runImportTransaction(operation),
+			captureUndoState: () => this.captureUndoState(),
+			commitImportUndo: captured => { undoManager.commitCapturedState(captured, 'importBookmarks') },
+			importFolder: (configFolderPath, workspaceRootPath) =>
+				bookmarkRepository.importBookmarkConfigurationsFromFolder(configFolderPath, workspaceRootPath),
+			importFile: (configPath, targetAbsolutePath) =>
+				bookmarkRepository.importBookmarkConfiguration(configPath, targetAbsolutePath),
+			refresh: (editor, expectedScope) => this.refresh(editor, expectedScope, true),
 		}
 	}
 
-	async readBookmarksContent() {
-		await fileUtils.readContentBookmarkInFile(this.codeBookmarks)
+	private bookmarkStoragePathWorkflowPort(): BookmarkStoragePathWorkflowPort {
+		return {
+			activeRoot: () => storageRootState.root,
+			ensureConfigured: () => ExtensionConfig.ensureGlobalStoragePathConfigured(),
+			configuredRoot: () => ExtensionConfig.resolveStoragePath(),
+			sameRoot: (left, right) => normalizedAbsolutePath(left) === normalizedAbsolutePath(right),
+			activateRoot: root => storageRootState.activate(root),
+			rememberRoot: async root => { await this.context.globalState.update(LAST_STORAGE_ROOT_KEY, root) },
+			reloadActiveTab: forceReloadDisk => this.reloadActiveTab(forceReloadDisk),
+			queueFullSave: () => this.saveAllBookmarksToFile(),
+			beginStorageTransition: () => this.saveCoordinator.beginStorageTransition(),
+			finishStorageTransition: () => this.saveCoordinator.finishStorageTransition(),
+			cancelStorageTransition: () => this.saveCoordinator.cancelStorageTransition(),
+			flushPendingSaves: requireSuccess => this.flushPendingSaves(requireSuccess),
+			transferRoot: (sourceRoot, targetRoot) => transferStorageRoot(sourceRoot, targetRoot),
+			setupConfigWatcher: () => this.setupConfigWatcher(),
+			reportPreviousFailure: error => logger.error(`上一次书签存储目录转移失败: ${errorMessage(error)}`),
+			bookmarks: () => this.codeBookmarks,
+		}
+	}
+
+	saveBookmarksToFile(paths: readonly string[]): void {
+		if (paths.length === 0) return
+		this.saveCoordinator.queuePaths(paths)
+	}
+
+	private saveAllBookmarksToFile(): void {
+		this.saveCoordinator.queueAll()
+	}
+
+	public saveBookmarkNodeState(bookmark: Bookmark): void {
+		this.saveBookmarksToFile([this.absoluteBookmarkPath(bookmark.path)])
+	}
+
+	public async flushPendingSaves(requireSuccess = false): Promise<void> {
+		return this.saveCoordinator.flushPendingSaves(requireSuccess)
+	}
+
+	private async runImportTransaction<T>(operation: () => Promise<T>): Promise<T> {
+		return this.saveCoordinator.runImportTransaction(operation)
+	}
+
+	private resolveBookmarkViewTarget(
+		scopePathOverride?: string,
+		expectedScope?: string,
+	): { storageScope: string, scopeFilePath?: string } {
+		const activeEditor = vscode.window.activeTextEditor?.document.uri.scheme === 'file'
+			? vscode.window.activeTextEditor
+			: undefined
+		let scopeFilePath = scopePathOverride ?? activeEditor?.document.uri.fsPath
+		const storageScope = expectedScope ?? (scopeFilePath
+			? this.storageScopeForUri(vscode.Uri.file(scopeFilePath))
+			: this.storageScope(activeEditor))
+		if (!scopeFilePath && storageScope === this.currentStorageScope) scopeFilePath = this.currentScopeFilePath
+		if (!scopeFilePath && storageScope.startsWith('workspace:')) scopeFilePath = fileUtils.workspaceRoot() || undefined
+		return { storageScope, scopeFilePath }
+	}
+
+	private emptyPreparedBookmarkView(scopePathOverride?: string, expectedScope?: string): PreparedBookmarkView {
+		const target = this.resolveBookmarkViewTarget(scopePathOverride, expectedScope)
+		return {
+			bookmarks: new BookmarkSet(),
+			storageScope: target.storageScope,
+			scopeFilePath: target.scopeFilePath,
+			workspaceOrder: target.storageScope.startsWith('workspace:') ? [] : null,
+			workspaceOrderNeedsPersist: false,
+			contentUpdated: false,
+		}
+	}
+
+	private async readWorkspaceOrderForView(
+		bookmarks: BookmarkSet,
+		storageScope: string,
+		scopeFilePath?: string,
+		signal?: AbortSignal,
+	): Promise<WorkspaceOrderSnapshot> {
+		return loadWorkspaceOrderForView(
+			bookmarks.values
+				.filter(bookmark => bookmark.isFile && bookmark.path)
+				.map(bookmark => bookmark.path),
+			storageScope,
+			scopeFilePath,
+			signal,
+			{
+				resolveBookmarkFolder: candidateScopeFilePath => {
+					const scopeUri = candidateScopeFilePath ? vscode.Uri.file(candidateScopeFilePath) : undefined
+					return fileUtils.getGlobalBookmarkFolder(true, scopeUri) ?? undefined
+				},
+				readFile: filePath => fs.promises.readFile(filePath, 'utf8'),
+				reportReadFailure: error => logger.error(`读取工作区书签排序失败: ${errorMessage(error)}`),
+			},
+		)
+	}
+
+	private persistWorkspaceOrderSnapshot(
+		snapshot: WorkspaceOrderSnapshot,
+		storageScope: string,
+		generation: number,
+	): void {
+		if (!snapshot.needsPersist || !snapshot.filePath || !snapshot.order) return
+		void Promise.resolve().then(async () => {
+			if (this.disposed || generation !== this.viewLoadGeneration || storageScope !== this.currentStorageScope) return
+			if (!await fileUtils.writeJsonFileAsync(snapshot.filePath!, snapshot.order!)) {
+				logger.showWarningMessage('无法保存工作区文件排序，请检查书签存储路径权限。')
+			}
+		}).catch(error => logger.error(`保存工作区书签排序失败: ${errorMessage(error)}`))
+	}
+
+	private async prepareBookmarkView(
+		scopePathOverride?: string,
+		expectedScope?: string,
+		signal?: AbortSignal,
+	): Promise<PreparedBookmarkView> {
+		const target = this.resolveBookmarkViewTarget(scopePathOverride, expectedScope)
+		return runBookmarkViewPreparation(target, {
+			currentStorageScope: this.currentStorageScope,
+			currentBookmarks: this.codeBookmarks.values,
+			readBookmarks: (activePaths, candidateSignal) => bookmarkRepository.readBookmarksFromFile(
+				[...activePaths],
+				undefined,
+				candidateSignal,
+			),
+			readContentBookmarks: (bookmarks, scopeFilePath, candidateSignal) => fileUtils.readContentBookmarkInFile(
+				bookmarks,
+				true,
+				undefined,
+				scopeFilePath ? vscode.Uri.file(scopeFilePath) : undefined,
+				undefined,
+				candidateSignal,
+			),
+			readWorkspaceOrder: (bookmarks, candidateTarget, candidateSignal) => this.readWorkspaceOrderForView(
+				bookmarks,
+				candidateTarget.storageScope,
+				candidateTarget.scopeFilePath,
+				candidateSignal,
+			),
+		}, signal)
+	}
+
+	private commitPreparedBookmarkView(prepared: PreparedBookmarkView): ViewTransitionState {
+		return commitBookmarkView(prepared, {
+			currentStorageScope: () => this.currentStorageScope,
+			currentBookmarkCount: () => this.codeBookmarks.size,
+			handleStorageScopeChange: () => {
+				this.codeMarkerSyncLifecycle.resetWorkspaceScan()
+			},
+			setCurrentStorageScope: storageScope => { this.currentStorageScope = storageScope },
+			setCurrentScopeFilePath: scopeFilePath => { this.currentScopeFilePath = scopeFilePath },
+			setWorkspaceOrder: order => { this.workspaceOrderCache = order },
+			setBookmarks: bookmarks => { this.codeBookmarks = bookmarks },
+			rebuildFileNodeCache: bookmarks => {
+				this.bookmarkTreeDataProjection.rebuildFileNodeCache(
+					bookmarks,
+					this.bookmarkTreeDataProjectionPort(),
+				)
+			},
+			invalidatePathIndex: () => this.invalidatePathIndex(),
+		})
+	}
+
+	private async publishCommittedViewTransition(
+		transition: ViewTransitionState,
+		generation: number,
+	): Promise<void> {
+		await publishViewTransition(transition, generation, {
+			isCurrent: candidateGeneration => candidateGeneration === this.viewLoadGeneration && !this.disposed,
+			treeVisible: this.treeView?.visible === true,
+			waitForTreePopulation: candidateGeneration => this.waitForTreePopulation(candidateGeneration),
+			fireTreeChanged: () => this._onDidChangeTreeData.fire(),
+			queueBookmarkPresenceContexts: () => this.queueBookmarkPresenceContexts(),
+			setUndoScope: () => undoManager.setActiveScope(this.currentStorageScope),
+		}, TREE_RENDER_SETTLE_MS)
+	}
+
+	private waitForTreePopulation(generation: number): Promise<void> {
+		return this.bookmarkTreeViewLifecycle.waitForPopulation(generation)
+	}
+
+	private resolvePendingTreePopulation(generation?: number): void {
+		this.bookmarkTreeViewLifecycle.resolvePopulation(generation)
+	}
+
+	async importBookmarkConfiguration(): Promise<void> {
+		return runImportBookmarkConfiguration(this.bookmarkImportWorkflowPort())
 	}
 
 	async onSearchInFile() {
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) {
-			logger.showWarningMessage('当前没有打开的文件');
-			return;
-		}
-		const path = fileUtils.absoluteToRelative(editor.document.uri.fsPath);
-		const bookmarks = this.codeBookmarks.getBookmarksWithPath(new BookmarkSet(), path);
-		if (bookmarks.size === 0) {
-			logger.showWarningMessage('当前文件无书签');
-			return;
-		}
-
-		const items: (vscode.QuickPickItem & { bookmark: Bookmark })[] = Array.from(bookmarks.values).map(bm => ({
-			label: `$(bookmark) ${bm.label}`,
-			description: `第 ${bm.start.line + 1} 行`,
-			detail: bm.content,
-			bookmark: bm
-		}));
-
-		const selected = await vscode.window.showQuickPick(items, {
-			placeHolder: '搜索当前文件的书签',
-			matchOnDescription: true,
-			matchOnDetail: true
-		});
-
-		if (selected) {
-			vscode.commands.executeCommand(Commands.openBookmark, selected.bookmark);
-		}
+		return runSearchBookmarksInActiveFile(this.bookmarkTreeInteractionPort())
 	}
 
 	async onSort() {
-		const options: vscode.QuickPickItem[] = [
-			{ label: '自定义排序', description: SortModeBookmark.mode === SortModeBookmark.Custom ? '(当前)' : '' },
-			{ label: '按时间升序', description: SortModeBookmark.mode === SortModeBookmark.TimeAsc ? '(当前)' : '最早添加在前' },
-			{ label: '按时间降序', description: SortModeBookmark.mode === SortModeBookmark.TimeDesc ? '(当前)' : '最新添加在前' },
-			{ label: '按位置升序', description: SortModeBookmark.mode === SortModeBookmark.LineAsc ? '(当前)' : '从上到下' },
-			{ label: '按位置降序', description: SortModeBookmark.mode === SortModeBookmark.LineDesc ? '(当前)' : '从下到上' },
-		];
+		return runSelectBookmarkSortMode(this.bookmarkTreeInteractionPort())
+	}
 
-		const selected = await vscode.window.showQuickPick(options, {
-			placeHolder: '选择视图排序方式（不影响底层拖拽原始顺序）'
-		});
+	private currentStorageScope: string | undefined;
 
-		if (selected) {
-			if (selected.label === '自定义排序') SortModeBookmark.mode = SortModeBookmark.Custom;
-			else if (selected.label === '按时间升序') SortModeBookmark.mode = SortModeBookmark.TimeAsc;
-			else if (selected.label === '按时间降序') SortModeBookmark.mode = SortModeBookmark.TimeDesc;
-			else if (selected.label === '按位置升序') SortModeBookmark.mode = SortModeBookmark.LineAsc;
-			else if (selected.label === '按位置降序') SortModeBookmark.mode = SortModeBookmark.LineDesc;
+	private storageScopeForUri(uri?: vscode.Uri): string {
+		const workspaceRoot = fileUtils.workspaceRoot(uri)
+		if (workspaceRoot) {
+			return `workspace:${normalizedAbsolutePath(workspaceRoot)}`
+		}
+		if (uri?.scheme === 'file') {
+			return `file:${normalizedAbsolutePath(uri.fsPath)}`
+		}
+		return 'global'
+	}
 
-			this._onDidChangeTreeData.fire();
+	private storageScope(editor?: vscode.TextEditor): string {
+		const candidateEditor = editor ?? vscode.window.activeTextEditor
+		if (candidateEditor?.document.uri.scheme !== 'file' && this.currentStorageScope) return this.currentStorageScope
+		const uri = candidateEditor?.document.uri.scheme === 'file' ? candidateEditor.document.uri : undefined
+		return this.storageScopeForUri(uri)
+	}
+
+	private uriMatchesCurrentScope(uri: vscode.Uri): boolean {
+		return this.currentStorageScope !== undefined && this.storageScopeForUri(uri) === this.currentStorageScope
+	}
+
+	private bookmarkViewRefreshPort(): BookmarkViewRefreshPort {
+		return {
+			currentStorageScope: () => this.currentStorageScope,
+			currentScopeFilePath: () => this.currentScopeFilePath,
+			setCurrentScopeFilePath: filePath => { this.currentScopeFilePath = filePath },
+			workspaceRoot: () => fileUtils.workspaceRoot() || undefined,
+			nextRevealGeneration: () => this.bookmarkTreeViewLifecycle.nextRevealGeneration(),
+			beginViewLoad: () => this.beginViewLoad(),
+			currentViewLoadGeneration: () => this.viewLoadGeneration,
+			loadingViewGeneration: () => this.loadingViewGeneration,
+			clearLoading: () => this.viewLoads.clearLoading(),
+			markLoading: generation => this.viewLoads.markLoading(generation),
+			resetCodeMarkerScan: () => this.codeMarkerSyncLifecycle.resetWorkspaceScan(),
+			queueBookmarkPresenceContexts: () => this.queueBookmarkPresenceContexts(),
+			restoreConfigWatcher: generation => {
+				void this.setupConfigWatcher(generation)
+					.catch(error => logger.error(`恢复书签配置监听器失败: ${errorMessage(error)}`))
+			},
+			restoreBackgroundEnhancements: generation => {
+				void this.initializeBackgroundEnhancements(
+					this.languageCommentProfiles.initialize(),
+					this.currentStorageScope,
+					generation,
+				)
+			},
+			scheduleActiveFileReveal: (editor, viewGeneration, revealGeneration) =>
+				this.scheduleActiveFileReveal(editor, viewGeneration, revealGeneration),
+			initView: (scopePath, generation, storageScope) =>
+				this.initViewEditor(scopePath, true, generation, storageScope),
+			isCurrent: (generation, storageScope) =>
+				generation === this.viewLoadGeneration && this.currentStorageScope === storageScope,
+			treeVisible: () => this.treeView?.visible === true,
+			reportRefreshFailure: error => logger.error(`刷新书签视图失败: ${errorMessage(error)}`),
 		}
 	}
 
-	public refreshing = false
-	private currentModeIsWorkspace: boolean | undefined = undefined;
-	public forceNextLoad = false;
-	
-	private timeRefresh: NodeJS.Timeout = setTimeout(() => {
-		this.refreshing = false
-		this.initViewEditor()
-	}, 100);
+	private scheduleActiveFileReveal(
+		editor: vscode.TextEditor,
+		viewGeneration: number,
+		revealGeneration: number,
+	): void {
+		this.bookmarkTreeViewLifecycle.scheduleActiveFileReveal(
+			editor,
+			viewGeneration,
+			revealGeneration,
+			this.bookmarkTreeViewLifecyclePort(),
+		)
+	}
 
-	reloadActiveTab(forceReloadDisk: boolean = false) {
+	public async ensureEditorScope(editor: vscode.TextEditor): Promise<void> {
+		if (editor.document.uri.scheme !== 'file') return
+		const scope = this.storageScopeForUri(editor.document.uri)
+		await this.refresh(editor, scope)
+	}
+
+	reloadActiveTab(forceReloadDisk: boolean = false): Promise<void> {
 		const editor = vscode.window.activeTextEditor;
-		const isWorkspace = editor ? fileUtils.isWorkspaceMode(editor.document.uri) : fileUtils.isWorkspaceMode();
-		this.refresh(editor, isWorkspace, forceReloadDisk);
+		let shouldReconcile = false
+		if (!forceReloadDisk && editor?.document.uri.scheme === 'file' && this.uriMatchesCurrentScope(editor.document.uri)) {
+			const activePath = fileUtils.absoluteToRelative(editor.document.uri.fsPath)
+			const activeKey = `${this.currentStorageScope}\0${activePath}`
+			if (!this.reconciliationAttemptedPaths.has(activeKey) && this.getBookmarksByPath(activePath).length === 0) {
+				shouldReconcile = this.codeBookmarks.values.some(fileNode => fileNode.isFile
+					&& !fs.existsSync(fileUtils.relativeToAbsolute(fileNode.path, editor.document.uri)))
+				if (shouldReconcile) this.reconciliationAttemptedPaths.add(activeKey)
+			}
+		}
+		return this.refresh(editor, this.storageScope(editor), forceReloadDisk || shouldReconcile);
 	}
 
-	public async refresh(editor?: vscode.TextEditor, isWorkspace?: boolean, forceReloadDisk: boolean = false) {
-		vscode.workspace.getConfiguration('codebookmark');
-		
-		if (forceReloadDisk || this.currentModeIsWorkspace !== isWorkspace) {
-			this.workspaceOrderCache = null;
-			this.forceNextLoad = true;
-		}
-		
-		if (!forceReloadDisk && isWorkspace && this.currentModeIsWorkspace === true) {
-			if (editor) {
-				const rePath = fileUtils.absoluteToRelative(editor.document.uri.fsPath);
-				const fileNode = this.fileNodesCache.get(rePath);
-				if (fileNode && this.treeView?.visible) {
-					setTimeout(() => {
-						try {
-							this.treeView?.reveal(fileNode, { expand: true, select: false, focus: false });
-						} catch {}
-					}, 10);
-				}
-			}
-			return;
-		}
+	onStoragePathChanged(): Promise<void> {
+		return this.storagePathWorkflow.run(this.bookmarkStoragePathWorkflowPort())
+	}
 
-		if (forceReloadDisk) {
-			this.forceNextLoad = true;
-		}
+	async onWorkspaceFoldersChanged(): Promise<void> {
+		const editor = vscode.window.activeTextEditor?.document.uri.scheme === 'file'
+			? vscode.window.activeTextEditor
+			: undefined
+		const nextScope = editor
+			? this.storageScopeForUri(editor.document.uri)
+			: this.storageScopeForUri()
+		await this.refresh(editor, nextScope, true)
+	}
 
-		this.currentModeIsWorkspace = isWorkspace;
-		this.refreshing = true
-		
-		clearTimeout(this.timeRefresh);
-		this.timeRefresh = setTimeout(() => {
-			this.refreshing = false;
-			this.initViewEditor().then(() => {
-				if (isWorkspace && editor && this.treeView?.visible) {
-					const rePath = fileUtils.absoluteToRelative(editor.document.uri.fsPath);
-					const fileNode = this.fileNodesCache.get(rePath);
-					if (fileNode) {
-						setTimeout(() => {
-							try {
-								this.treeView?.reveal(fileNode, { expand: true, select: false, focus: false });
-							} catch {}
-						}, 10);
-					}
-				}
-			});
-		}, 100);
+	onDisplayConfigurationChanged(): void {
+		this.refreshDecoration()
+		for (const editor of vscode.window.visibleTextEditors) this.updateInlineDecoration(editor)
+	}
+
+	public async refresh(editor?: vscode.TextEditor, storageScope = this.storageScope(editor), forceReloadDisk: boolean = false) {
+		return this.viewRefreshCoordinator.refresh(
+			editor,
+			storageScope,
+			forceReloadDisk,
+			this.bookmarkViewRefreshPort(),
+		)
 	}
 
 	// On click item button
 	async onRenameBookmark(bm?: Bookmark, selectedBookmarks?: Bookmark[]) {
-		let targets: Bookmark[] = [];
-		if (selectedBookmarks && selectedBookmarks.length > 1) {
-			targets = selectedBookmarks;
-		} else if (this.treeView && this.treeView.selection.length > 1) {
-			const isBmInSelection = bm ? this.treeView.selection.some(s => s.Id === bm.Id) : true;
-			if (isBmInSelection) {
-				targets = [...this.treeView.selection];
-			} else {
-				targets = [bm!];
-			}
-		} else {
-			const target = bm || (this.treeView?.selection.length ? this.treeView.selection[0] : undefined);
-			if (target) targets.push(target);
-		}
-
-		if (targets.length === 0) return;
-
-		const resolvedTargets = targets
-			.map(t => this.codeBookmarks.findBookmark(t))
-			.filter(t => t !== undefined && !t.isBookmarkInvalid) as Bookmark[];
-
-		if (resolvedTargets.length === 0) return;
-
-		if (resolvedTargets.length === 1) {
-			await this._editLabel(resolvedTargets[0]);
-			return;
-		}
-
-		const getDepth = (bookmark: Bookmark) => {
-			let depth = 0;
-			let curr = bookmark.parent;
-			while (curr) {
-				depth++;
-				curr = curr.parent;
-			}
-			return depth;
-		};
-
-		undoManager.saveState(this.codeBookmarks, 'rename');
-
-		// Batch Rename via Temporary File to avoid dirty prompt
-		const tmpPath = vscode.Uri.file(`${fileUtils.getGlobalBookmarkFolder()}/batch-rename-${Date.now()}.txt`);
-		const content = resolvedTargets.map(bm => '\t'.repeat(getDepth(bm)) + bm.label).join('\n');
-		
-		await fs.promises.writeFile(tmpPath.fsPath, content, 'utf8');
-
-		const doc = await vscode.workspace.openTextDocument(tmpPath);
-		await vscode.window.showTextDocument(doc, { preview: false });
-
-		vscode.window.showInformationMessage(`提示：按 Tab 键体现的层级仅供参考，请直接修改行内文字，修改完成后直接关闭该面板即可自动生效。`);
-
-		const changeDisposable = vscode.workspace.onDidChangeTextDocument(async (e) => {
-			if (e.document === doc && doc.isDirty) {
-				await doc.save();
-			}
-		});
-
-		const closeDisposable = vscode.workspace.onDidCloseTextDocument(async (closedDoc) => {
-			if (closedDoc === doc) {
-				const lines = doc.getText().split('\n');
-				let hasChanges = false;
-				const changedPaths = new Set<string>();
-				
-				for (let i = 0; i < resolvedTargets.length && i < lines.length; i++) {
-					const newLabel = lines[i].replace(/^\t+/, '').trim();
-					if (newLabel && newLabel !== resolvedTargets[i].label) {
-						resolvedTargets[i].label = Helper.formatLabelSpacing(newLabel);
-						hasChanges = true;
-						changedPaths.add(fileUtils.relativeToAbsolute(resolvedTargets[i].path));
-					}
-				}
-				
-				if (hasChanges) {
-					this.refreshDecoration();
-					this.saveBookmarksToFile(Array.from(changedPaths));
-					logger.showMessage(`成功批量重命名了多个书签！`);
-				}
-
-				changeDisposable.dispose();
-				closeDisposable.dispose();
-
-				try {
-					await fs.promises.unlink(tmpPath.fsPath);
-				} catch {}
-			}
-		});
+		return runRenameBookmark(bm, selectedBookmarks, this.bookmarkEditingWorkflowPort())
 	}
 
 	async editBookmark_editLabel(bm?: Bookmark, selectedBookmarks?: Bookmark[]) {
@@ -1694,339 +1837,100 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	async editBookmark_updatePosOnly(bm: Bookmark) {
-		const bookmark = this.codeBookmarks.findBookmark(bm)
-		if (bookmark === undefined) return
-		this._replaceBookmark(bookmark)
+		return runUpdateBookmarkPosition(bm, this.bookmarkEditingWorkflowPort())
 	}
 
 	async editBookmark_updatePosAndRename(bm: Bookmark) {
-		const bookmark = this.codeBookmarks.findBookmark(bm)
-		if (bookmark === undefined) return
-		const editor = vscode.window.activeTextEditor
-		if (!editor || editor.document.lineAt(editor.selection.start.line).text === '') {
-			vscode.window.showWarningMessage("当前光标行为空，无法重命名书签！")
-			return
-		}
-		undoManager.saveState(this.codeBookmarks, 'rename');
-		if (await this._editLabel(bookmark, true)) {
-			this._replaceBookmark(bookmark, true)
-		}
+		return runUpdateBookmarkPositionAndRename(bm, this.bookmarkEditingWorkflowPort())
 	}
 
 	async editBookmark_changeIcon(bm?: Bookmark, selectedBookmarks?: Bookmark[]) {
-		let targets: Bookmark[] = [];
-		if (selectedBookmarks && selectedBookmarks.length > 1) {
-			targets = selectedBookmarks;
-		} else if (this.treeView && this.treeView.selection.length > 1) {
-			const isBmInSelection = bm ? this.treeView.selection.some(s => s.Id === bm.Id) : true;
-			if (isBmInSelection) {
-				targets = [...this.treeView.selection];
-			} else {
-				targets = [bm!];
-			}
-		} else {
-			const target = bm || (this.treeView?.selection.length ? this.treeView.selection[0] : undefined);
-			if (target) targets.push(target);
-		}
-
-		if (targets.length === 0) return;
-
-		const resolvedTargets = targets
-			.map(t => this.codeBookmarks.findBookmark(t))
-			.filter(t => t !== undefined && !t.isBookmarkInvalid) as Bookmark[];
-
-		if (resolvedTargets.length === 0) return;
-
-		let initialIcon = resolvedTargets[0].icon || '';
-		for (let i = 1; i < resolvedTargets.length; i++) {
-			if ((resolvedTargets[i].icon || '') !== initialIcon) {
-				initialIcon = '';
-				break;
-			}
-		}
-
-		IconPickerWebview.createOrShow(this.context, 'batch_change_icon', initialIcon, (iconName, _) => {
-			let changed = false;
-			const changedPaths = new Set<string>();
-			undoManager.saveState(this.codeBookmarks, 'icon');
-			
-			for (const bookmark of resolvedTargets) {
-				if (bookmark.icon !== iconName) {
-					bookmark.icon = iconName;
-					changed = true;
-					changedPaths.add(fileUtils.relativeToAbsolute(bookmark.path));
-				}
-			}
-			
-			if (changed) {
-				this.saveBookmarksToFile(Array.from(changedPaths));
-				this.refreshDecoration();
-			}
-		});
+		return runChangeBookmarkIcons(bm, selectedBookmarks, this.bookmarkEditingWorkflowPort())
 	}
 
 	async editBookmark_restoreDefaultIcon(bm?: Bookmark, selectedBookmarks?: Bookmark[]) {
-		let targets: Bookmark[] = [];
-		if (selectedBookmarks && selectedBookmarks.length > 1) {
-			targets = selectedBookmarks;
-		} else if (this.treeView && this.treeView.selection.length > 1) {
-			const isBmInSelection = bm ? this.treeView.selection.some(s => s.Id === bm.Id) : true;
-			if (isBmInSelection) {
-				targets = [...this.treeView.selection];
-			} else {
-				targets = [bm!];
-			}
-		} else {
-			const target = bm || (this.treeView?.selection.length ? this.treeView.selection[0] : undefined);
-			if (target) targets.push(target);
-		}
-
-		if (targets.length === 0) return;
-
-		const resolvedTargets = targets
-			.map(t => this.codeBookmarks.findBookmark(t))
-			.filter(t => t !== undefined && !t.isBookmarkInvalid) as Bookmark[];
-
-		if (resolvedTargets.length === 0) return;
-
-		let changed = false;
-		const changedPaths = new Set<string>();
-		undoManager.saveState(this.codeBookmarks, 'icon');
-		
-		for (const bookmark of resolvedTargets) {
-			if (bookmark.icon !== '') {
-				bookmark.icon = '';
-				changed = true;
-				changedPaths.add(fileUtils.relativeToAbsolute(bookmark.path));
-			}
-		}
-		
-		if (changed) {
-			this.saveBookmarksToFile(Array.from(changedPaths));
-			this.refreshDecoration();
-		}
+		return runRestoreDefaultBookmarkIcons(bm, selectedBookmarks, this.bookmarkEditingWorkflowPort())
 	}
 
-	private _replaceBookmark(bookmark: Bookmark, skipSaveState: boolean = false) {
-		const editor = vscode.window.activeTextEditor
-		if (editor) {
-			if (!skipSaveState) undoManager.saveState(this.codeBookmarks, 'move');
-			bookmark.path = fileUtils.absoluteToRelative(editor.document.uri.fsPath)
-			const startPosition = editor.selection.start;
-			const endPosition = editor.selection.end;
-			if (startPosition.isEqual(endPosition)) {
-				bookmark.content = editor.document.lineAt(startPosition.line).text
-			} else {
-				bookmark.content = editor.document.getText(editor.selection)
-			}
-			bookmark.start = CursorIndex.from(startPosition)
-			bookmark.end = CursorIndex.from(endPosition)
-			bookmark.contextValue = ContextBookmark.Bookmark
-			this.saveBookmarksToFile()
-			this.refreshDecoration()
-		}
+	private canUpdateBookmarkInEditor(bookmark: Bookmark, editor: vscode.TextEditor): boolean {
+		if (editor.document.uri.scheme !== 'file') return false
+		if (!this.uriMatchesCurrentScope(editor.document.uri)) return false
+		const currentPath = fileUtils.absoluteToRelative(editor.document.uri.fsPath).replace(/\\/g, '/')
+		const bookmarkPath = bookmark.path.replace(/\\/g, '/')
+		return bookmarkPathKey(currentPath) === bookmarkPathKey(bookmarkPath)
 	}
 
-	private async _editLabel(bookmark: Bookmark, skipSaveState: boolean = false): Promise<boolean> {
-		const newLabel = await vscode.window.showInputBox({ prompt: '编辑书签标签', value: `${bookmark.label}` })
-		if (newLabel === undefined) return false
-		if (newLabel.trim() === '') {
-			logger.showWarningMessage('标签不能为空')
-			return false
-		}
-		if (!skipSaveState) undoManager.saveState(this.codeBookmarks, 'move');
-		bookmark.label = Helper.formatLabelSpacing(newLabel);
-		this.saveBookmarksToFile([fileUtils.relativeToAbsolute(bookmark.path)])
-		this.refreshDecoration()
-		return true
+	private revealPinnedBookmarkLater(bookmark: Bookmark): void {
+		this.bookmarkTreeViewLifecycle.schedulePinnedBookmarkReveal(
+			bookmark,
+			this.bookmarkTreeViewLifecyclePort(),
+		)
 	}
 
-	private checkHasInvalidBookmarks(bookmarks: import('../models/BookmarkSet').BookmarkSet): boolean {
-		for (const bm of bookmarks.values) {
-			if (bm.contextValue === ContextBookmark.BookmarkInvalid) {
-				return true;
-			}
-			if (bm.subs && bm.subs.size > 0) {
-				if (this.checkHasInvalidBookmarks(bm.subs)) return true;
-			}
-		}
-		return false;
+	public clearInvalidBookmarks(): void {
+		return runClearInvalidBookmarks(this.bookmarkDeletionWorkflowPort())
 	}
 
-	public clearInvalidBookmarks() {
-		let removedCount = 0;
-
-		const recursiveFindInvalid = (bookmarks: import('../models/BookmarkSet').BookmarkSet) => {
-			const toDelete: string[] = [];
-			for (const bm of bookmarks.values) {
-				if (bm.contextValue === ContextBookmark.BookmarkInvalid) {
-					toDelete.push(bm.Id);
-				} else if (bm.subs && bm.subs.size > 0) {
-					toDelete.push(...recursiveFindInvalid(bm.subs));
-				}
-			}
-			return toDelete;
-		};
-
-		const invalidIds = recursiveFindInvalid(this.codeBookmarks);
-		
-		if (invalidIds.length > 0) {
-			undoManager.saveState(this.codeBookmarks, 'delete');
-		}
-
-		for (const id of invalidIds) {
-			this.codeBookmarks.deleteBookmark(id);
-			removedCount++;
-		}
-
-		if (removedCount > 0) {
-			this.refreshDecoration();
-			this.saveBookmarksToFile();
-		}
-	}
-
-	async onDeleteBookmark(bm?: Bookmark, selectedBookmarks?: Bookmark[]) {
-		let targets: Bookmark[] = [];
-		if (selectedBookmarks && selectedBookmarks.length > 1) {
-			targets = selectedBookmarks;
-		} else if (this.treeView && this.treeView.selection.length > 1) {
-			targets = [...this.treeView.selection];
-		} else {
-			const bookmark = bm || (this.treeView?.selection.length ? this.treeView.selection[0] : undefined);
-			if (bookmark) targets.push(bookmark);
-		}
-
-		if (targets.length === 0) return;
-
-		let hasAnySubs = false;
-		for (const target of targets) {
-			if (target.hasSub(this.codeBookmarks)) {
-				hasAnySubs = true;
-				break;
-			}
-		}
-
-		let confirmMode = "是";
-		if (hasAnySubs) {
-			const promptMsg = targets.length > 1 ? `选中了 ${targets.length} 项，其中包含带子书签的文件夹，确定要删除吗？` : "确定要删除包含子书签的文件夹吗？";
-			const confirm = await vscode.window.showInformationMessage(promptMsg, "是", "保留子书签，仅删除当前项", "否");
-			if (!confirm || confirm === "否") return;
-			confirmMode = confirm === "保留子书签，仅删除当前项" ? "保留" : "是";
-		}
-
-		let hasChanges = false;
-		undoManager.saveState(this.codeBookmarks, 'delete');
-		for (const target of targets) {
-			if (target.hasSub(this.codeBookmarks)) {
-				if (confirmMode === "保留") {
-					if (this.moveChildrenToParentWhenDelete(target)) {
-						hasChanges = true;
-					}
-				} else {
-					this.deleteBookmarksData(target.Id);
-					hasChanges = true;
-				}
-			} else {
-				this.deleteBookmarksData(target.Id);
-				hasChanges = true;
-			}
-		}
-
-		if (hasChanges) {
-			this.saveBookmarksToFile(targets.map(b => fileUtils.relativeToAbsolute(b.path)));
-			this.refreshDecoration();
-			if (targets.length > 1) {
-				logger.showMessage(`成功删除了 ${targets.length} 个书签`);
-			}
-		}
+	async onDeleteBookmark(bm?: Bookmark, selectedBookmarks?: Bookmark[]): Promise<void> {
+		return runDeleteBookmarks(bm, selectedBookmarks, this.bookmarkDeletionWorkflowPort())
 	}
 
 	onClickPinView(bookmark: Bookmark) {
-		undoManager.saveState(this.codeBookmarks, 'status');
-		const modified = this.codeBookmarks.pinBookmark(bookmark);
-		for (const mod of modified) {
-			this._onDidChangeTreeData.fire(mod);
-		}
-		if (bookmark.isOpened && this.treeView) {
-			setTimeout(() => {
-				try {
-					this.treeView?.reveal(bookmark, { expand: true, select: false, focus: false });
-				} catch {}
-			}, 50);
+		runTogglePinnedBookmark(bookmark, this.bookmarkEditingWorkflowPort())
+	}
+
+	async onRenameDirectory(oldPath: string, newPath: string): Promise<void> {
+		return runRenamedSourcePath(oldPath, newPath, this.sourcePathChangeWorkflowPort())
+	}
+
+	onDeleteDirectory(deletePath: string): void {
+		return runDeletedSourcePath(deletePath, this.sourcePathChangeWorkflowPort())
+	}
+
+	private bookmarkHistoryWorkflowPort(): BookmarkHistoryWorkflowPort {
+		return {
+			applyHistory: operation => operation === 'undo'
+				? undoManager.undo(this.codeBookmarks, this.currentStorageScope, this.undoWorkspaceOrder())
+				: undoManager.redo(this.codeBookmarks, this.currentStorageScope, this.undoWorkspaceOrder()),
+			currentStorageScope: () => this.currentStorageScope,
+			setWorkspaceOrder: order => { this.workspaceOrderCache = order },
+			workspaceOrderFilePath: () => {
+				const folder = fileUtils.getGlobalBookmarkFolder(true, this.currentScopeUri())
+				return folder ? path.join(folder, '_workspace_order.json') : undefined
+			},
+			writeWorkspaceOrder: (filePath, order) => fileUtils.writeJsonFileAsync(filePath, order),
+			reportWorkspaceOrderSaveFailure: () =>
+				logger.showWarningMessage('无法保存撤销后的工作区文件顺序，请检查书签存储路径权限。'),
+			bookmarkSourcePaths: () => this.codeBookmarks.values
+				.filter(bookmark => bookmark.isFile && bookmark.path)
+				.map(bookmark => this.absoluteBookmarkPath(bookmark.path)),
+			bookmarks: () => this.codeBookmarks,
+			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),
+			saveAllBookmarks: () => this.saveAllBookmarksToFile(),
+			refreshDecoration: () => this.refreshDecoration(),
+			showAppliedMessage: message => logger.showMessage(message),
+			showUnavailableMessage: message => { void vscode.window.showInformationMessage(message) },
 		}
 	}
 
-	onMoveUpLevel(bookmark: Bookmark) {
-		const bm = this.codeBookmarks.findBookmark(bookmark);
-		if (!bm) return;
-		const parent = this.codeBookmarks.findParentBookmark(bm);
-		if (!parent) {
-			logger.showMessage('该书签已经在最顶层，无法继续向上移动。');
-			return;
-		}
-		
-		const grandparent = this.codeBookmarks.findParentBookmark(parent);
-		
-		undoManager.saveState(this.codeBookmarks, 'move');
-		parent.subs.fastDelete(bm);
-		
-		if (grandparent) {
-			grandparent.subs.add(bm);
-			bm.parent = grandparent;
-		} else {
-			this.codeBookmarks.add(bm);
-			bm.parent = undefined;
-		}
-		
-		this.saveBookmarksToFile();
-		this.refreshDecoration();
+	async undo(): Promise<void> {
+		return runBookmarkHistoryOperation('undo', this.bookmarkHistoryWorkflowPort())
 	}
 
-
-
-
-
-	onMoveDirectory(oldPath: string, newPath: string) {
-		undoManager.saveState(this.codeBookmarks, 'sync');
-		this.codeBookmarks.renamePath(oldPath, newPath)
-		this.saveBookmarksToFile()
-		this.refreshDecoration()
+	async redo(): Promise<void> {
+		return runBookmarkHistoryOperation('redo', this.bookmarkHistoryWorkflowPort())
 	}
 
-	onRenameDirectory(oldPath: string, newPath: string) {
-		undoManager.saveState(this.codeBookmarks, 'sync');
-		const relOld = fileUtils.absoluteToRelative(oldPath);
-		const relNew = fileUtils.absoluteToRelative(newPath);
-		this.codeBookmarks.renamePath(relOld, relNew)
-		this.saveBookmarksToFile()
-		this.refreshDecoration()
-	}
-
-	onDeleteDirectory(deletePath: string) {
-		undoManager.saveState(this.codeBookmarks, 'sync');
-		const relDel = fileUtils.absoluteToRelative(deletePath);
-		const hasDelete = this.codeBookmarks.deleteWithPath(relDel)
-		if (hasDelete) {
-			this.saveBookmarksToFile()
-			this.refreshDecoration()
-		}
-	}
-
-	undo() {
-		if (undoManager.undo(this.codeBookmarks)) {
-			this.saveBookmarksToFile()
-			this.refreshDecoration()
-		} else {
-			vscode.window.showInformationMessage("没有可以撤销的操作。");
-		}
-	}
-
-	redo() {
-		if (undoManager.redo(this.codeBookmarks)) {
-			this.saveBookmarksToFile()
-			this.refreshDecoration()
-		} else {
-			vscode.window.showInformationMessage("没有可以恢复的操作。");
-		}
+	dispose() {
+		this.disposed = true
+		this.bookmarkContextCoordinator.dispose()
+		this.bookmarkTreeViewLifecycle.dispose()
+		this.viewLoads.dispose()
+		this.configWatcherCoordinator.dispose()
+		this.codeMarkerSyncLifecycle.dispose()
+		this.bookmarkDocumentChangeCoordinator.dispose()
+		this.viewRefreshCoordinator.dispose()
+		this.saveCoordinator.dispose()
+		this._onDidChangeTreeData.dispose()
 	}
 }

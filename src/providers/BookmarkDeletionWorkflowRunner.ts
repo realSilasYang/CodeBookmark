@@ -1,0 +1,124 @@
+import * as vscode from 'vscode'
+import { Bookmark } from '../models/Bookmark'
+import { BookmarkSet } from '../models/BookmarkSet'
+import { formatBookmarkLevelSummary, summarizeBookmarks, summarizeBookmarkTrees } from '../util/BookmarkStatistics'
+import { logger } from '../util/Logger'
+
+type BookmarkDeletionUndoAction = 'clearInvalidBookmarks' | 'deleteBookmarks'
+
+export interface BookmarkDeletionWorkflowPort {
+	bookmarks(): BookmarkSet
+	resolveTargets(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]): Bookmark[]
+	findBookmark(bookmark: Bookmark): Bookmark | undefined
+	bookmarkContainsCodeMarker(bookmark: Bookmark): boolean
+	warnProtectedCodeMarkers(count: number): void
+	deleteBookmark(id: string): boolean
+	absoluteBookmarkPath(bookmarkPath: string): string
+	saveUndoState(action: BookmarkDeletionUndoAction): void
+	saveBookmarks(filePaths: string[]): void
+	refreshDecoration(): void
+}
+
+function collectInvalidBookmarks(bookmarks: BookmarkSet): Bookmark[] {
+	const invalid: Bookmark[] = []
+	for (const bookmark of bookmarks.values) {
+		if (bookmark.isBookmarkInvalid) {
+			invalid.push(bookmark)
+		} else if (bookmark.subs.size > 0) {
+			invalid.push(...collectInvalidBookmarks(bookmark.subs))
+		}
+	}
+	return invalid
+}
+
+export function hasInvalidBookmarks(bookmarks: BookmarkSet): boolean {
+	for (const bookmark of bookmarks.values) {
+		if (bookmark.isBookmarkInvalid) return true
+		if (bookmark.subs.size > 0 && hasInvalidBookmarks(bookmark.subs)) return true
+	}
+	return false
+}
+
+function moveChildrenToParentWhenDelete(
+	bookmark: Bookmark,
+	port: BookmarkDeletionWorkflowPort,
+): boolean {
+	const bookmarks = port.bookmarks()
+	const subs = bookmarks.findBookmark(bookmark)?.subs
+	const parent = bookmarks.findParentBookmark(bookmark)
+	if (!subs) return false
+	if (!bookmarks.moveGroupToNode(subs, parent)) return false
+	port.deleteBookmark(bookmark.id)
+	return true
+}
+
+export function runClearInvalidBookmarks(port: BookmarkDeletionWorkflowPort): void {
+	const invalidBookmarks = collectInvalidBookmarks(port.bookmarks())
+	const deletableBookmarks = invalidBookmarks.filter(bookmark => !port.bookmarkContainsCodeMarker(bookmark))
+	const protectedCount = invalidBookmarks.length - deletableBookmarks.length
+	if (protectedCount > 0) port.warnProtectedCodeMarkers(protectedCount)
+	if (deletableBookmarks.length === 0) return
+
+	const changedPaths = deletableBookmarks.map(bookmark => port.absoluteBookmarkPath(bookmark.path))
+	port.saveUndoState('clearInvalidBookmarks')
+	for (const bookmark of deletableBookmarks) port.deleteBookmark(bookmark.id)
+	port.refreshDecoration()
+	port.saveBookmarks(changedPaths)
+}
+
+async function confirmDeletion(targets: Bookmark[]): Promise<'是' | '保留' | undefined> {
+	const prompt = targets.length > 1
+		? `选中了 ${targets.length} 项，其中包含带子书签的文件夹，确定要删除吗？`
+		: '确定要删除包含子书签的文件夹吗？'
+	const confirm = await vscode.window.showInformationMessage(prompt, '是', '保留子书签，仅删除当前项', '否')
+	if (!confirm || confirm === '否') return undefined
+	return confirm === '保留子书签，仅删除当前项' ? '保留' : '是'
+}
+
+export async function runDeleteBookmarks(
+	bookmark: Bookmark | undefined,
+	selectedBookmarks: Bookmark[] | undefined,
+	port: BookmarkDeletionWorkflowPort,
+): Promise<void> {
+	const candidateTargets = port.resolveTargets(bookmark, selectedBookmarks)
+		.map(target => port.findBookmark(target))
+		.filter((target): target is Bookmark => target !== undefined)
+	const uniqueTargets = [...new Map(candidateTargets.map(target => [target.id, target])).values()]
+	let targets = uniqueTargets.filter(target =>
+		!target.isChildOf(new BookmarkSet(uniqueTargets.filter(other => other !== target))),
+	)
+	if (targets.length === 0) return
+
+	const protectedTargets = targets.filter(target => port.bookmarkContainsCodeMarker(target))
+	if (protectedTargets.length > 0) port.warnProtectedCodeMarkers(protectedTargets.length)
+	targets = targets.filter(target => !port.bookmarkContainsCodeMarker(target))
+	if (targets.length === 0) return
+
+	const hasAnySubs = targets.some(target => target.subs.size > 0)
+	let confirmMode: '是' | '保留' = '是'
+	if (hasAnySubs) {
+		const confirmed = await confirmDeletion(targets)
+		if (!confirmed) return
+		confirmMode = confirmed
+	}
+
+	let hasChanges = false
+	const deletedSummary = confirmMode === '保留'
+		? summarizeBookmarks(targets)
+		: summarizeBookmarkTrees(targets)
+	const changedPaths = targets.map(target => port.absoluteBookmarkPath(target.path))
+	port.saveUndoState('deleteBookmarks')
+	for (const target of targets) {
+		if (target.subs.size > 0 && confirmMode === '保留') {
+			if (moveChildrenToParentWhenDelete(target, port)) hasChanges = true
+		} else {
+			port.deleteBookmark(target.id)
+			hasChanges = true
+		}
+	}
+
+	if (!hasChanges) return
+	port.saveBookmarks(changedPaths)
+	port.refreshDecoration()
+	if (targets.length > 1) logger.showMessage(`批量删除完成，删除结果：${formatBookmarkLevelSummary(deletedSummary)}。`)
+}

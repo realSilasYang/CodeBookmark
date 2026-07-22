@@ -1,17 +1,30 @@
 const fs = require('fs');
 const path = require('path');
 
-// Iconify sources for massive mult-variant generation
-const emojiPacks = ['fluent-emoji-flat', 'twemoji', 'noto-v1', 'fxemoji'];
+// Iconify sources used for the same semantic concept.
+const emojiSources = ['fluent-emoji-flat', 'twemoji', 'noto-v1', 'fxemoji'];
+const sourceLabels = new Map([
+    ['fluent-emoji-flat', 'fluent'],
+    ['twemoji', 'twitter'],
+    ['noto-v1', 'google_noto'],
+    ['fxemoji', 'mozilla'],
+    ['flat-color-icons', 'flat_color'],
+    ['vscode-icons', 'vscode'],
+    ['logos', 'logo'],
+]);
+
+function sourceLabel(source) {
+    return sourceLabels.get(source) || source.replace(/-/g, '_');
+}
 
 // Helper for CLDR emojis
-function generateEmojiVariants(prefix, cldrNames) {
+function generateEmojiSources(prefix, cldrNames) {
     let results = [];
     cldrNames.forEach(name => {
-        emojiPacks.forEach((pack, idx) => {
+        emojiSources.forEach(source => {
             results.push({
-                url: `https://api.iconify.design/${pack}/${name}.svg`,
-                name: `${prefix}_${name.replace(/-/g, '_')}_v${idx + 1}.svg`,
+                url: `https://api.iconify.design/${source}/${name}.svg`,
+                name: `${prefix}_${name.replace(/-/g, '_')}_${sourceLabel(source)}.svg`,
                 concept: name.replace(/-/g, '_')
             });
         });
@@ -20,14 +33,15 @@ function generateEmojiVariants(prefix, cldrNames) {
 }
 
 // Helper for explicit URLs
-function generateExplicitVariants(prefix, urls) {
+function generateExplicitSources(prefix, urls) {
     let results = [];
-    urls.forEach((url, idx) => {
+    urls.forEach(url => {
         // e.g. logos/javascript -> url
-        const baseName = url.split('/').pop().replace(/-/g, '_');
+        const [source, rawName] = url.split('/');
+        const baseName = rawName.replace(/-/g, '_');
         results.push({
             url: `https://api.iconify.design/${url}.svg`,
-            name: `${prefix}_${baseName}_v${idx + 1}.svg`,
+            name: `${prefix}_${baseName}_${sourceLabel(source)}.svg`,
             concept: baseName
         });
     });
@@ -139,25 +153,36 @@ const brandExplicit = [
 ];
 
 // Combine all
-const allCuratedIcons = [
-    ...generateEmojiVariants('status', statusEmojis),
-    ...generateExplicitVariants('status', statusExplicit),
+const generatedIcons = [
+    ...generateEmojiSources('status', statusEmojis),
+    ...generateExplicitSources('status', statusExplicit),
     
-    ...generateEmojiVariants('arch', archEmojis),
-    ...generateExplicitVariants('arch', archExplicit),
+    ...generateEmojiSources('arch', archEmojis),
+    ...generateExplicitSources('arch', archExplicit),
     
-    ...generateEmojiVariants('ui', uiEmojis),
-    ...generateExplicitVariants('ui', uiExplicit),
+    ...generateEmojiSources('ui', uiEmojis),
+    ...generateExplicitSources('ui', uiExplicit),
     
-    ...generateEmojiVariants('fun', funEmojis),
+    ...generateEmojiSources('fun', funEmojis),
     
-    ...generateExplicitVariants('brand', brandExplicit)
+    ...generateExplicitSources('brand', brandExplicit)
 ];
+
+// Some concepts intentionally overlap across categories. Keep one download per output file.
+const allCuratedIcons = [...new Map(generatedIcons.map(icon => [icon.name, icon])).values()];
 
 const outputData = {
     total: allCuratedIcons.length,
     icons: allCuratedIcons
 };
 
-fs.writeFileSync(path.join(__dirname, 'curated_icons.json'), JSON.stringify(outputData, null, 2));
-console.log(`MASSIVE Curated list built with ${allCuratedIcons.length} variants! Ready for download.`);
+const outputPath = path.join(__dirname, 'curated_icons.json');
+const temporaryPath = `${outputPath}.${process.pid}.tmp`;
+try {
+    fs.writeFileSync(temporaryPath, JSON.stringify(outputData, null, 2));
+    fs.renameSync(temporaryPath, outputPath);
+} catch (error) {
+    try { fs.unlinkSync(temporaryPath); } catch {}
+    throw error;
+}
+console.log(`Curated list built with ${allCuratedIcons.length} unique source-backed icons.`);

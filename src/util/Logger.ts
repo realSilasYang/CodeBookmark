@@ -1,42 +1,30 @@
 import * as vscode from 'vscode';
 
-class Logger {
+class Logger implements vscode.Disposable {
 	private channel = vscode.window.createOutputChannel('CodeBookmark');
-	private canLog: boolean = true;
 
-	infor(message: any) {
-		if (this.canLog) {
-			console.log(message);
-			this.channel.appendLine(String(message));
-		}
+	private normalizeMessage(message: unknown): string {
+		return String(message).replace(/\(/g, '（').replace(/\)/g, '）')
 	}
 
-	error(message: any) {
-		if (this.canLog) {
-			console.error(message);
-			this.channel.appendLine(`[ERROR] ${String(message)}`);
-		}
+	info(message: unknown) {
+		this.channel.appendLine(`[INFO] ${this.normalizeMessage(message)}`);
 	}
 
-	warning(message: any) {
-		if (this.canLog) {
-			console.warn(message);
-			this.channel.appendLine(`[WARN] ${String(message)}`);
-		}
+	error(message: unknown) {
+		console.error(message);
+		this.channel.appendLine(`[ERROR] ${this.normalizeMessage(message)}`);
 	}
 
 	showWarningMessage(message: string) {
-		if (this.canLog)
-			vscode.window.showWarningMessage(message);
+		void vscode.window.showWarningMessage(this.normalizeMessage(message));
 	}
 	showMessage(message: string) {
-		if (this.canLog)
-			vscode.window.showInformationMessage(message);
+		void vscode.window.showInformationMessage(this.normalizeMessage(message));
 	}
 
-	showErrorMessage(message: string) {
-		if (this.canLog)
-			vscode.window.showErrorMessage(message);
+	dispose() {
+		this.channel.dispose();
 	}
 }
 

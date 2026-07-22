@@ -1,44 +1,121 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
+import * as path from 'path';
+import { normalizeAIRequestTimeoutSeconds } from '../util/AIRequestPolicy';
+import { resolveStoragePath } from '../util/StoragePath';
 export class ExtensionConfig {
-	static globalStoragePath: string = ''
+	private static validatedStoragePath: string | undefined
+	private static snapshot: {
+		globalStoragePath: string
+		aiEndpoint: string
+		aiApiKey: string
+		aiModel: string
+		aiTimeoutS: number
+		aiPrompt: string
+		aiOptimizePrompt: string
+		aiAssignIcons: boolean
+		autoSpace: boolean
+		inlineLabel: boolean
+		defaultExpandLevel: number
+	} | undefined
+
+	private static values() {
+		if (!this.snapshot) {
+			const root = vscode.workspace.getConfiguration('codebookmark')
+			const ai = vscode.workspace.getConfiguration('codebookmark.AI')
+			const expandLevel = root.get<number>('defaultExpandLevel') ?? 3
+			this.snapshot = {
+				globalStoragePath: String(root.get('globalStoragePath') || ''),
+				aiEndpoint: String(ai.get('endpoint') || '').trim(),
+				aiApiKey: String(ai.get('apiKey') || '').trim(),
+				aiModel: String(ai.get('model') || '').trim(),
+				aiTimeoutS: normalizeAIRequestTimeoutSeconds(ai.get('timeoutS')),
+				aiPrompt: String(ai.get('prompt') || '').trim(),
+				aiOptimizePrompt: String(ai.get('optimizePrompt') || '').trim(),
+				aiAssignIcons: ai.get<boolean>('assignIcons') ?? true,
+				autoSpace: root.get<boolean>('autoSpace') ?? true,
+				inlineLabel: root.get<boolean>('inlineLabel') ?? true,
+				defaultExpandLevel: Number.isFinite(expandLevel) ? Math.max(0, Math.floor(expandLevel)) : 3,
+			}
+		}
+		return this.snapshot
+	}
+
+	static invalidate(): void {
+		this.snapshot = undefined
+		this.validatedStoragePath = undefined
+	}
+
+	static get globalStoragePath(): string {
+		return this.values().globalStoragePath
+	}
+
+	static resolveStoragePath(): string {
+		return resolveStoragePath(this.globalStoragePath)
+	}
 
 	static get aiEndpoint(): string {
-		return String(vscode.workspace.getConfiguration('codebookmark.ai').get('endpoint') || '').trim();
+		return this.values().aiEndpoint;
 	}
 	static get aiApiKey(): string {
-		return String(vscode.workspace.getConfiguration('codebookmark.ai').get('apiKey') || '').trim();
+		return this.values().aiApiKey;
 	}
 	static get aiModel(): string {
-		return String(vscode.workspace.getConfiguration('codebookmark.ai').get('model') || '').trim();
+		return this.values().aiModel;
+	}
+	static get aiTimeoutS(): number {
+		return this.values().aiTimeoutS;
 	}
 	static get aiPrompt(): string {
-		return String(vscode.workspace.getConfiguration('codebookmark.ai').get('prompt') || '').trim();
+		return this.values().aiPrompt;
 	}
 	static get aiOptimizePrompt(): string {
-		return String(vscode.workspace.getConfiguration('codebookmark.ai').get('optimizePrompt') || '').trim();
+		return this.values().aiOptimizePrompt;
+	}
+	static get aiAssignIcons(): boolean {
+		return this.values().aiAssignIcons;
 	}
 	static get autoSpace(): boolean {
-		return vscode.workspace.getConfiguration('codebookmark').get<boolean>('autoSpace') ?? true;
+		return this.values().autoSpace;
 	}
 	static get inlineLabel(): boolean {
-		return vscode.workspace.getConfiguration('codebookmark').get<boolean>('inlineLabel') ?? true;
+		return this.values().inlineLabel;
+	}
+	static get defaultExpandLevel(): number {
+		return this.values().defaultExpandLevel;
+	}
+
+	static ensureAIConfigured(): boolean {
+		const missing: string[] = []
+		if (!this.aiEndpoint) missing.push('Endpoint')
+		if (!this.aiApiKey) missing.push('API Key')
+		if (!this.aiModel) missing.push('模型名称')
+		if (missing.length === 0) return true
+
+		void vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.AI')
+		void vscode.window.showErrorMessage(`请先补全 AI 配置：${missing.join('、')}。`)
+		return false
 	}
 
 	static ensureGlobalStoragePathConfigured(): boolean {
 		let folder = ExtensionConfig.globalStoragePath;
 		if (!folder || folder.trim() === '') {
-			vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.globalStoragePath');
-			vscode.window.showErrorMessage('请先配置全局书签存储的绝对路径后方可使用！该路径禁止留空！');
+			void vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.globalStoragePath');
+			void vscode.window.showErrorMessage('请先配置全局书签存储路径；该设置不能为空。');
 			return false;
 		}
 
-		folder = folder.trim();
-		folder = folder.replace(/^~([\\/].*)?$/, (match, p1) => path.join(os.homedir(), p1 || ''));
-		folder = folder.replace(/%([^%]+)%/g, (_, n) => process.env[n] || '');
-		folder = path.normalize(folder);
+		try {
+			folder = ExtensionConfig.resolveStoragePath();
+		} catch (error) {
+			void vscode.window.showErrorMessage(`书签存储路径无效：${error instanceof Error ? error.message : String(error)}`)
+			return false
+		}
+		if (!path.isAbsolute(folder)) {
+			void vscode.window.showErrorMessage(`书签存储路径必须是绝对路径：${folder}`)
+			return false
+		}
+		if (folder === this.validatedStoragePath) return true;
 
 		if (!fs.existsSync(folder)) {
 			try {
@@ -61,6 +138,7 @@ export class ExtensionConfig {
 			return false;
 		}
 
+		this.validatedStoragePath = folder;
 		return true;
 	}
 }

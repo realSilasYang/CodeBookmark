@@ -1,37 +1,69 @@
 {
   "name": "codebookmark",
-  "displayName": "Code Bookmarks",
-  "description": "一款强大的代码书签管理插件，能够让你在 VS Code 中高效地标记、导航和管理代码跳转。",
+  "displayName": "CodeBookmark",
+  "description": "为源码位置创建分层书签，并提供导航、排序、拖拽、撤销和 AI 辅助。",
   "version": "1.0.0",
-  "publisher": "阳熙来",
+  "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/realSilasYang/CodeBookmark.git"
+  },
+  "homepage": "https://github.com/realSilasYang/CodeBookmark#readme",
+  "bugs": {
+    "url": "https://github.com/realSilasYang/CodeBookmark/issues"
+  },
+  "keywords": [
+    "bookmark",
+    "code-navigation",
+    "hierarchy",
+    "ai",
+    "vscode"
+  ],
   "icon": "resources/bookmark_logo.png",
+  "galleryBanner": {
+    "color": "#252526",
+    "theme": "dark"
+  },
+  "pricing": "Free",
   "engines": {
-    "vscode": "^1.125.0"
+    "vscode": "^1.125.0",
+    "node": ">=24 <25"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "*"
-  ],
   "main": "./out/extension.js",
+  "files": [
+    "out/**/*.js",
+    "resources",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "SUPPORT.md",
+    "THIRD_PARTY_NOTICES.md",
+    "THIRD_PARTY_LICENSES"
+  ],
   "scripts": {
     "generate-package-json": "node generate-package-json.js",
-    "build:dev": "npm run compile && cross-env BUILD_ENV=Dev npm run generate-package-json",
-    "build:prod": "npm run compile && cross-env npm run generate-package-json",
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./ && node generate-package-json.js",
+    "compile": "node scripts/clean-output.js && tsc -p ./ && node generate-package-json.js",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\" \"generate-package-json.js\" \"scripts/**/*.js\"",
+    "verify": "npm run compile && npm run lint && node scripts/verify-all.js",
+    "test:integration": "npm run compile && node scripts/run-integration-tests.js",
+    "verify:icons": "node scripts/verify-icon-assets.js",
+    "package:list": "npx --yes @vscode/vsce@3.9.2 ls --no-dependencies",
+    "package:vsix": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
+    "check:release": "npm run verify && npm run test:integration && npm audit --audit-level=high && npm run package:list"
   },
   "devDependencies": {
     "@eslint/js": "^9.10.0",
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.125.0",
-    "cross-env": "^10.1.0",
+    "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.7.0",
     "globals": "^15.11.0",
     "typescript": "~6.0.0",
@@ -61,8 +93,13 @@
     "viewsWelcome": [
       {
         "view": "codebookmarkTreeView",
-        "contents": "暂无书签，按 [Ctrl+B] 添加\n\n[查看使用说明](command:codebookmark.openHelp)",
-        "when": "bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.hasBookmark"
+        "contents": "暂无书签，按下 Ctrl+B 即刻添加！\n\n[导入书签配置文件](command:codebookmark.importBookmarkConfig)\n\n[查看使用说明](command:codebookmark.openHelp)",
+        "when": "bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.loadFailed && codebookmark.aiAnalysisAvailable && !codebookmark.activeFileHasBookmark"
+      },
+      {
+        "view": "codebookmarkTreeView",
+        "contents": "[查看使用说明](command:codebookmark.openHelp)",
+        "when": "bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.loadFailed && !codebookmark.aiAnalysisAvailable"
       }
     ],
     "commands": [
@@ -85,11 +122,6 @@
         "command": "codebookmark.deleteBookmark",
         "title": "删除",
         "icon": "$(trash)"
-      },
-      {
-        "command": "codebookmark.editBookmark",
-        "title": "编辑标签",
-        "icon": "$(edit)"
       },
       {
         "command": "codebookmark.editBookmark.editLabel",
@@ -123,13 +155,27 @@
       },
       {
         "command": "codebookmark.pinView",
-        "title": "进入书签容器模式",
+        "title": "设为当前文件的新书签容器",
         "icon": "$(folder-opened)"
       },
       {
         "command": "codebookmark.unpinView",
-        "title": "退出书签容器模式",
+        "title": "取消新书签容器",
         "icon": "$(folder)"
+      },
+      {
+        "command": "codebookmark.undo",
+        "title": "撤销：暂无可撤销操作",
+        "icon": "$(discard)",
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo",
+        "title": "重做：暂无可重做操作",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.bookmark.searchInFile",
@@ -161,7 +207,7 @@
       },
       {
         "command": "codebookmark.openSettings",
-        "title": "$(settings) 打开代码书签设置",
+        "title": "$(settings) 代码书签设置",
         "icon": "$(settings)",
         "category": "Code Bookmarks"
       },
@@ -172,62 +218,177 @@
         "category": "Code Bookmarks"
       },
       {
+        "command": "codebookmark.importBookmarkConfig",
+        "title": "导入书签配置文件",
+        "icon": "$(file-symlink-file)",
+        "enablement": "!codebookmark.activeFileHasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
         "command": "codebookmark.ai.generateAppend",
         "title": "$(add) 追加",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwrite",
-        "title": "$(replace) 替换",
+        "title": "$(replace) 重新生成并替换",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkip",
         "title": "$(diff-added) 生成",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimize",
-        "title": "$(hubot) 单文件",
+        "title": "$(hubot) 当前脚本",
+        "enablement": "codebookmark.aiAnalysisAvailable",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.ai.optimizeDirect",
+        "title": "$(hubot) 优化当前脚本的书签标签",
+        "enablement": "codebookmark.aiAnalysisAvailable",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.ai.optimizeFolderDirect",
+        "title": "$(hubot) 优化当前文件夹内有书签的脚本中的书签标签",
+        "enablement": "codebookmark.aiAnalysisAvailable",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.ai.optimizeSelectedDirect",
+        "title": "$(hubot) 优化选中书签的标签",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeSelected",
-        "title": "$(hubot) 选中项",
+        "title": "$(hubot) 选中的书签",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateAppendFolder",
-        "title": "$(add) 追加",
+        "title": "$(add) 为有书签的脚本追加",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwriteFolder",
-        "title": "$(replace) 替换",
+        "title": "$(replace) 为有书签的脚本重新生成并替换",
+        "enablement": "codebookmark.aiAnalysisAvailable",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.ai.generateAppendFolderDirect",
+        "title": "$(add) 为当前文件夹内有书签的脚本追加",
+        "enablement": "codebookmark.aiAnalysisAvailable",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.ai.generateOverwriteFolderDirect",
+        "title": "$(replace) 为当前文件夹内有书签的脚本重新生成并替换",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkipFolder",
-        "title": "$(diff-added) 生成",
+        "title": "$(diff-added) 为所有无书签脚本生成",
+        "enablement": "codebookmark.aiAnalysisAvailable",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.ai.generateSkipFolderDirect",
+        "title": "$(diff-added) 为当前文件夹内无书签脚本生成",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeFolder",
-        "title": "$(hubot) 文件夹"
+        "title": "$(hubot) 当前文件夹内有书签的脚本",
+        "enablement": "codebookmark.aiAnalysisAvailable",
+        "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeContextItem",
         "title": "$(hubot) AI 优化书签标签",
+        "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.testConnection",
-        "title": "Test AI Connection",
+        "title": "测试 AI 连接",
+        "icon": "$(debug-disconnect)",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.ai.openSettings",
+        "title": "$(settings) AI 配置",
+        "icon": "$(settings)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.exportToMarkdown",
-        "title": "$(export) 导出书签为 Markdown 报表",
+        "title": "Markdown",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.exportToHtml",
+        "title": "HTML",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.exportToCsv",
+        "title": "CSV",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.exportToText",
+        "title": "纯文本",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.exportSourceFiles",
+        "title": "配置源文件",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.batchExportToMarkdown",
+        "title": "Markdown",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.batchExportToHtml",
+        "title": "HTML",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.batchExportToCsv",
+        "title": "CSV",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.batchExportToText",
+        "title": "纯文本",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.batchExportSourceFiles",
+        "title": "配置源文件",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
@@ -237,171 +398,255 @@
         "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.undo",
-        "title": "撤销",
+        "command": "codebookmark.undo.modifyBookmarks",
+        "title": "撤销：修改书签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo",
-        "title": "恢复",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.drag",
-        "title": "撤销上一步操作 (拖拽节点位置)",
+        "command": "codebookmark.undo.reorderFiles",
+        "title": "撤销：调整文件顺序",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.drag",
-        "title": "恢复撤销的操作 (拖拽节点位置)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.add",
-        "title": "撤销上一步操作 (新增书签)",
+        "command": "codebookmark.undo.moveBookmarks",
+        "title": "撤销：移动书签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.add",
-        "title": "恢复撤销的操作 (新增书签)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.delete",
-        "title": "撤销上一步操作 (删除书签)",
+        "command": "codebookmark.undo.addBookmarks",
+        "title": "撤销：添加书签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.delete",
-        "title": "恢复撤销的操作 (删除书签)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.sync",
-        "title": "撤销上一步操作 (同步代码变更)",
+        "command": "codebookmark.undo.toggleBookmarks",
+        "title": "撤销：添加/删除书签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.sync",
-        "title": "恢复撤销的操作 (同步代码变更)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.rename",
-        "title": "撤销上一步操作 (重命名书签)",
+        "command": "codebookmark.undo.deleteBookmarks",
+        "title": "撤销：删除书签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.rename",
-        "title": "恢复撤销的操作 (重命名书签)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.icon",
-        "title": "撤销上一步操作 (修改书签图标)",
+        "command": "codebookmark.undo.generateAIBookmarks",
+        "title": "撤销：AI 生成书签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.icon",
-        "title": "恢复撤销的操作 (修改书签图标)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.move",
-        "title": "撤销上一步操作 (移动书签层级)",
+        "command": "codebookmark.undo.optimizeAIBookmarks",
+        "title": "撤销：AI 优化书签标签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.move",
-        "title": "恢复撤销的操作 (移动书签层级)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.status",
-        "title": "撤销上一步操作 (更改展开状态)",
+        "command": "codebookmark.undo.importBookmarks",
+        "title": "撤销：导入书签配置",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.status",
-        "title": "恢复撤销的操作 (更改展开状态)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.ai",
-        "title": "撤销上一步操作 (AI 批量生成书签)",
+        "command": "codebookmark.undo.renameBookmarks",
+        "title": "撤销：重命名书签",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.ai",
-        "title": "恢复撤销的操作 (AI 批量生成书签)",
-        "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
-      },
-      {
-        "command": "codebookmark.undo.ai-optimize",
-        "title": "撤销上一步操作 (AI 批量优化标签)",
+        "command": "codebookmark.undo.updateBookmarkPosition",
+        "title": "撤销：更新书签位置",
         "icon": "$(discard)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canUndo"
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
       },
       {
-        "command": "codebookmark.redo.ai-optimize",
-        "title": "恢复撤销的操作 (AI 批量优化标签)",
+        "command": "codebookmark.undo.updateBookmarkAndRename",
+        "title": "撤销：更新位置并重命名",
+        "icon": "$(discard)",
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.undo.changeBookmarkIcons",
+        "title": "撤销：更改书签图标",
+        "icon": "$(discard)",
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.undo.restoreBookmarkIcons",
+        "title": "撤销：恢复默认图标",
+        "icon": "$(discard)",
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.undo.clearInvalidBookmarks",
+        "title": "撤销：清除失效书签",
+        "icon": "$(discard)",
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.undo.setBookmarkContainer",
+        "title": "撤销：设置新书签容器",
+        "icon": "$(discard)",
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.undo.unsetBookmarkContainer",
+        "title": "撤销：取消新书签容器",
+        "icon": "$(discard)",
+        "enablement": "bookmarks.var.bookmark.canUndo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.modifyBookmarks",
+        "title": "重做：修改书签",
         "icon": "$(redo)",
-        "category": "Code Bookmarks",
-        "enablement": "bookmarks.var.bookmark.canRedo"
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.reorderFiles",
+        "title": "重做：调整文件顺序",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.moveBookmarks",
+        "title": "重做：移动书签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.addBookmarks",
+        "title": "重做：添加书签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.toggleBookmarks",
+        "title": "重做：添加/删除书签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.deleteBookmarks",
+        "title": "重做：删除书签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.generateAIBookmarks",
+        "title": "重做：AI 生成书签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.optimizeAIBookmarks",
+        "title": "重做：AI 优化书签标签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.importBookmarks",
+        "title": "重做：导入书签配置",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.renameBookmarks",
+        "title": "重做：重命名书签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.updateBookmarkPosition",
+        "title": "重做：更新书签位置",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.updateBookmarkAndRename",
+        "title": "重做：更新位置并重命名",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.changeBookmarkIcons",
+        "title": "重做：更改书签图标",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.restoreBookmarkIcons",
+        "title": "重做：恢复默认图标",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.clearInvalidBookmarks",
+        "title": "重做：清除失效书签",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.setBookmarkContainer",
+        "title": "重做：设置新书签容器",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
+      },
+      {
+        "command": "codebookmark.redo.unsetBookmarkContainer",
+        "title": "重做：取消新书签容器",
+        "icon": "$(redo)",
+        "enablement": "bookmarks.var.bookmark.canRedo",
+        "category": "Code Bookmarks"
       }
     ],
     "keybindings": [
       {
         "command": "codebookmark.deleteBookmark",
         "key": "delete",
-        "when": "listFocus && (focusedView == 'codebookmarkTreeView' || focusedView == 'codebookmarkWatcherTree')"
+        "when": "listFocus && focusedView == 'codebookmarkTreeView'"
       },
       {
         "command": "codebookmark.renameBookmark",
         "title": "重命名书签",
         "key": "f2",
-        "when": "listFocus && (focusedView == 'codebookmarkTreeView' || focusedView == 'codebookmarkWatcherTree')",
+        "when": "listFocus && focusedView == 'codebookmarkTreeView'",
         "category": "Code Bookmarks"
       },
       {
@@ -431,21 +676,187 @@
       }
     ],
     "menus": {
-      "commandPalett": [
-        {
-          "command": "codebookmark.toggleBookmark"
-        },
-        {
-          "command": "codebookmark.forceAddBookmark"
-        },
-        {
-          "command": "codebookmark.forceDeleteBookmark"
-        },
-        {
-          "command": "codebookmark.ai.testConnection"
-        }
-      ],
       "view/title": [
+        {
+          "when": "(view == codebookmarkTreeView) && !bookmarks.var.bookmark.undoOperation",
+          "group": "navigation@1",
+          "command": "codebookmark.undo"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == modifyBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.modifyBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == reorderFiles",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.reorderFiles"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == moveBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.moveBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == addBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.addBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == toggleBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.toggleBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == deleteBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.deleteBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == generateAIBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.generateAIBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == optimizeAIBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.optimizeAIBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == importBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.importBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == renameBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.renameBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == updateBookmarkPosition",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.updateBookmarkPosition"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == updateBookmarkAndRename",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.updateBookmarkAndRename"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == changeBookmarkIcons",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.changeBookmarkIcons"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == restoreBookmarkIcons",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.restoreBookmarkIcons"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == clearInvalidBookmarks",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.clearInvalidBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == setBookmarkContainer",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.setBookmarkContainer"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.undoOperation == unsetBookmarkContainer",
+          "group": "navigation@1",
+          "command": "codebookmark.undo.unsetBookmarkContainer"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && !bookmarks.var.bookmark.redoOperation",
+          "group": "navigation@2",
+          "command": "codebookmark.redo"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == modifyBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.modifyBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == reorderFiles",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.reorderFiles"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == moveBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.moveBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == addBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.addBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == toggleBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.toggleBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == deleteBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.deleteBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == generateAIBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.generateAIBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == optimizeAIBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.optimizeAIBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == importBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.importBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == renameBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.renameBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == updateBookmarkPosition",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.updateBookmarkPosition"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == updateBookmarkAndRename",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.updateBookmarkAndRename"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == changeBookmarkIcons",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.changeBookmarkIcons"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == restoreBookmarkIcons",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.restoreBookmarkIcons"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == clearInvalidBookmarks",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.clearInvalidBookmarks"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == setBookmarkContainer",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.setBookmarkContainer"
+        },
+        {
+          "when": "(view == codebookmarkTreeView) && bookmarks.var.bookmark.redoOperation == unsetBookmarkContainer",
+          "group": "navigation@2",
+          "command": "codebookmark.redo.unsetBookmarkContainer"
+        },
         {
           "when": "(view == codebookmarkTreeView)",
           "group": "navigation@3",
@@ -470,163 +881,53 @@
           "when": "(view == codebookmarkTreeView)",
           "group": "navigation@99",
           "submenu": "codebookmark.moreSubmenu"
-        },
-        {
-          "command": "codebookmark.undo",
-          "when": "view == codebookmarkTreeView && !codebookmark.undoAction",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo",
-          "when": "view == codebookmarkTreeView && !codebookmark.redoAction",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.drag",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'drag'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.drag",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'drag'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.add",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'add'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.add",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'add'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.delete",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'delete'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.delete",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'delete'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.sync",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'sync'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.sync",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'sync'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.rename",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'rename'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.rename",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'rename'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.icon",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'icon'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.icon",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'icon'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.move",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'move'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.move",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'move'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.status",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'status'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.status",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'status'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.ai",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'ai'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.ai",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'ai'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "codebookmark.undo.ai-optimize",
-          "when": "view == codebookmarkTreeView && codebookmark.undoAction == 'ai-optimize'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "codebookmark.redo.ai-optimize",
-          "when": "view == codebookmarkTreeView && codebookmark.redoAction == 'ai-optimize'",
-          "group": "navigation@2"
         }
       ],
       "view/item/context": [
         {
           "command": "codebookmark.pinView",
-          "title": "进入书签容器模式",
+          "title": "设为当前文件的新书签容器",
           "icon": "$(folder-opened)",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && (viewItem == bookmark || viewItem == watcher) ",
+          "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom))",
           "group": "inline@2"
         },
         {
           "command": "codebookmark.unpinView",
-          "title": "退出书签容器模式",
+          "title": "取消新书签容器",
           "icon": "$(folder)",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && viewItem == bookmarkPinned",
+          "when": "(view == codebookmarkTreeView) && (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom)",
           "group": "inline@2"
         },
         {
           "submenu": "codebookmark.editSubmenu",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && (viewItem == bookmark || viewItem == watcher || viewItem == bookmarkFolder || viewItem == bookmarkPinned || viewItem == bookmarkInvalid)",
+          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom))",
           "group": "inline@3"
         },
         {
           "command": "codebookmark.deleteBookmark",
           "title": "删除",
           "icon": "$(trash)",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && ((viewItem == bookmark || viewItem == watcher || viewItem == bookmarkFolder || viewItem == bookmarkInvalid)  || viewItem == bookmarkPinned)",
+          "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || viewItem == bookmarkInvalid || viewItem == bookmarkPinned)",
           "group": "inline@4"
         },
         {
           "command": "codebookmark.editBookmark.editLabel",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && ((viewItem == bookmark || viewItem == watcher || viewItem == bookmarkFolder || viewItem == bookmarkInvalid)  || viewItem == bookmarkPinned)",
+          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom))",
           "group": "1_edit@1"
         },
         {
           "command": "codebookmark.editBookmark.changeIcon",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && ((viewItem == bookmark || viewItem == watcher || viewItem == bookmarkFolder || viewItem == bookmarkInvalid)  || viewItem == bookmarkPinned)",
+          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom))",
           "group": "1_edit@2"
         },
         {
           "command": "codebookmark.editBookmark.restoreDefaultIcon",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && ((viewItem == bookmark || viewItem == watcher || viewItem == bookmarkFolder || viewItem == bookmarkInvalid)  || viewItem == bookmarkPinned)",
+          "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerCustom || viewItem == bookmarkCodeMarkerPinnedCustom)",
           "group": "1_edit@3"
         },
         {
           "command": "codebookmark.ai.optimizeContextItem",
-          "when": "((view == codebookmarkTreeView) || (view == codebookmarkWatcherTree)) && ((viewItem == bookmark || viewItem == watcher || viewItem == bookmarkFolder || viewItem == bookmarkInvalid)  || viewItem == bookmarkPinned)",
+          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom))",
           "group": "1_edit@4"
         }
       ],
@@ -645,6 +946,192 @@
           "command": "codebookmark.forceDeleteBookmark",
           "group": "codebookmark@3",
           "when": "editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "codebookmark.ai.optimizeDirect",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.ai.optimizeFolderDirect",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.ai.optimizeSelectedDirect",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.ai.generateAppendFolderDirect",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.ai.generateOverwriteFolderDirect",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.ai.generateSkipFolderDirect",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.ai.testConnection",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.modifyBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.reorderFiles",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.moveBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.addBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.toggleBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.deleteBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.generateAIBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.optimizeAIBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.importBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.renameBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.updateBookmarkPosition",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.updateBookmarkAndRename",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.changeBookmarkIcons",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.restoreBookmarkIcons",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.clearInvalidBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.setBookmarkContainer",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.undo.unsetBookmarkContainer",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.modifyBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.reorderFiles",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.moveBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.addBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.toggleBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.deleteBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.generateAIBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.optimizeAIBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.importBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.renameBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.updateBookmarkPosition",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.updateBookmarkAndRename",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.changeBookmarkIcons",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.restoreBookmarkIcons",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.clearInvalidBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.setBookmarkContainer",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.redo.unsetBookmarkContainer",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.batchExportToMarkdown",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.batchExportToHtml",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.batchExportToCsv",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.batchExportToText",
+          "when": "false"
+        },
+        {
+          "command": "codebookmark.batchExportSourceFiles",
+          "when": "false"
         }
       ],
       "codebookmark.editSubmenu": [
@@ -678,7 +1165,7 @@
           "group": "1_primary@1"
         },
         {
-          "command": "codebookmark.exportToMarkdown",
+          "submenu": "codebookmark.exportSubmenu",
           "group": "1_primary@2"
         },
         {
@@ -690,52 +1177,176 @@
           "group": "2_secondary@2"
         }
       ],
-      "codebookmark.aiSubmenu": [
+      "codebookmark.exportSubmenu": [
         {
-          "submenu": "codebookmark.aiGenerateSubmenu",
+          "command": "codebookmark.exportToMarkdown",
+          "group": "1_formats@1"
+        },
+        {
+          "command": "codebookmark.exportToHtml",
+          "group": "1_formats@2"
+        },
+        {
+          "command": "codebookmark.exportToCsv",
+          "group": "1_formats@3"
+        },
+        {
+          "command": "codebookmark.exportToText",
+          "group": "1_formats@4"
+        },
+        {
+          "command": "codebookmark.exportSourceFiles",
+          "group": "1_formats@5"
+        },
+        {
+          "submenu": "codebookmark.batchExportSubmenu",
+          "group": "2_batch@1"
+        }
+      ],
+      "codebookmark.batchExportSubmenu": [
+        {
+          "command": "codebookmark.batchExportToMarkdown",
           "group": "1_items@1"
         },
         {
-          "submenu": "codebookmark.aiOptimizeSubmenu",
+          "command": "codebookmark.batchExportToHtml",
           "group": "1_items@2"
+        },
+        {
+          "command": "codebookmark.batchExportToCsv",
+          "group": "1_items@3"
+        },
+        {
+          "command": "codebookmark.batchExportToText",
+          "group": "1_items@4"
+        },
+        {
+          "command": "codebookmark.batchExportSourceFiles",
+          "group": "1_items@5"
+        }
+      ],
+      "codebookmark.aiSubmenu": [
+        {
+          "submenu": "codebookmark.aiGenerateSubmenu",
+          "group": "1_items@1",
+          "when": "codebookmark.aiAnalysisAvailable && codebookmark.activeFileAvailable && (codebookmark.activeFileHasBookmark || (workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript)))"
+        },
+        {
+          "submenu": "codebookmark.aiGenerateWorkspaceSubmenu",
+          "group": "1_items@1",
+          "when": "codebookmark.aiAnalysisAvailable && !codebookmark.activeFileAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
+        },
+        {
+          "command": "codebookmark.ai.generateSkip",
+          "group": "1_items@1",
+          "when": "codebookmark.aiAnalysisAvailable && codebookmark.activeFileAvailable && !codebookmark.activeFileHasBookmark && !(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript))"
+        },
+        {
+          "command": "codebookmark.ai.generateSkipFolderDirect",
+          "group": "1_items@1",
+          "when": "codebookmark.aiAnalysisAvailable && !codebookmark.activeFileAvailable && workspaceFolderCount > 0 && codebookmark.currentFolderHasUnbookmarkedScript && !codebookmark.currentFolderHasBookmarkedScript"
+        },
+        {
+          "submenu": "codebookmark.aiOptimizeSubmenu",
+          "group": "1_items@2",
+          "when": "codebookmark.aiAnalysisAvailable && (((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)) || ((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && codebookmark.hasSelection) || ((workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && codebookmark.hasSelection))"
+        },
+        {
+          "command": "codebookmark.ai.optimizeDirect",
+          "group": "1_items@2",
+          "when": "codebookmark.aiAnalysisAvailable && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
+        },
+        {
+          "command": "codebookmark.ai.optimizeFolderDirect",
+          "group": "1_items@2",
+          "when": "codebookmark.aiAnalysisAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection"
+        },
+        {
+          "command": "codebookmark.ai.optimizeSelectedDirect",
+          "group": "1_items@2",
+          "when": "codebookmark.aiAnalysisAvailable && workspaceFolderCount > 0 && codebookmark.hasSelection && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
+        },
+        {
+          "command": "codebookmark.ai.openSettings",
+          "group": "2_configuration@1"
         }
       ],
       "codebookmark.aiGenerateSubmenu": [
         {
           "submenu": "codebookmark.aiGenerateFileSubmenu",
-          "group": "1_items@1"
+          "group": "1_items@1",
+          "when": "(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript)) && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)"
+        },
+        {
+          "command": "codebookmark.ai.generateSkip",
+          "group": "1_items@1",
+          "when": "(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript)) && codebookmark.activeFileAvailable && !codebookmark.activeFileHasBookmark"
         },
         {
           "submenu": "codebookmark.aiGenerateFolderSubmenu",
-          "group": "1_items@2"
+          "group": "1_items@2",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript"
+        },
+        {
+          "command": "codebookmark.ai.generateSkipFolderDirect",
+          "group": "1_items@2",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasUnbookmarkedScript && !codebookmark.currentFolderHasBookmarkedScript"
+        },
+        {
+          "command": "codebookmark.ai.generateAppend",
+          "group": "1_items@1",
+          "when": "(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript))"
+        },
+        {
+          "command": "codebookmark.ai.generateOverwrite",
+          "group": "1_items@2",
+          "when": "(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript))"
+        }
+      ],
+      "codebookmark.aiGenerateWorkspaceSubmenu": [
+        {
+          "command": "codebookmark.ai.generateSkipFolderDirect",
+          "group": "1_items@1",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasUnbookmarkedScript"
+        },
+        {
+          "command": "codebookmark.ai.generateAppendFolderDirect",
+          "group": "1_items@2",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript"
+        },
+        {
+          "command": "codebookmark.ai.generateOverwriteFolderDirect",
+          "group": "1_items@3",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript"
         }
       ],
       "codebookmark.aiGenerateFileSubmenu": [
         {
-          "command": "codebookmark.ai.generateSkip",
-          "group": "1_items@1"
-        },
-        {
           "command": "codebookmark.ai.generateAppend",
-          "group": "1_items@2"
+          "group": "1_items@1",
+          "when": "(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)"
         },
         {
           "command": "codebookmark.ai.generateOverwrite",
-          "group": "1_items@3"
+          "group": "1_items@2",
+          "when": "(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)"
         }
       ],
       "codebookmark.aiGenerateFolderSubmenu": [
         {
           "command": "codebookmark.ai.generateSkipFolder",
-          "group": "1_items@1"
+          "group": "1_items@1",
+          "when": "workspaceFolderCount > 0 && (view == codebookmarkTreeView) && codebookmark.currentFolderHasUnbookmarkedScript"
         },
         {
           "command": "codebookmark.ai.generateAppendFolder",
-          "group": "1_items@2"
+          "group": "1_items@2",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript"
         },
         {
           "command": "codebookmark.ai.generateOverwriteFolder",
-          "group": "1_items@3"
+          "group": "1_items@3",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript"
         }
       ],
       "codebookmark.aiOptimizeSubmenu": [
@@ -746,19 +1357,17 @@
         },
         {
           "command": "codebookmark.ai.optimize",
-          "group": "4_optimize@2"
+          "group": "4_optimize@2",
+          "when": "(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)"
         },
         {
           "command": "codebookmark.ai.optimizeFolder",
-          "group": "4_optimize@3"
+          "group": "4_optimize@3",
+          "when": "(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
         }
       ]
     },
     "submenus": [
-      {
-        "id": "codebookmark.editor.context",
-        "label": "书签菜单"
-      },
       {
         "id": "codebookmark.editSubmenu",
         "label": "编辑书签",
@@ -770,6 +1379,15 @@
         "icon": "$(three-bars)"
       },
       {
+        "id": "codebookmark.exportSubmenu",
+        "label": "导出书签为…",
+        "icon": "$(export)"
+      },
+      {
+        "id": "codebookmark.batchExportSubmenu",
+        "label": "批量导出当前文件夹下…"
+      },
+      {
         "id": "codebookmark.aiSubmenu",
         "label": "AI 辅助",
         "icon": "$(symbol-event)"
@@ -779,171 +1397,109 @@
         "label": "生成书签"
       },
       {
+        "id": "codebookmark.aiGenerateWorkspaceSubmenu",
+        "label": "生成书签"
+      },
+      {
         "id": "codebookmark.aiGenerateFileSubmenu",
-        "label": "当前文件"
+        "label": "当前脚本"
       },
       {
         "id": "codebookmark.aiGenerateFolderSubmenu",
-        "label": "文件夹及子目录"
+        "label": "当前文件夹"
       },
       {
         "id": "codebookmark.aiOptimizeSubmenu",
-        "label": "优化标签"
+        "label": "优化书签标签"
       }
     ],
     "configuration": [
       {
         "type": "object",
-        "title": "Code Bookmarks Settings",
+        "title": "代码书签设置",
         "properties": {
           "codebookmark.globalStoragePath": {
             "order": 1,
             "type": "string",
             "default": "",
-            "description": "全局书签配置存放的绝对路径文件夹（必填项，禁止留空）"
-          },
-          "codebookmark.ai.endpoint": {
-            "order": 2,
-            "type": "string",
-            "default": "",
-            "description": "AI 接口地址"
-          },
-          "codebookmark.ai.apiKey": {
-            "order": 3,
-            "type": "string",
-            "default": "",
-            "description": "AI 接口密钥 (API Key)"
-          },
-          "codebookmark.ai.model": {
-            "order": 4,
-            "type": "string",
-            "default": "",
-            "markdownDescription": "AI 模型名称。配置完成上方要素后，[点击这里验证 AI 连接](command:codebookmark.ai.testConnection)"
+            "description": "书签配置目录的绝对路径（必填，支持 ~ 和 %ENV%）"
           },
           "codebookmark.defaultExpandLevel": {
-            "order": 5,
+            "order": 2,
             "type": "integer",
             "default": 3,
             "minimum": 0,
             "description": "展开/折叠按钮的默认展开级别。设为 3 表示展开时显示前三级书签；设为 0 表示展开全部层级。"
           },
-          "codebookmark.ai.prompt": {
-            "order": 6,
-            "type": "string",
-            "editPresentation": "multilineText",
-            "default": "你是一个专业的代码审查与提炼助手。\n请主要【根据代码中的注释内容】来组织和生成书签。注意确保行号 (line) 必须准确地指向对应注释或相关代码所在的真实行号（0索引）。\n⚠️极其重要：你的计算常常会数错行号，因此你的 `content` 字段**必须**包含原封不动的、完整的一行真实代码或注释文本（原样摘录，不可修改删减）。插件底层会通过全文检索该 `content` 来进行二次纠错定位！\n关于层级嵌套 (subs)：请根据代码的实际逻辑结构决定书签是否并列或嵌套。**绝不要无脑把所有书签都嵌套在第一个书签之下**，应当有多个合理的平行的根级书签！\n输出必须是严格的JSON格式，包含一个 bookmarks 数组，必须完全遵循插件原生书签配置结构，不要输出额外解释，不要用Markdown包裹。\n字段说明：\n- id: 书签唯一ID，随机短字符串(如7位字母数字)\n- label: 书签的显示标签，提取或精简注释内容\n- path: 文件相对路径，请直接使用提示中提供的【当前文件路径】\n- line: 书签所在行号(0索引，即真实行号减1)\n- opened: 展开状态(如果该书签包含 subs 子节点，请务必设为 2 表示默认展开；没有子节点设为 0)\n- content: 必须是对应行的真实文本(含注释符)\n- subs: 子书签数组，表示逻辑上的从属关系，要合理分层\n- params: 位置参数，格式为 \"开始行,开始列,结束行,结束列\"\n示例：\n{\n  \"bookmarks\": [\n    {\n      \"id\": \"vp8kipq\",\n      \"label\": \"系统初始化配置\",\n      \"path\": \"example.ts\",\n      \"line\": 14,\n      \"opened\": 2,\n      \"content\": \"// 1. 系统初始化配置\",\n      \"subs\": [\n        {\n          \"id\": \"vp8kiXz\",\n          \"label\": \"加载环境变量\",\n          \"path\": \"example.ts\",\n          \"line\": 16,\n          \"opened\": 0,\n          \"content\": \"// 读取并解析.env\",\n          \"subs\": [],\n          \"params\": \"16,0,16,10\"\n        }\n      ],\n      \"params\": \"14,0,14,14\"\n    },\n    {\n      \"id\": \"ab12cde\",\n      \"label\": \"网络请求模块\",\n      \"path\": \"example.ts\",\n      \"line\": 30,\n      \"opened\": 0,\n      \"content\": \"// ================= 网络请求模块 =================\",\n      \"subs\": [],\n      \"params\": \"30,0,30,50\"\n    }\n  ]\n}",
-            "description": "AI 自动生成书签时的提示词（Prompt）"
-          },
-          "codebookmark.ai.optimizePrompt": {
-            "order": 7,
-            "type": "string",
-            "editPresentation": "multilineText",
-            "default": "你是一个专业的高级工程师。请根据提供的文件源码上下文，优化以下提供的现有书签的标签（label）。\n要求：\n1. 深刻理解源码逻辑，返回优化后的标签。\n2. 标签必须极其简练（尽量控制在15个字以内），直击核心逻辑。\n3. 不要包含特殊符号。\n4. 绝对不能修改或提议修改书签的其他任何配置部分。\n5. 返回格式必须是合法的纯 JSON 数组，对象字段仅包含 `id` 和 `new_label`，不包含任何 Markdown 标记。\n示例：\n[\n  { \"id\": \"vp8kipq\", \"new_label\": \"系统初始化\" }\n]",
-            "description": "AI 优化书签标签时的提示词（Prompt）"
-          },
           "codebookmark.autoSpace": {
-            "order": 8,
+            "order": 3,
             "type": "boolean",
             "default": true,
             "description": "是否在书签标签的中英文/数字之间自动插入空格，优化排版显示。"
           },
           "codebookmark.inlineLabel": {
-            "order": 9,
+            "order": 4,
             "type": "boolean",
             "default": true,
             "description": "在光标所在行的代码末尾显示书签标签的幽灵文本（类似 GitLens 的行内注释效果）。"
+          },
+          "codebookmark.AI.endpoint": {
+            "order": 5,
+            "type": "string",
+            "default": "",
+            "description": "AI 接口地址；远程服务应使用 HTTPS"
+          },
+          "codebookmark.AI.apiKey": {
+            "order": 6,
+            "type": "string",
+            "default": "",
+            "description": "AI 接口密钥（API Key）"
+          },
+          "codebookmark.AI.model": {
+            "order": 7,
+            "type": "string",
+            "default": "",
+            "markdownDescription": "AI 模型名称。配置 API Key 后可 [验证 AI 连接](command:codebookmark.ai.testConnection)"
+          },
+          "codebookmark.AI.assignIcons": {
+            "order": 8,
+            "type": "boolean",
+            "default": true,
+            "description": "让 AI 在生成书签后选择书签图标"
+          },
+          "codebookmark.AI.timeoutS": {
+            "order": 9,
+            "type": "integer",
+            "default": 60,
+            "minimum": 1,
+            "maximum": 600,
+            "description": "AI 请求超时时间（秒，范围 1–600）"
+          },
+          "codebookmark.AI.prompt": {
+            "order": 10,
+            "type": "string",
+            "editPresentation": "multilineText",
+            "default": "你是代码导航书签规划器。请先理解文件的整体职责，再识别值得反复跳转的模块入口、类/接口、函数/方法、生命周期阶段、状态转换、重要分支、错误处理、外部 I/O、性能关键点和高价值注释；忽略导入、样板代码、简单赋值、重复包装和琐碎语句。\n书签必须落在用户实际需要阅读的源码行上，标签说明该位置“为什么重要”，而不是重复代码文本。插件会像手动添加书签一样生成 ID、路径、创建时间、选区、上下文指纹和展开状态。\n\n请只返回严格 JSON，不要使用 Markdown。根对象格式为：\n{\"bookmarks\":[{\"label\":\"启动入口\",\"lineNumber\":12,\"anchor\":\"原始源码完整一行\",\"icon\":\"entry\",\"children\":[]},{\"label\":\"处理结果\",\"lineNumber\":24,\"anchor\":\"另一行原始源码\",\"children\":[]}]}\n\n字段约束：\n- label：准确、可扫描的短标签，优先使用“动作 + 对象”或“阶段 + 目的”，尽量不超过 15 个汉字。\n- lineNumber：输入源码左侧显示的 1 基行号。\n- anchor：对应行去掉“行号 | ”前缀后的原始完整文本，必须逐字摘录，不得改写；不要选择空行。\n- icon：可选。仅在书签语义与某个图标键高度匹配时输出；匹配不明确时省略，让插件使用默认图标。\n- children：只在子逻辑真实包含于父逻辑时嵌套；类/函数内部的阶段可以作为子项，同级逻辑保持并列，并保留多个合理的根节点。\n- 同一源码行最多生成一个书签，不要重复。\n- 不要为了凑数量生成书签；没有明确导航价值的位置应省略。\n\n不要输出 id、path、createdAt、line、collapsibleState、pinned、content、params、iconName、contextBefore、contextAfter 等持久化字段。",
+            "description": "AI 自动提取书签的系统提示词。"
+          },
+          "codebookmark.AI.optimizePrompt": {
+            "order": 11,
+            "type": "string",
+            "editPresentation": "multilineText",
+            "default": "你是代码导航书签编辑器。根据带行号源码以及现有书签的标签、行号和原文锚点，判断每个书签实际指向的模块、类、函数、阶段、分支或故障处理逻辑，并改进不准确、含糊或冗长的标签。\n标签要让用户在树视图中快速区分相邻逻辑，优先保留领域术语和关键动作，尽量不超过 15 个汉字；不得修改书签位置、层级、ID 或锚点。已经清晰的标签可以省略。\n\n只返回严格 JSON 数组，不要使用 Markdown。每项包含输入中已有的 id，以及需要更新的 new_label 或 icon：\n[{\"id\":\"已有 ID\",\"new_label\":\"优化后的标签\"},{\"id\":\"另一已有 ID\",\"icon\":\"error\"}]\n\n不要虚构 ID，同一 ID 最多返回一次；不要返回空标签、换行、位置描述或与代码无关的宣传语。",
+            "description": "AI 优化书签标签和语义图标时的提示词。"
           }
         }
       }
     ],
     "colors": [
       {
-        "id": "codebookmark.color.Todo",
-        "defaults": {
-          "dark": "#00ff00",
-          "light": "#00ff00"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.InProgress",
-        "defaults": {
-          "dark": "#ffff00",
-          "light": "#ffff00"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.Hold",
-        "defaults": {
-          "dark": "#009eff",
-          "light": "#009eff"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.Warning",
-        "defaults": {
-          "dark": "#ffff00",
-          "light": "#ffff00"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.Error",
-        "defaults": {
-          "dark": "#ff0000",
-          "light": "#ff0000"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.Done",
-        "defaults": {
-          "dark": "#00ff00",
-          "light": "#00ff00"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.NeedReview",
-        "defaults": {
-          "dark": "#009eff",
-          "light": "#009eff"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.NeedRemove",
-        "defaults": {
-          "dark": "#ff0000",
-          "light": "#ff0000"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.NeedImprove",
-        "defaults": {
-          "dark": "#ffff00",
-          "light": "#ffff00"
-        },
-        "description": "green"
-      },
-      {
-        "id": "codebookmark.color.Red",
-        "defaults": {
-          "dark": "#ff0000",
-          "light": "#ff0000"
-        },
-        "description": "red"
-      },
-      {
         "id": "codebookmark.color.Lvl1Orange",
         "defaults": {
           "dark": "#f76f53",
           "light": "#f76f53"
         },
-        "description": "Level 1 Bookmark Orange"
+        "description": "一级书签颜色"
       },
       {
         "id": "codebookmark.color.Lvl2Blue",
@@ -951,7 +1507,7 @@
           "dark": "#24acf2",
           "light": "#24acf2"
         },
-        "description": "Level 2 Bookmark Blue"
+        "description": "二级书签颜色"
       }
     ]
   }

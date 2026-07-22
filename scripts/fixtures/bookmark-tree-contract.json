@@ -1,0 +1,35 @@
+{
+  "id": "root-bookmark",
+  "createdAt": 1700000000000,
+  "label": "Root bookmark",
+  "path": "src/example.ts",
+  "collapsibleState": 2,
+  "pinned": true,
+  "content": "function example() {}",
+  "contextBefore": "// before",
+  "contextAfter": "// after",
+  "iconName": "status_idea_red.svg",
+  "isInvalid": false,
+  "subs": [
+    {
+      "id": "child-bookmark",
+      "createdAt": 1700000000001,
+      "label": "Child marker",
+      "path": "src/example.ts",
+      "collapsibleState": 0,
+      "pinned": false,
+      "content": "// TODO: child",
+      "iconName": "status_idea_yellow.svg",
+      "isInvalid": false,
+      "subs": [],
+      "params": "5,3,5,7",
+      "codeMarker": {
+        "type": "code-marker",
+        "marker": "TODO",
+        "generatedLabel": "TODO: child",
+        "iconCustomized": false
+      }
+    }
+  ],
+  "params": "2,1,4,8"
+}

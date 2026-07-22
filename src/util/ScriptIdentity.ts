@@ -1,0 +1,55 @@
+import * as crypto from 'crypto'
+import * as fs from 'fs'
+
+export interface SourceFingerprint {
+	sha256: string
+	size: number
+	device?: string
+	inode?: string
+}
+
+function createRandomIdentity(): string {
+	const hex = crypto.randomBytes(16).toString('hex')
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+export function createScriptId(): string {
+	return createRandomIdentity()
+}
+
+export function createBookmarkId(): string {
+	return createRandomIdentity()
+}
+
+export function createOperationId(): string {
+	return createRandomIdentity()
+}
+
+export function isScriptId(value: unknown): value is string {
+	return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
+export async function fingerprintSourceFile(filePath: string): Promise<SourceFingerprint | undefined> {
+	try {
+		const stat = await fs.promises.stat(filePath)
+		if (!stat.isFile()) return undefined
+		const device = stat.dev === undefined ? '' : String(stat.dev)
+		const inode = stat.ino === undefined ? '' : String(stat.ino)
+		const sha256 = await new Promise<string>((resolve, reject) => {
+			const hash = crypto.createHash('sha256')
+			const stream = fs.createReadStream(filePath)
+			stream.on('data', chunk => hash.update(chunk))
+			stream.on('end', () => resolve(hash.digest('hex')))
+			stream.on('error', reject)
+		})
+		const fingerprint: SourceFingerprint = {
+			sha256,
+			size: stat.size,
+			device: device || undefined,
+			inode: inode || undefined,
+		}
+		return fingerprint
+	} catch {
+		return undefined
+	}
+}
