@@ -450,3 +450,11 @@ npm run verify:icons
 ```
 
 发布前应通过 `npm run check:release`。扩展包只包含 `out`、`resources`、`README.md`、`CHANGELOG.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md` 与 `THIRD_PARTY_LICENSES`。推送与 GitHub Release、版本标签、VSIX 检查以及 Marketplace 发布步骤见 [RELEASING.md](RELEASING.md)。首次发布 Marketplace 前，需要先创建并确认 `realSilasYang` Publisher ID；若该 ID 不可用，应修改 `BasePackage.ts` 中的 `publisher` 并重新编译。项目源码使用 MIT 许可证，第三方图标与 Fuse.js 遵循各自许可证。
+
+# Star 历史趋势
+
+<div align="center">
+  <a href="https://www.star-history.com/#realSilasYang/CodeBookmark&amp;Date">
+    <img src="https://api.star-history.com/svg?repos=realSilasYang/CodeBookmark&amp;type=Date" alt="CodeBookmark Star 历史趋势图">
+  </a>
+</div>
