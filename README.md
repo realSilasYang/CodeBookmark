@@ -1,3 +1,26 @@
+<div align="center">
+  <img src="./resources/bookmark_logo.png" width="112" height="112" alt="CodeBookmark Logo">
+
+  <h1>代码书签（CodeBookmark）</h1>
+
+  <p><strong>可分层、可拖拽，并能随文件移动自动恢复的 VS Code 源码书签</strong></p>
+
+  <p>
+    <a href="https://github.com/realSilasYang/CodeBookmark/releases"><img src="https://img.shields.io/github/v/release/realSilasYang/CodeBookmark?style=flat-square&amp;label=version" alt="最新版本"></a>
+    <a href="https://github.com/realSilasYang/CodeBookmark/releases"><img src="https://img.shields.io/github/downloads/realSilasYang/CodeBookmark/total?style=flat-square&amp;label=downloads" alt="GitHub 下载量"></a>
+    <a href="https://github.com/realSilasYang/CodeBookmark/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/realSilasYang/CodeBookmark/ci.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="CI 状态"></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/github/license/realSilasYang/CodeBookmark?style=flat-square" alt="开源许可证"></a>
+    <a href="https://code.visualstudio.com/"><img src="https://img.shields.io/badge/VS%20Code-%E2%89%A51.125.0-007ACC?style=flat-square" alt="VS Code 版本要求"></a>
+  </p>
+
+  <p>
+    <a href="https://marketplace.visualstudio.com/items?itemName=realSilasYang.codebookmark">扩展市场</a> ·
+    <a href="#用户使用指南">用户指南</a> ·
+    <a href="https://github.com/realSilasYang/CodeBookmark/releases">版本发布</a> ·
+    <a href="https://github.com/realSilasYang/CodeBookmark/issues/new/choose">问题反馈</a>
+  </p>
+</div>
+
 代码书签（CodeBookmark）是一个面向源码导航的 VS Code 扩展：它把普通书签组织成可拖拽的层级树，在文件移动或改名后自动恢复绑定，并提供自动代码标记、导入导出、撤销重做、图标和 AI 辅助。
 
 ---
