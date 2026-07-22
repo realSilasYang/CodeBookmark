@@ -2,6 +2,12 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { CodeMarkerSyncLifecycle } = require('../out/providers/CodeMarkerSyncLifecycle')
 
+const workspacePath = path.resolve('workspace')
+
+function workspaceFile(...segments) {
+  return path.join(workspacePath, ...segments)
+}
+
 class FakeScheduling {
   constructor(events) {
     this.events = events
@@ -38,7 +44,7 @@ function createHarness(options = {}) {
   const lifecycle = new CodeMarkerSyncLifecycle(scheduling)
   let viewGeneration = options.viewGeneration ?? 1
   let loadingGeneration = options.loadingGeneration
-  let storageScope = options.storageScope ?? 'workspace:C:\\workspace'
+  let storageScope = options.storageScope ?? `workspace:${workspacePath}`
   let globs = options.globs ?? ['**/*.ts']
   let profilesInitialized = options.profilesInitialized ?? true
   let supported = options.supported ?? true
@@ -108,14 +114,14 @@ async function flushAsyncWork() {
 
 async function main() {
   const ignored = createHarness()
-  ignored.lifecycle.scheduleFileSync(uri('C:\\workspace\\virtual.ts', 'untitled'), false, ignored.port)
-  ignored.lifecycle.scheduleFileSync(uri('C:\\workspace\\excluded.ts'), false, ignored.port)
+  ignored.lifecycle.scheduleFileSync(uri(workspaceFile('virtual.ts'), 'untitled'), false, ignored.port)
+  ignored.lifecycle.scheduleFileSync(uri(workspaceFile('excluded.ts')), false, ignored.port)
   ignored.setSupported(false)
-  ignored.lifecycle.scheduleFileSync(uri('C:\\workspace\\unsupported.txt'), false, ignored.port)
+  ignored.lifecycle.scheduleFileSync(uri(workspaceFile('unsupported.txt')), false, ignored.port)
   assert.deepEqual(ignored.events, [])
 
   const debounced = createHarness()
-  const sourceUri = uri('C:\\workspace\\source.ts')
+  const sourceUri = uri(workspaceFile('source.ts'))
   debounced.lifecycle.scheduleFileSync(sourceUri, false, debounced.port)
   debounced.lifecycle.scheduleFileSync(sourceUri, false, debounced.port)
   assert.equal(debounced.scheduling.timers.length, 1)
@@ -149,8 +155,8 @@ async function main() {
   assert.equal(failedFileSync.events.at(-1), `fileFailure:${sourceUri.fsPath}:sync failed`)
 
   const cancelledPath = createHarness()
-  const nestedUri = uri('C:\\workspace\\folder\\nested.ts')
-  const otherUri = uri('C:\\workspace\\other.ts')
+  const nestedUri = uri(workspaceFile('folder', 'nested.ts'))
+  const otherUri = uri(workspaceFile('other.ts'))
   cancelledPath.lifecycle.scheduleFileSync(nestedUri, false, cancelledPath.port)
   cancelledPath.lifecycle.scheduleFileSync(otherUri, false, cancelledPath.port)
   cancelledPath.lifecycle.cancelPath(path.dirname(nestedUri.fsPath))
@@ -168,13 +174,14 @@ async function main() {
   assert.ok(watchers.events.includes('dispose:**/*.js'))
   assert.ok(watchers.events.includes('watchFailure:**/*.broken:watch failed'))
 
-  const workspace = createHarness({ storageScope: 'workspace:C:\\workspace' })
+  const workspaceScope = `workspace:${workspacePath}`
+  const workspace = createHarness({ storageScope: workspaceScope })
   workspace.lifecycle.scheduleWorkspaceScan(workspace.port)
   assert.equal(workspace.lifecycle.currentWorkspaceScanGeneration, 1)
   workspace.scheduling.runNext()
   await flushAsyncWork()
-  assert.ok(workspace.events.includes('workspaceScan:workspace:C:\\workspace:1'))
-  workspace.lifecycle.markWorkspaceScanCompleted('workspace:C:\\workspace')
+  assert.ok(workspace.events.includes(`workspaceScan:${workspaceScope}:1`))
+  workspace.lifecycle.markWorkspaceScanCompleted(workspaceScope)
   workspace.lifecycle.scheduleWorkspaceScan(workspace.port)
   assert.equal(workspace.scheduling.timers.length, 0)
   workspace.lifecycle.invalidateWorkspaceScanScope()
@@ -185,7 +192,7 @@ async function main() {
   loading.lifecycle.scheduleWorkspaceScan(loading.port)
   assert.equal(loading.scheduling.timers.length, 0)
   loading.setLoadingGeneration(undefined)
-  loading.setStorageScope('file:C:\\script.ts')
+  loading.setStorageScope(`file:${path.resolve('script.ts')}`)
   loading.lifecycle.scheduleWorkspaceScan(loading.port)
   assert.equal(loading.scheduling.timers.length, 0)
 
