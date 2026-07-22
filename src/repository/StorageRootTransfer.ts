@@ -11,6 +11,7 @@ import { atomicCopyFile, atomicWriteFile } from '../util/AtomicFile'
 import { mergeSerializedBookmarks } from '../models/SerializedBookmarkTree'
 
 const TRANSFER_STATE_FILE = '.storage-transfer.json'
+const OWNED_STORAGE_DIRECTORIES = ['scripts', 'scopes', '.script-relocations'] as const
 
 interface StorageRootTransferResult {
 	copiedFiles: number
@@ -123,11 +124,24 @@ async function listFiles(root: string): Promise<string[]> {
 			else if (entry.isFile()) files.push(absolute)
 		}
 	}
-	for (const directory of ['scripts', 'scopes', '.script-relocations']) {
+	for (const directory of OWNED_STORAGE_DIRECTORIES) {
 		const absolute = path.join(root, directory)
 		if (await exists(absolute)) await visit(absolute)
 	}
 	return files
+}
+
+async function removeSourceStorageEntries(root: string): Promise<void> {
+	// A storage root may share a parent with unrelated user files. Remove only entries owned by CodeBookmark.
+	for (const directory of OWNED_STORAGE_DIRECTORIES) {
+		await fs.promises.rm(path.join(root, directory), { recursive: true, force: true })
+	}
+	await fs.promises.rm(path.join(root, TRANSFER_STATE_FILE), { force: true })
+	for (const entry of await fs.promises.readdir(root, { withFileTypes: true })) {
+		if (entry.isFile() && entry.name.startsWith(`${TRANSFER_STATE_FILE}.`) && entry.name.endsWith('.tmp')) {
+			await fs.promises.rm(path.join(root, entry.name), { force: true })
+		}
+	}
 }
 
 async function writeJournal(targetRoot: string, value: unknown): Promise<void> {
@@ -250,5 +264,6 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		completedAt: new Date().toISOString(),
 		...result,
 	})
+	await removeSourceStorageEntries(source)
 	return result
 }

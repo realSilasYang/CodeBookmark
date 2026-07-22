@@ -10,6 +10,7 @@ async function run() {
   const commands = new Set(await vscode.commands.getCommands(true))
   for (const command of [
     'codebookmark.toggleBookmark',
+    'codebookmark.manageBookmarkConfigurations',
     'codebookmark.ai.openSettings',
     'codebookmark.ai.testConnection',
   ]) {

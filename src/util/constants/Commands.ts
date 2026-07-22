@@ -218,6 +218,13 @@ export class Commands {
 			'enablement': `!${Commands.varActiveFileHasBookmark}`,
 			"category": "Code Bookmarks"
 		},
+		manageBookmarkConfigurations: {
+			'command': Commands.nameExtension + '.manageBookmarkConfigurations',
+			'title': '$(files) 书签配置文件管理',
+			'icon': '$(files)',
+			'when': `${Commands.viewCodeBookmarkView}`,
+			"category": "Code Bookmarks"
+		},
 		aiGenerateAppend: {
 			'command': Commands.nameExtension + '.ai.generateAppend',
 			'title': '$(add) 追加',
@@ -485,8 +492,9 @@ export class Commands {
 		{ command: this.bookmarkCommands.clearInvalidBookmarks.command, group: "0_clear@1", when: this.bookmarkCommands.clearInvalidBookmarks.when },
 		{ command: this.bookmarkCommands.sort.command, group: "1_primary@1" },
 		{ submenu: this.exportSubmenuId, group: "1_primary@2" },
-		{ command: this.bookmarkCommands.openHelp.command, group: "2_secondary@1" },
-		{ command: this.bookmarkCommands.openSettings.command, group: "2_secondary@2" }
+		{ command: this.bookmarkCommands.manageBookmarkConfigurations.command, group: "2_secondary@1" },
+		{ command: this.bookmarkCommands.openHelp.command, group: "2_secondary@2" },
+		{ command: this.bookmarkCommands.openSettings.command, group: "2_secondary@3" }
 	]
 
 	static exportSubmenu_items = [

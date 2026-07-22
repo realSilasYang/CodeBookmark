@@ -141,7 +141,7 @@ async function main() {
   ])
   assert.equal(
     informationMessages.at(-1),
-    '书签存储目录转移完成：复制 3 个文件，合并 2 个文件，保留 1 个冲突副本；当前结果：共 0 个书签。来源目录已保留作为备份。',
+    '书签存储目录转移完成：复制 3 个文件，合并 2 个文件，保留 1 个冲突副本；当前结果：共 0 个书签。原目录中的书签配置已删除。',
   )
 
   const deferred = createHarness({ activeRoot: 'C:\\bookmarks\\source', deferredSave: true })
@@ -173,6 +173,30 @@ async function main() {
     'watcher:setup',
   ])
   assert.equal(errorMessages.at(-1), '书签存储目录转移失败，仍继续使用来源目录：copy failed')
+
+  errorMessages.length = 0
+  const postTransferFailure = createHarness({
+    activeRoot: 'C:\\bookmarks\\source',
+    rememberRoot: async () => { throw new Error('state write failed') },
+  })
+  await new BookmarkStoragePathWorkflowRunner().run(postTransferFailure.port)
+  assert.deepEqual(postTransferFailure.events.slice(4), [
+    'save:queue',
+    'transition:begin',
+    'save:flush:required',
+    'transfer:C:\\bookmarks\\source:C:\\bookmarks\\target',
+    'activate:C:\\bookmarks\\target',
+    'remember:C:\\bookmarks\\target',
+    'activate:C:\\bookmarks\\target',
+    'transition:cancel',
+    'save:queue',
+    'save:flush:normal',
+    'watcher:setup',
+  ])
+  assert.equal(
+    errorMessages.at(-1),
+    '书签存储目录已转移且原目录已清理，但完成切换时发生错误，已继续使用新目录：state write failed',
+  )
 
   const serialized = createHarness({ activeRoot: undefined })
   let releaseRemember

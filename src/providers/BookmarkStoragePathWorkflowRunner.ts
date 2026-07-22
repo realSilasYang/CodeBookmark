@@ -56,9 +56,11 @@ export class BookmarkStoragePathWorkflowRunner {
 
 		port.queueFullSave()
 		port.beginStorageTransition()
+		let transferCompleted = false
 		try {
 			await port.flushPendingSaves(true)
 			const result = await port.transferRoot(sourceRoot, targetRoot)
+			transferCompleted = true
 			port.activateRoot(targetRoot)
 			await port.rememberRoot(targetRoot)
 			if (port.finishStorageTransition()) {
@@ -69,15 +71,18 @@ export class BookmarkStoragePathWorkflowRunner {
 			await port.reloadActiveTab(true)
 			const summary = summarizeBookmarkTrees(port.bookmarks())
 			void vscode.window.showInformationMessage(
-				`书签存储目录转移完成：复制 ${result.copiedFiles} 个文件，合并 ${result.mergedFiles} 个文件${result.conflictFiles > 0 ? `，保留 ${result.conflictFiles} 个冲突副本` : ''}；当前结果：${formatBookmarkLevelSummary(summary)}。来源目录已保留作为备份。`,
+				`书签存储目录转移完成：复制 ${result.copiedFiles} 个文件，合并 ${result.mergedFiles} 个文件${result.conflictFiles > 0 ? `，保留 ${result.conflictFiles} 个冲突副本` : ''}；当前结果：${formatBookmarkLevelSummary(summary)}。原目录中的书签配置已删除。`,
 			)
 		} catch (error) {
-			port.activateRoot(sourceRoot)
+			port.activateRoot(transferCompleted ? targetRoot : sourceRoot)
 			port.cancelStorageTransition()
 			port.queueFullSave()
 			await port.flushPendingSaves()
 			await port.setupConfigWatcher()
-			void vscode.window.showErrorMessage(`书签存储目录转移失败，仍继续使用来源目录：${errorMessage(error)}`)
+			const message = transferCompleted
+				? `书签存储目录已转移且原目录已清理，但完成切换时发生错误，已继续使用新目录：${errorMessage(error)}`
+				: `书签存储目录转移失败，仍继续使用来源目录：${errorMessage(error)}`
+			void vscode.window.showErrorMessage(message)
 		}
 	}
 }

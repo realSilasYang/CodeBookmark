@@ -8,6 +8,11 @@ import { fileChangeFingerprints } from '../util/FileChangeFingerprint'
 import { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
 import { bookmarkRepository, type ScriptRelocationChange } from '../repository/BookmarkRepository'
+import {
+	listBookmarkConfigurationFiles,
+	type BookmarkConfigurationDeleteRequest,
+	type BookmarkConfigurationEntry,
+} from '../repository/BookmarkConfigurationCatalog'
 import fs = require('fs')
 import * as path from 'path'
 import { ContextBookmark, isBookmarkItemContext } from '../util/ContextValue'
@@ -71,6 +76,7 @@ import {
 	type AIFolderWorkflowTarget,
 } from './AIFolderWorkflowRunner'
 import { BookmarkIdleViewCoordinator } from './BookmarkIdleViewCoordinator'
+import { BookmarkConfigurationManagerWebview } from './BookmarkConfigurationManagerWebview'
 import {
 	runOptimizeSelectedBookmarks,
 	type AISelectedBookmarksWorkflowPort,
@@ -96,6 +102,9 @@ import {
 	runDeleteBookmarks,
 	type BookmarkDeletionWorkflowPort,
 } from './BookmarkDeletionWorkflowRunner'
+import {
+	formatBookmarkLevelSummary,
+} from '../util/BookmarkStatistics'
 import {
 	BOOKMARK_TREE_MIME_TYPE,
 	publishExpandCollapseContext,
@@ -1105,6 +1114,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			showTransferFailure: error => {
 				void vscode.window.showErrorMessage(`目标书签存储目录尚未启用，已继续使用来源目录：${errorMessage(error)}`)
 			},
+			reportPostTransferFailure: error => logger.error(`书签存储目录已转移，但记录新目录失败: ${errorMessage(error)}`),
+			showPostTransferFailure: error => {
+				void vscode.window.showErrorMessage(`书签存储目录已转移且原目录已清理，但记录新目录失败；当前继续使用新目录：${errorMessage(error)}`)
+			},
 		})
 	}
 
@@ -1695,6 +1708,78 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	async importBookmarkConfiguration(): Promise<void> {
 		return runImportBookmarkConfiguration(this.bookmarkImportWorkflowPort())
+	}
+
+	openBookmarkConfigurationManager(): void {
+		BookmarkConfigurationManagerWebview.createOrShow(this.context, {
+			load: async () => {
+				await this.flushPendingSaves(true)
+				const storageRoot = storageRootState.root
+				if (!storageRoot) throw new Error('尚未配置书签存储目录')
+				return {
+					storageRoot,
+					entries: await listBookmarkConfigurationFiles(storageRoot),
+				}
+			},
+			delete: requests => this.deleteBookmarkConfigurationFiles(requests),
+			openSource: entry => this.openConfigurationSource(entry),
+			revealConfiguration: entry => this.revealBookmarkConfiguration(entry),
+			revealStorageRoot: async storageRoot => {
+				await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(storageRoot))
+			},
+		})
+	}
+
+	private async deleteBookmarkConfigurationFiles(
+		requests: readonly BookmarkConfigurationDeleteRequest[],
+	): Promise<void> {
+		const storageRoot = storageRootState.root
+		if (!storageRoot) throw new Error('尚未配置书签存储目录')
+
+		this.saveCoordinator.beginStorageTransition()
+		try {
+			await this.flushPendingSaves(true)
+			const result = await bookmarkRepository.deleteBookmarkConfigurationFiles(requests)
+			if (this.saveCoordinator.finishStorageTransition()) {
+				this.saveAllBookmarksToFile()
+				await this.flushPendingSaves(true)
+			}
+			await this.reloadActiveTab(true)
+			const skipped = result.changedFiles + result.missingFiles + result.failedFiles
+			const deletedScripts = result.deletedEntries.filter(entry => entry.kind === 'script').length
+			const deletedWorkspaceOrders = result.deletedEntries.filter(entry => entry.kind === 'workspaceOrder').length
+			const deletedTransferJournals = result.deletedEntries.filter(entry => entry.kind === 'transferJournal').length
+			const deletedKinds = [
+				deletedScripts > 0 ? `书签配置 ${deletedScripts} 条（${formatBookmarkLevelSummary(result.bookmarkSummary)}）` : '',
+				deletedWorkspaceOrders > 0 ? `工作区排序记录 ${deletedWorkspaceOrders} 条` : '',
+				deletedTransferJournals > 0 ? `存储迁移记录 ${deletedTransferJournals} 条` : '',
+			].filter(Boolean).join('；') || '无'
+			const message = `书签存储记录清理完成：请求 ${result.requestedFiles} 条，清理 ${result.deletedFiles} 条，跳过 ${skipped} 条；${deletedKinds}。`
+			if (skipped > 0) void vscode.window.showWarningMessage(message)
+			else void vscode.window.showInformationMessage(message)
+		} catch (error) {
+			this.saveCoordinator.cancelStorageTransition()
+			this.saveAllBookmarksToFile()
+			await this.flushPendingSaves()
+			throw error
+		}
+	}
+
+	private async openConfigurationSource(entry: BookmarkConfigurationEntry): Promise<void> {
+		if (entry.kind !== 'script') {
+			void vscode.window.showInformationMessage('这条记录不对应脚本，不能打开脚本。')
+			return
+		}
+		if (!entry.scriptPath || !entry.sourceExists) {
+			void vscode.window.showWarningMessage('对应脚本不存在，无法打开。')
+			return
+		}
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(entry.scriptPath))
+		await vscode.window.showTextDocument(document, { preview: true })
+	}
+
+	private async revealBookmarkConfiguration(entry: BookmarkConfigurationEntry): Promise<void> {
+		await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(entry.filePath))
 	}
 
 	async onSearchInFile() {

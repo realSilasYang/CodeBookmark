@@ -11,6 +11,8 @@ interface StorageRootActivationPort {
 	warnRememberedFallback(): void
 	reportTransferFailure(error: unknown): void
 	showTransferFailure(error: unknown): void
+	reportPostTransferFailure(error: unknown): void
+	showPostTransferFailure(error: unknown): void
 }
 
 export async function ensureStorageRootActive(port: StorageRootActivationPort): Promise<boolean> {
@@ -26,9 +28,11 @@ export async function ensureStorageRootActive(port: StorageRootActivationPort): 
 
 	const configuredRoot = port.configuredRoot()
 	const previousRoot = port.activeRoot() ?? rememberedRoot
+	let transferCompleted = false
 	if (previousRoot && !port.sameRoot(previousRoot, configuredRoot) && port.rootExists(previousRoot)) {
 		try {
 			await port.transferRoot(previousRoot, configuredRoot)
+			transferCompleted = true
 		} catch (error) {
 			port.activateRoot(previousRoot)
 			port.reportTransferFailure(error)
@@ -38,6 +42,12 @@ export async function ensureStorageRootActive(port: StorageRootActivationPort): 
 	}
 
 	port.activateRoot(configuredRoot)
-	await port.rememberRoot(configuredRoot)
+	try {
+		await port.rememberRoot(configuredRoot)
+	} catch (error) {
+		if (!transferCompleted) throw error
+		port.reportPostTransferFailure(error)
+		port.showPostTransferFailure(error)
+	}
 	return true
 }

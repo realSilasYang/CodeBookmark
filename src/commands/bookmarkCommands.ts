@@ -92,6 +92,8 @@ export function bookmarkCommands(
 				vscode.window.showErrorMessage(`导入书签配置失败：${error instanceof Error ? error.message : String(error)}`)
 			}
 		}))
+	register(Commands.bookmarkCommands.manageBookmarkConfigurations.command,
+		requireStorage(() => provider.openBookmarkConfigurationManager()))
 	register(Commands.bookmarkCommands.searchInFile.command, withEditor(() => provider.onSearchInFile()))
 	register(Commands.bookmarkCommands.sort.command, requireStorage(() => provider.onSort()))
 	register(Commands.bookmarkCommands.undo.command, requireStorage(() => provider.undo()))

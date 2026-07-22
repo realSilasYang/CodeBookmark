@@ -41,6 +41,8 @@ function createHarness(overrides = {}) {
     warnRememberedFallback: () => events.push('warnFallback'),
     reportTransferFailure: error => events.push(`reportFailure:${String(error)}`),
     showTransferFailure: error => events.push(`showFailure:${String(error)}`),
+    reportPostTransferFailure: error => events.push(`reportPostFailure:${String(error)}`),
+    showPostTransferFailure: error => events.push(`showPostFailure:${String(error)}`),
   }
   return { events, port }
 }
@@ -130,6 +132,23 @@ async function main() {
     `showFailure:${String(transferError)}`,
   ])
   assert.equal(harness.events.includes('remember:target'), false)
+
+  const postTransferRememberError = new Error('expected post-transfer remember failure')
+  harness = createHarness({
+    activeRoot: 'source',
+    existingRoots: ['source'],
+    rememberError: postTransferRememberError,
+  })
+  assert.equal(await ensureStorageRootActive(harness.port), true)
+  assert.deepEqual(harness.events.slice(4), [
+    'same:source:target',
+    'exists:source',
+    'transfer:source:target',
+    'activate:target',
+    'remember:target',
+    `reportPostFailure:${String(postTransferRememberError)}`,
+    `showPostFailure:${String(postTransferRememberError)}`,
+  ])
 
   const rememberError = new Error('expected remember failure')
   harness = createHarness({ rememberError })

@@ -31,6 +31,11 @@ import { inferDirectoryRelocation, planScriptRelocation } from './ScriptRelocati
 import { recoverScriptRelocations } from './ScriptRelocationRecovery'
 import { WorkspaceOrderStore } from './WorkspaceOrderStore'
 import {
+	removeBookmarkConfigurationFiles,
+	type BookmarkConfigurationDeleteRequest,
+	type BookmarkConfigurationDeletionResult,
+} from './BookmarkConfigurationCatalog'
+import {
 	formatBookmarkLevelSummary,
 	mergeBookmarkLevelSummaries,
 	summarizeBookmarkTrees,
@@ -1102,6 +1107,32 @@ class CodeBookmarksRepository {
 		dirtyPaths?: readonly string[],
 	): Promise<boolean> {
 		return this.enqueueRelocation(() => this.saveBookmarksSnapshot(bookmarks, activePaths, storageRootOverride, dirtyPaths))
+	}
+
+	async deleteBookmarkConfigurationFiles(
+		requests: readonly BookmarkConfigurationDeleteRequest[],
+	): Promise<BookmarkConfigurationDeletionResult> {
+		return this.enqueueRelocation(async () => {
+			const storageRoot = this.storageRoot()
+			if (!storageRoot) throw new Error('尚未配置书签存储目录')
+			const result = await removeBookmarkConfigurationFiles(storageRoot, requests, {
+				deleteFile: filePath => this.deleteFile(filePath),
+				deleteEmptyDirectory: directoryPath => fs.promises.rmdir(directoryPath),
+			})
+			for (const entry of result.deletedEntries) {
+				if (entry.role !== 'primary' || !entry.scriptId) continue
+				this.removeIndexEntry(entry.scriptId)
+				if (entry.scriptPath) {
+					try {
+						await this.removeOrderPath(entry.scriptPath)
+					} catch (error) {
+						logger.error(`删除书签配置后清理工作区顺序失败（${entry.scriptPath}）: ${error}`)
+					}
+				}
+			}
+			if (result.deletedFiles > 0) this.indexReady = false
+			return result
+		})
 	}
 
 	private async saveBookmarksSnapshot(

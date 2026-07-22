@@ -1,8 +1,8 @@
 export const basePackage = {
 	"name": "codebookmark",
 	"displayName": "CodeBookmark",
-	"description": "为源码位置创建分层书签，并提供导航、排序、拖拽、撤销和 AI 辅助。",
-	"version": "1.0.1",
+	"description": "让书签通过粘性引擎持续绑定脚本并跟随代码，支持本地保存、AI 辅助与丰富的书签图标。",
+	"version": "1.1.0",
 	"publisher": "realSilasYang",
 	"author": "阳熙来",
 	"private": true,
@@ -18,7 +18,10 @@ export const basePackage = {
 	"keywords": [
 		"bookmark",
 		"code-navigation",
-		"hierarchy",
+		"sticky-bookmark",
+		"file-tracking",
+		"local-storage",
+		"bookmark-icons",
 		"ai",
 		"vscode"
 	],

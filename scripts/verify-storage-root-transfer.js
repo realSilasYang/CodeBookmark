@@ -79,12 +79,19 @@ async function main() {
   fs.writeFileSync(path.join(sourceScope, '_workspace_order.json'), JSON.stringify(['src/a.ts', 'src/b.ts']))
   fs.writeFileSync(path.join(targetScope, '_workspace_order.json'), JSON.stringify(['src/b.ts', 'src/c.ts']))
   fs.writeFileSync(path.join(source, 'unrelated-root-config.json'), '{}')
+  fs.writeFileSync(path.join(source, '.storage-transfer.json'), '{}')
+  fs.writeFileSync(path.join(source, '.storage-transfer.json.123.456.tmp'), 'stale journal temporary file')
   fs.writeFileSync(path.join(sourceWorkspace, `${copiedFile}.transfer-base`), 'old transfer backup')
 
   try {
     const first = await transferStorageRoot(source, target)
     assert.deepEqual(first, { copiedFiles: 1, mergedFiles: 2, conflictFiles: 0 })
-    assert.equal(fs.existsSync(path.join(sourceWorkspace, sharedFile)), true)
+    assert.equal(fs.existsSync(path.join(source, 'scripts')), false)
+    assert.equal(fs.existsSync(path.join(source, 'scopes')), false)
+    assert.equal(fs.existsSync(path.join(source, '.script-relocations')), false)
+    assert.equal(fs.existsSync(path.join(source, '.storage-transfer.json')), false)
+    assert.equal(fs.existsSync(path.join(source, '.storage-transfer.json.123.456.tmp')), false)
+    assert.equal(fs.existsSync(path.join(source, 'unrelated-root-config.json')), true)
     assert.equal(fs.existsSync(path.join(targetWorkspace, copiedFile)), true)
     assert.equal(fs.existsSync(path.join(target, 'unrelated-root-config.json')), false)
 
@@ -143,6 +150,16 @@ async function main() {
     assert.equal(resumedState.status, 'complete')
     assert.equal(resumedState.startedAt, '2026-01-01T00:00:00.000Z')
     assert.equal(fs.existsSync(path.join(resumeTarget, 'scripts', 'remaining.json')), true)
+    assert.equal(fs.existsSync(path.join(resumeSource, 'scripts')), false)
+
+    const failedSource = path.join(sandbox, 'failed-source')
+    const failedTarget = path.join(sandbox, 'failed-target')
+    const failedSourceFile = path.join(failedSource, 'scripts', 'blocked.json')
+    fs.mkdirSync(path.dirname(failedSourceFile), { recursive: true })
+    fs.mkdirSync(path.join(failedTarget, 'scripts', 'blocked.json'), { recursive: true })
+    fs.writeFileSync(failedSourceFile, '{"source":true}')
+    await assert.rejects(transferStorageRoot(failedSource, failedTarget))
+    assert.equal(fs.existsSync(failedSourceFile), true)
 
     await assert.rejects(
       transferStorageRoot(source, path.join(source, 'nested')),

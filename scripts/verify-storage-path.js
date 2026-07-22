@@ -54,6 +54,7 @@ assert.match(activation, /transferRoot: async \(source, target\) => \{ await tra
 assert.match(activation, /rememberRoot: async root => \{ await this\.context\.globalState\.update\(LAST_STORAGE_ROOT_KEY, root\) \}/)
 assert.match(activation, /当前书签存储路径无效，已继续使用上次验证成功的目录/)
 assert.match(activation, /目标书签存储目录尚未启用，已继续使用来源目录/)
+assert.match(activation, /书签存储目录已转移且原目录已清理，但记录新目录失败/)
 assert.doesNotMatch(activation, /if \(!ExtensionConfig\.ensureGlobalStoragePathConfigured\(\)\)/)
 assert.match(rootActivator, /const rememberedRoot = port\.rememberedRoot\(\)/)
 assert.match(rootActivator, /if \(!port\.ensureConfigured\(\)\)/)
@@ -74,7 +75,7 @@ assert.ok(transitionStart >= 0
 	&& flushSource > markTransition
 	&& transfer > flushSource
 	&& activateTarget > transfer)
-assert.match(storagePathWorkflow.slice(transitionStart), /port\.activateRoot\(sourceRoot\)/)
+assert.match(storagePathWorkflow.slice(transitionStart), /port\.activateRoot\(transferCompleted \? targetRoot : sourceRoot\)/)
 assert.match(storagePathWorkflow.slice(transitionStart), /port\.finishStorageTransition\(\)/)
 assert.match(storagePathWorkflow.slice(transitionStart), /port\.cancelStorageTransition\(\)/)
 assert.match(provider, /return this\.storagePathWorkflow\.run\(this\.bookmarkStoragePathWorkflowPort\(\)\)/)
