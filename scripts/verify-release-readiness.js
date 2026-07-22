@@ -24,6 +24,15 @@ assert.equal(manifest.icon, 'resources/bookmark_logo.png')
 assert.deepEqual(manifest.galleryBanner, { color: '#252526', theme: 'dark' })
 assert.equal(manifest.pricing, 'Free')
 assert.ok(manifest.keywords.length <= 30)
+assert.ok(manifest.keywords.every(keyword => typeof keyword === 'string' && keyword === keyword.trim() && keyword.length > 0))
+assert.equal(
+  new Set(manifest.keywords.map(keyword => keyword.toLocaleLowerCase())).size,
+  manifest.keywords.length,
+  'Marketplace keywords must be unique'
+)
+for (const keyword of ['bookmark', 'bookmarks', 'code bookmark', '书签', '代码书签', '标签', '代码标签']) {
+  assert.ok(manifest.keywords.includes(keyword), `Marketplace keyword '${keyword}' is required for discoverability`)
+}
 assert.deepEqual(manifest.dependencies, {})
 assert.equal(lockfile.version, manifest.version)
 assert.equal(lockfile.packages[''].version, manifest.version)

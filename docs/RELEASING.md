@@ -38,7 +38,7 @@ Marketplace 上的扩展身份已经固定为 Publisher `realSilasYang` 下的 `
 ```bash
 npm ci
 npm run check:release
-npm run package:vsix -- --out codebookmark-1.1.0.vsix
+npm run package:vsix -- --out codebookmark-1.1.1.vsix
 ```
 
 `package:list` 和 VSIX 打包会使用固定版本的 `@vscode/vsce`。包内只应出现 JavaScript 编译输出、运行时资源、README、CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。项目没有原生依赖，生成的 VSIX 是跨平台通用包，不需要 `--target`。
@@ -50,8 +50,8 @@ npm run package:vsix -- --out codebookmark-1.1.0.vsix
 提交发布版本后创建与清单版本完全一致的标签：
 
 ```bash
-git tag -a v1.1.0 -m "CodeBookmark 1.1.0"
-git push origin v1.1.0
+git tag -a v1.1.1 -m "CodeBookmark 1.1.1"
+git push origin v1.1.1
 ```
 
 `.github/workflows/release.yml` 会串行执行全量验证、扩展宿主集成测试、标签与版本核对和 VSIX 打包，再通过 GitHub OIDC 登录 Microsoft Entra ID，使用 `vsce publish --azure-credential --skip-duplicate` 把同一个 VSIX 发布到 Marketplace，最后创建 GitHub Release。工作流会下载 Marketplace 线上包，与本次构建产物进行 SHA-256 比对，只有逐字节一致才继续。GitHub Release 已存在时会补齐或替换同名 VSIX，因此失败后可以安全重跑；全局 `release` 并发组会阻止多个版本同时发布。不要在失败的工作流上手工补发未经验证的包。

@@ -56,7 +56,7 @@
 从 GitHub Releases 下载发布的 `.vsix` 文件，在 VS Code 中执行“扩展：从 VSIX 安装…”，或在终端运行：
 
 ```bash
-code --install-extension codebookmark-1.1.0.vsix
+code --install-extension codebookmark-1.1.1.vsix
 ```
 
 ### 🧑‍💻 从源码运行
