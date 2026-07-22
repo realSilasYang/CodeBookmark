@@ -42,7 +42,6 @@ export const basePackage = {
 		"README.md",
 		"CHANGELOG.md",
 		"LICENSE",
-		"SUPPORT.md",
 		"THIRD_PARTY_NOTICES.md",
 		"THIRD_PARTY_LICENSES"
 	],

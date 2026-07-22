@@ -14,7 +14,6 @@ assert.deepEqual(manifest.files, [
   'README.md',
   'CHANGELOG.md',
   'LICENSE',
-  'SUPPORT.md',
   'THIRD_PARTY_NOTICES.md',
   'THIRD_PARTY_LICENSES',
 ])
@@ -22,7 +21,6 @@ for (const releaseDocument of [
   'README.md',
   'CHANGELOG.md',
   'LICENSE',
-  'SUPPORT.md',
   'THIRD_PARTY_NOTICES.md',
   path.join('THIRD_PARTY_LICENSES', 'Apache-2.0.txt'),
   path.join('THIRD_PARTY_LICENSES', 'CC-BY-4.0.txt'),

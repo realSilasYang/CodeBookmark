@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release
@@ -17,6 +18,7 @@ jobs:
     name: Test, publish Marketplace, and create GitHub release
     runs-on: windows-latest
     timeout-minutes: 35
+    environment: marketplace-release
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -30,7 +32,9 @@ jobs:
         shell: pwsh
         env:
           CONFIRMED_PUBLISHER: ${{ vars.VSCODE_MARKETPLACE_PUBLISHER }}
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CONFIRMED_PUBLISHER)) {
             throw "Set the VSCODE_MARKETPLACE_PUBLISHER repository variable after registering the immutable Publisher ID."
@@ -39,8 +43,16 @@ jobs:
           if ($env:CONFIRMED_PUBLISHER -cne $manifestPublisher) {
             throw "Confirmed publisher '$env:CONFIRMED_PUBLISHER' does not match package publisher '$manifestPublisher'."
           }
-          if ([string]::IsNullOrWhiteSpace($env:VSCE_PAT)) {
-            throw "Set the VSCE_PAT repository secret before publishing a release tag."
+          foreach ($variableName in @('AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID')) {
+            $variableValue = [Environment]::GetEnvironmentVariable($variableName)
+            if ([string]::IsNullOrWhiteSpace($variableValue)) {
+              throw "Set the $variableName repository variable before publishing a release tag."
+            }
+            try {
+              [void][Guid]::Parse($variableValue)
+            } catch {
+              throw "$variableName must be a valid GUID."
+            }
           }
       - name: Validate tag and build VSIX
         shell: pwsh
@@ -50,13 +62,18 @@ jobs:
             throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
           }
           npm run package:vsix -- --out "codebookmark-$version.vsix"
+      - name: Authenticate to Microsoft Entra ID
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Publish to VS Code Marketplace
         shell: pwsh
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           $version = node -p "require('./package.json').version"
           npx --yes @vscode/vsce@3.9.2 publish `
+            --azure-credential `
             --packagePath "codebookmark-$version.vsix" `
             --skip-duplicate
       - name: Verify Marketplace package matches VSIX

@@ -2,7 +2,7 @@
 
 感谢你为 CodeBookmark 提交问题、文档或代码改进。
 
-参与本项目即表示同意遵守 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。提交普通缺陷、功能建议或改进建议时，请使用仓库提供的 Issue 模板；使用问题请先阅读 [SUPPORT.md](SUPPORT.md)。尚未修复的安全漏洞必须按照 [SECURITY.md](SECURITY.md) 私密报告。
+提交普通缺陷、功能建议或改进建议时，请使用仓库提供的 Issue 模板；使用问题请先阅读 [SUPPORT.md](SUPPORT.md)。尚未修复的安全漏洞必须按照 [SECURITY.md](SECURITY.md) 私密报告。
 
 ## 开发环境
 
@@ -33,7 +33,7 @@ npm audit --audit-level=high
 - 新增行为应补充对应的 `scripts/verify-*.js`；涉及 VS Code 生命周期时再补集成测试。
 - 新增第三方资源前必须核对再分发许可，并更新 `THIRD_PARTY_NOTICES.md`。
 - 不要提交 API Key、用户路径、书签数据、构建产物或本地工具配置。
-- 发布与版本维护流程见 `RELEASING.md`；普通 Pull Request 不应创建版本标签或修改已发布版本。
+- 发布与版本维护流程见 [发布指南](../docs/RELEASING.md)；普通 Pull Request 不应创建版本标签或修改已发布版本。
 
 ## 提交与 Pull Request
 
