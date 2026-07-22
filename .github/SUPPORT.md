@@ -2,7 +2,7 @@
 
 ## 使用问题
 
-请先阅读 README 的用户使用指南，特别是首次设置、书签存储路径、文件移动恢复、导入导出和 AI 配置章节。
+请先阅读 [README 用户使用指南](../README.md#用户使用指南)，特别是首次设置、书签存储路径、文件移动恢复、导入导出和 AI 配置章节。
 
 仍无法解决时，可以创建普通 Issue，并提供 CodeBookmark 版本、VS Code 版本、操作系统、最短复现步骤和经过脱敏的日志。请勿提交真实 API Key、完整书签配置、私人源码或可识别个人身份的本机路径。
 
@@ -12,10 +12,10 @@
 - 当前尚不存在的新能力或工作流使用“功能建议”模板。
 - 对已有功能、行为或开发设计的优化使用“改进建议”模板。
 - 三类模板均提供简体中文和英文版本。
-- 开发与 Pull Request 要求见 `CONTRIBUTING.md`。
+- 开发与 Pull Request 要求见 [贡献指南](CONTRIBUTING.md)。
 
 ## 安全问题
 
-尚未修复的安全漏洞不得创建公开 Issue。请按照 `SECURITY.md` 使用 GitHub Private vulnerability reporting 私密提交。
+尚未修复的安全漏洞不得创建公开 Issue。请按照 [安全策略](SECURITY.md) 使用 GitHub Private vulnerability reporting 私密提交。
 
 本项目目前由维护者在可用时间内提供社区支持，不承诺商业服务等级或固定响应时限。

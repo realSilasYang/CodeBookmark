@@ -6,7 +6,7 @@
 
 ## 报告漏洞
 
-请不要在公开 Issue 中披露尚未修复的漏洞。请使用 GitHub 仓库的 Private vulnerability reporting 提交复现步骤、受影响版本、影响范围和建议修复方式。
+请不要在公开 Issue 中披露尚未修复的漏洞。请使用 GitHub 仓库的 [Private vulnerability reporting](https://github.com/realSilasYang/CodeBookmark/security/advisories/new) 提交复现步骤、受影响版本、影响范围和建议修复方式。
 
 维护者确认后会评估影响、准备修复，并在发布安全版本后协调公开披露。一般功能缺陷和不包含安全影响的崩溃可以直接提交公开 Issue。
 

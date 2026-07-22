@@ -1,0 +1,57 @@
+name: Resolve Marketplace Identity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  resolve:
+    name: Resolve managed identity resource ID
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: marketplace-release
+    steps:
+      - name: Validate Microsoft Entra ID configuration
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          foreach ($variableName in @('AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID')) {
+            $variableValue = [Environment]::GetEnvironmentVariable($variableName)
+            if ([string]::IsNullOrWhiteSpace($variableValue)) {
+              throw "Set the $variableName repository variable before resolving the Marketplace identity."
+            }
+            try {
+              [void][Guid]::Parse($variableValue)
+            } catch {
+              throw "$variableName must be a valid GUID."
+            }
+          }
+      - name: Authenticate to Microsoft Entra ID
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Resolve Marketplace identity resource ID
+        shell: pwsh
+        run: |
+          $profile = az rest `
+            --method get `
+            --uri https://app.vssps.visualstudio.com/_apis/profile/profiles/me `
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace($profile.id)) {
+            throw "Azure DevOps Profile API did not return the managed identity resource ID."
+          }
+          @(
+            '## Marketplace identity resource ID'
+            ''
+            'Add this non-secret ID to Publisher `realSilasYang` as a `Contributor`:'
+            ''
+            ('`{0}`' -f $profile.id)
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY
