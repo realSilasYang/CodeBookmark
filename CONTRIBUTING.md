@@ -2,7 +2,7 @@
 
 感谢你为 CodeBookmark 提交问题、文档或代码改进。
 
-参与本项目即表示同意遵守 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。提交普通缺陷或功能建议时，请使用仓库提供的 Issue 模板；使用问题请先阅读 [SUPPORT.md](SUPPORT.md)。尚未修复的安全漏洞必须按照 [SECURITY.md](SECURITY.md) 私密报告。
+参与本项目即表示同意遵守 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。提交普通缺陷、功能建议或改进建议时，请使用仓库提供的 Issue 模板；使用问题请先阅读 [SUPPORT.md](SUPPORT.md)。尚未修复的安全漏洞必须按照 [SECURITY.md](SECURITY.md) 私密报告。
 
 ## 开发环境
 

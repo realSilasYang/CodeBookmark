@@ -59,8 +59,12 @@ const requiredSourceDocuments = [
   'THIRD_PARTY_NOTICES.md',
   path.join('.github', 'PULL_REQUEST_TEMPLATE.md'),
   path.join('.github', 'dependabot.yml'),
-  path.join('.github', 'ISSUE_TEMPLATE', 'bug-report.yml'),
-  path.join('.github', 'ISSUE_TEMPLATE', 'feature-request.yml'),
+  path.join('.github', 'ISSUE_TEMPLATE', 'bug-report--zh-cn.md'),
+  path.join('.github', 'ISSUE_TEMPLATE', 'bug-report.md'),
+  path.join('.github', 'ISSUE_TEMPLATE', 'feature-request--zh-cn.md'),
+  path.join('.github', 'ISSUE_TEMPLATE', 'feature-request.md'),
+  path.join('.github', 'ISSUE_TEMPLATE', 'improvement--zh-cn.md'),
+  path.join('.github', 'ISSUE_TEMPLATE', 'improvement.md'),
   path.join('.github', 'ISSUE_TEMPLATE', 'config.yml'),
   path.join('.github', 'workflows', 'ci.yml'),
   path.join('.github', 'workflows', 'release.yml'),
@@ -78,6 +82,27 @@ for (const relativePath of [...requiredSourceDocuments, ...requiredLicenseFiles]
   assert.equal(fs.statSync(absolutePath).isFile(), true, `${relativePath} must be a file`)
   assert.ok(fs.statSync(absolutePath).size > 0, `${relativePath} must not be empty`)
 }
+
+const issueTemplateContracts = [
+  ['bug-report--zh-cn.md', '[BUG]', 'bug'],
+  ['bug-report.md', '[BUG]', 'bug'],
+  ['feature-request--zh-cn.md', '[FEATURE]', 'enhancement'],
+  ['feature-request.md', '[FEATURE]', 'enhancement'],
+  ['improvement--zh-cn.md', '[IMPROVEMENT]', 'enhancement'],
+  ['improvement.md', '[IMPROVEMENT]', 'enhancement'],
+]
+for (const [fileName, title, label] of issueTemplateContracts) {
+  const content = read(path.join('.github', 'ISSUE_TEMPLATE', fileName))
+  const frontMatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  assert.ok(frontMatter, `${fileName} must contain YAML front matter`)
+  assert.match(frontMatter[1], /^name: .+$/m)
+  assert.match(frontMatter[1], /^about: .+$/m)
+  assert.ok(frontMatter[1].split(/\r?\n/).includes(`title: '${title} '`), `${fileName} must use the ${title} title prefix`)
+  assert.ok(frontMatter[1].split(/\r?\n/).includes(`labels: ${label}`), `${fileName} must use the ${label} label`)
+}
+const issueTemplateConfig = read(path.join('.github', 'ISSUE_TEMPLATE', 'config.yml'))
+assert.match(issueTemplateConfig, /^blank_issues_enabled: false$/m)
+assert.match(issueTemplateConfig, /\/security\/advisories\/new/)
 
 const changelog = read('CHANGELOG.md')
 const license = read('LICENSE')
