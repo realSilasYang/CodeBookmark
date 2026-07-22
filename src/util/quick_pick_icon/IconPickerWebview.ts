@@ -290,8 +290,8 @@ export class IconPickerWebview {
             </div>
         `;
 
-        let finalTabsHtml = '';
-        let initialPanelsHtml = '';
+        let finalTabsHtml: string;
+        let initialPanelsHtml: string;
         if (recentIcons.length > 0 || showRestoreDefault) {
             finalTabsHtml = recentTabHtml + `<hr class="sidebar-separator"/>` + categoryTabsHtml.replace('class="tab active"', 'class="tab"');
             initialPanelsHtml = recentPanelHtml + categoryPanelsHtml.replace('class="category-section "', 'class="category-section hidden"');

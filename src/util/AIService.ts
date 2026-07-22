@@ -330,7 +330,7 @@ export class AIService {
 				return normalizeAIBookmarkPayload(parseAIJsonReply(content || choice.text, '{'));
 			} catch (error) {
 				logger.error(`AI 书签响应解析失败: ${error}`);
-				throw new Error('AI 未能返回合法的书签 JSON，请检查提示词或重试。');
+				throw new Error('AI 未能返回合法的书签 JSON，请检查提示词或重试。', { cause: error });
 			}
 		}
 
@@ -378,7 +378,7 @@ export class AIService {
 				optimized.push(...normalizeAIOptimizedBookmarks(parsed, semanticContextById))
 			} catch (error) {
 				logger.error(`AI 标签响应解析失败: ${error}`)
-				throw new Error(`AI 第 ${batchNumber}/${batchCount} 批未能返回合法的标签更新 JSON，请重试。`)
+				throw new Error(`AI 第 ${batchNumber}/${batchCount} 批未能返回合法的标签更新 JSON，请重试。`, { cause: error })
 			}
 		}
 		return optimized
