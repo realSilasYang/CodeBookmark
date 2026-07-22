@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 私密报告安全漏洞
+  - name: 私密报告安全漏洞 / Report a security vulnerability privately
     url: https://github.com/realSilasYang/CodeBookmark/security/advisories/new
-    about: 请勿在公开 Issue 中披露尚未修复的安全问题。
+    about: 请勿在公开 Issue 中披露尚未修复的安全问题。 Do not disclose unresolved security issues in public.
