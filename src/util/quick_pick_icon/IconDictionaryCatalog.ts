@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责图标选择界面与资源检索，具体对象为 `IconDictionaryCatalog`。
+ *
+ * 实现要点：维护经过审计的静态条目与查找元数据，使展示和语义匹配保持稳定。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`IconDictionaryEntry`、`iconDictionaryCatalog`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as fs from 'fs'
 import * as path from 'path'
 import * as vscode from 'vscode'

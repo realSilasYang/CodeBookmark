@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责构建脚本共享基础设施，具体对象为 `manifest-localizations`。
+ *
+ * 实现要点：集中复用清单本地化与生成规则，避免多个构建入口产生不一致结果。
+ * 核心边界：脚本失败时应以非零状态退出，且不得静默改写不属于本任务的用户文件。
+ * 主要入口：`translateManifestText`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const {
   DEFAULT_AI_GENERATION_PROMPT,
   DEFAULT_AI_GENERATION_PROMPT_EN,
@@ -6,10 +14,9 @@ const {
 } = require('../../out/util/constants/AIPrompts')
 const { UNDO_ACTION_LABELS, UNDO_ACTION_LABELS_EN } = require('../../out/util/UndoActions')
 
-// VS Code's official and long-standing non-Chinese display-language locales.
-// package.nls.json is the complete Chinese fallback. Every locale below receives
-// a complete English catalog so a missing key can never fall back to Chinese in
-// an otherwise English VS Code window.
+// 这些是 VS Code 官方长期支持的非中文显示语言区域代码。
+// package.nls.json 保存完整中文回退；下面每个区域代码都写入完整英文目录，
+// 从而保证缺失键不会让原本应显示英文的 VS Code 窗口局部回退到中文。
 const ENGLISH_MANIFEST_LOCALES = Object.freeze([
   'en',
   'bg',

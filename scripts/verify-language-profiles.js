@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-language-profiles`。
+ *
+ * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-language-profiles` 对应契约。
+ * 核心边界：通过断言锁定“verify-language-profiles”相关行为，任何失败都表示实现偏离既有契约。
+ * 主要入口：`uri`、`captureExpectedLoggerErrors`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const { installModuleMocks } = require('./test-support/module-mocks')
@@ -13,7 +21,7 @@ function uri(fsPath) {
 
 const files = new Map([
   ['/extensions/fiction/language-configuration.json', Buffer.from(`{
-    // JSONC comments and trailing commas are intentional.
+    // 这里有意使用 JSONC 注释与尾随逗号，用于验证语言配置解析器的兼容能力。
     "comments": {
       "lineComment": ";;",
       "blockComment": ["{-", "-}"],
@@ -23,6 +31,9 @@ const files = new Map([
   ['/extensions/batch/language-configuration.json', Buffer.from(`{
     "comments": { "lineComment": "REM" }
   }`)],
+  ['/extensions/uncolored/language-configuration.json', Buffer.from(`{
+    "comments": { "lineComment": "//" }
+  }`)],
 ])
 
 const extensions = [
@@ -30,6 +41,7 @@ const extensions = [
     extensionUri: uri('/extensions/fiction'),
     packageJSON: {
       contributes: {
+        grammars: [{ language: 'fiction', scopeName: 'source.fiction', path: './syntaxes/fiction.tmLanguage.json' }],
         languages: [
           {
             id: 'fiction',
@@ -50,6 +62,7 @@ const extensions = [
     extensionUri: uri('/extensions/batch'),
     packageJSON: {
       contributes: {
+        grammars: [{ language: 'bat', scopeName: 'source.batch', path: './syntaxes/batch.tmLanguage.json' }],
         languages: [{
           id: 'bat',
           extensions: ['.cmd'],
@@ -62,10 +75,23 @@ const extensions = [
     extensionUri: uri('/extensions/untrusted'),
     packageJSON: {
       contributes: {
+        grammars: [{ language: 'outside', scopeName: 'source.outside', path: './syntaxes/outside.tmLanguage.json' }],
         languages: [{
           id: 'outside',
           extensions: ['.outside'],
           configuration: '../outside.json',
+        }],
+      },
+    },
+  },
+  {
+    extensionUri: uri('/extensions/uncolored'),
+    packageJSON: {
+      contributes: {
+        languages: [{
+          id: 'uncolored',
+          extensions: ['.uncolored'],
+          configuration: 'language-configuration.json',
         }],
       },
     },
@@ -137,6 +163,10 @@ async function captureExpectedLoggerErrors(operation) {
   const byNestedPattern = registry.profileFor(undefined, '/workspace/configs/app.fiction')
   assert.ok(direct && byExtension && byCompoundExtension && byFilename && byPattern && byNestedPattern)
   assert.equal(registry.profileFor('outside', '/workspace/file.outside'), undefined)
+  assert.equal(registry.profileFor('uncolored', '/workspace/file.uncolored'), undefined)
+  assert.equal(registry.profileFor('plaintext', '/workspace/story.fic'), undefined)
+  assert.equal(registry.supportsFile('/workspace/story.fic', 'plaintext'), false)
+  assert.equal(registry.supportsFile('/workspace/story.fic'), true)
 
   const lines = [
     'text = ";; TODO inside string"',
@@ -158,6 +188,7 @@ async function captureExpectedLoggerErrors(operation) {
   assert.ok(globs.some(glob => glob.includes('.fic')))
   assert.ok(globs.some(glob => glob.includes('Fictionfile')))
   assert.ok(globs.some(glob => glob.includes('fiction-template')))
+  assert.equal(globs.some(glob => glob.includes('uncolored')), false)
 
   files.set('/extensions/fiction/language-configuration.json', Buffer.from(`{
     "comments": { "lineComment": "##" }
@@ -167,7 +198,7 @@ async function captureExpectedLoggerErrors(operation) {
   assert.match(String(reloadErrors[0][0]), /已跳过 1 个无效的语言文件匹配模式/)
   const reloaded = registry.profileFor('fiction', '/workspace/story.fic')
   assert.deepEqual(
-    scanCodeMarkers(['run ;; TODO old', 'run ## FIXME refreshed'], 'fiction', 'story.fic', 100, reloaded).occurrences.map(item => item.marker),
+    scanCodeMarkers(['run ;; TODO: old', 'run ## FIXME: refreshed'], 'fiction', 'story.fic', 100, reloaded).occurrences.map(item => item.marker),
     ['FIXME']
   )
 

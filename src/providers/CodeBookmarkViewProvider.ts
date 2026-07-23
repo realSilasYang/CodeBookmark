@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `CodeBookmarkViewProvider`。
+ *
+ * 实现要点：通过小型端口连接纯逻辑与 VS Code API，使状态变化顺序可独立验证。
+ * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
+ * 主要入口：`CodeBookmarksViewProvider`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
 import { Commands } from '../util/constants/Commands'
@@ -499,11 +507,9 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	/**
-	 * Apply repository-level rebinding to the in-memory tree.  File-system
-	 * providers can report a move as delete + create, so the repository may
-	 * update the durable script binding without going through onRenameDirectory.
-	 * Keeping this bridge here prevents a subsequent in-memory save from putting
-	 * the old path back on disk.
+	 * 把仓库层重绑定结果同步到内存树。文件系统提供器可能把移动报告成“删除＋创建”，
+	 * 因而仓库会在未经过 onRenameDirectory 的情况下更新持久脚本绑定。
+	 * 此处保留桥接可防止后续内存保存把旧路径重新写回磁盘。
 	 */
 	async applyRepositoryRelocations(changes: readonly ScriptRelocationChange[]): Promise<void> {
 		return applySourceRepositoryRelocations(changes, this.sourcePathChangeWorkflowPort())
@@ -565,7 +571,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				.catch(error => logger.error(localize(`刷新语言注释配置失败: ${errorMessage(error)}`, `Failed to refresh language comment configurations: ${errorMessage(error)}`)))
 		})
 
-		// Create decoration type for inline ghost text (bookmark label at end of line)
+		// 创建行尾幽灵文本装饰类型，用于显示当前行的书签标签。
 		this._inlineLabelDecorationType = vscode.window.createTextEditorDecorationType({
 			after: {
 				color: new vscode.ThemeColor('editorCodeLens.foreground'),
@@ -579,7 +585,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	public treeView?: vscode.TreeView<Bookmark>;
 
-	// Inline ghost text decoration
+	// 复用单个行内幽灵文本装饰实例，避免每次光标移动都创建主题资源。
 	private _inlineLabelDecorationType: vscode.TextEditorDecorationType;
 
 	init(treeView: vscode.TreeView<Bookmark>): void {
@@ -590,7 +596,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				.catch(error => logger.error(localize(`更新书签选择上下文失败: ${errorMessage(error)}`, `Failed to update bookmark selection context: ${errorMessage(error)}`)));
 		});
 
-		// Setup cursor change listener for inline ghost text
+		// 监听光标与活动编辑器变化，及时刷新行内幽灵文本及当前文件上下文。
 		const cursorListener = vscode.window.onDidChangeTextEditorSelection(e => {
 			this.updateInlineDecoration(e.textEditor);
 		});
@@ -622,9 +628,8 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		})
 		this.context.subscriptions.push(selectionListener, cursorListener, editorListener, tabListener)
 
-		// TreeDataProvider registration is already complete at this point. Disk access is
-		// deliberately detached from extension activation so a slow/network storage root
-		// can never make VS Code time out activation or leave getChildren() unresolved.
+		// 此时 TreeDataProvider 已注册完成。磁盘访问有意与扩展激活解耦，
+		// 避免慢速或网络存储根目录导致 VS Code 激活超时，或让 getChildren() 长期未决。
 		this.bookmarkTreeViewLifecycle.startInitialLoad(treeView, this.bookmarkTreeViewLifecyclePort())
 
 		void this.initViewEditor()
@@ -666,7 +671,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		return this.bookmarkTreeDataProjection.treeItem(element, this.bookmarkTreeDataProjectionPort())
 	}
 
-	// Drag-and-Drop
+	// 拖放只负责把 VS Code 数据传输对象交给纯工作流，实际层级规则由下层统一验证。
 	handleDrag(source: Bookmark[], treeDataTransfer: vscode.DataTransfer): void {
 		runBookmarkTreeDrag(source, treeDataTransfer)
 	}
@@ -894,8 +899,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				void this.setupConfigWatcher(candidateGeneration)
 					.catch(error => logger.error(localize(`设置书签配置监听器失败: ${errorMessage(error)}`, `Failed to set up the bookmark configuration watcher: ${errorMessage(error)}`)))
 			},
-			// Disk-backed bookmark data is the core startup path. Language profiles and
-			// marker reconciliation can run after the tree becomes interactive.
+			// 磁盘书签数据是启动主路径；语言配置与自动标记对账可在书签树可交互后后台执行。
 			startBackgroundEnhancements: candidateGeneration => {
 				void this.initializeBackgroundEnhancements(
 					languageProfilesReady,
@@ -957,7 +961,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		
 		if (fireTree) this._onDidChangeTreeData.fire()
 
-		// Refresh inline ghost text for current editor
+		// 树数据变化后同步刷新当前编辑器的行内幽灵文本。
 		const editor = vscode.window.activeTextEditor;
 		if (editor) {
 			this.updateInlineDecoration(editor);
@@ -1275,7 +1279,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	async toggleBookmark(editor: vscode.TextEditor): Promise<void> {
 		return runToggleBookmark(editor, this.manualBookmarkWorkflowPort())
 	}
-	// **************** file
+	// **************** 文件级操作
 	private currentScopeFilePath: string | undefined;
 	private readonly saveCoordinator = new BookmarkSaveCoordinator(this.bookmarkSaveCoordinatorPort())
 	private readonly storagePathWorkflow = new BookmarkStoragePathWorkflowRunner()
@@ -1652,7 +1656,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		)
 	}
 
-	// On click item button
+	// 处理树节点行内操作按钮触发的重命名命令。
 	async onRenameBookmark(bm?: Bookmark, selectedBookmarks?: Bookmark[]) {
 		return runRenameBookmark(bm, selectedBookmarks, this.bookmarkEditingWorkflowPort())
 	}

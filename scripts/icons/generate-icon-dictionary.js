@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责图标资源整理与词典生成，具体对象为 `generate-icon-dictionary`。
+ *
+ * 实现要点：把来源、语义别名和输出名称转换为可审计的图标资源清单。
+ * 核心边界：资源名称、语义词典和输出文件必须稳定，避免搜索结果或 AI 图标选择发生无意漂移。
+ * 主要入口：`readJson`、`atomicWriteJson`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const fs = require('fs')
 const path = require('path')
 
@@ -67,8 +75,8 @@ const semanticAliases = {
   vue: ['Vue', '前端', '组件', '界面'],
 }
 
-// Deliberately broad fuzzy-search vocabulary. Dialect, slang and internet
-// expressions are product semantics here, not noise to be filtered out.
+// 模糊搜索词表有意覆盖方言、俗称和网络表达；这些词属于产品语义，
+// 不能当作噪声过滤，否则用户用自然说法时将无法找到对应图标。
 const fuzzySemanticAliases = {
   typescript: ['ts', 'typescript', '代码', '脚本', '前端', '严谨', '类型', '类型安全'],
   javascript: ['js', 'javascript', '代码', '脚本', '前端', '动态', '弱类型', 'h5', '原生js', '香草js'],
@@ -204,9 +212,8 @@ const fuzzySemanticAliases = {
   money: ['钱', '财务', '搞钱', '钞票', '银子', '票子', '搞米', '发财', '暴富', '资产', '财富', '金币'],
 }
 
-// Exact concept supplements for icons whose names are too specific to be
-// covered safely by token matching. These are intentionally colloquial so
-// searches can follow how people actually describe an icon.
+// 对名称过于专门、无法安全依赖分词匹配的图标补充精确概念。
+// 词语有意贴近日常表达，使搜索行为符合用户实际描述图标的方式。
 const supplementalConceptAliases = {
   adidas: ['阿迪达斯', '阿迪', '运动品牌', '三道杠', '球鞋', '运动服', '潮牌'],
   alipay: ['支付宝', '支付', '付款', '扫码支付', '蚂蚁', '电子钱包', '剁手'],

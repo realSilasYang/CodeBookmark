@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责扩展构建与产物生成，具体对象为 `generate-package-json`。
+ *
+ * 实现要点：从源码与稳定清单生成可发布产物，并在覆盖目标前完成确定性整理。
+ * 核心边界：生成结果必须确定、可复现，并与源码清单及发布校验保持一致。
+ * 主要入口：`messageKey`、`localizeManifestValue`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const fs = require('fs');
 const path = require('path');
 
@@ -55,7 +63,7 @@ const sourcePackageJson = {
         ...commands.redoCommands,
       ]
         .filter((e, i, arr) => {
-          // Deduplicate: keep only the first occurrence of each command ID
+          // 按命令 ID 去重并保留第一次出现的位置，保证生成菜单的顺序稳定。
           return arr.findIndex(x => x.command === e.command) === i;
         })
         .map((e) => {

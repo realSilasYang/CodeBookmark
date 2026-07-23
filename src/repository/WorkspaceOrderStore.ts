@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `WorkspaceOrderStore`。
+ *
+ * 实现要点：维护可变状态及其索引，对外提供原子更新和一致快照。
+ * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
+ * 主要入口：`WorkspaceOrderStore`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as path from 'path'
 import { localize } from '../i18n/Localization'
 import { absolutePathKey } from '../util/AbsolutePath'

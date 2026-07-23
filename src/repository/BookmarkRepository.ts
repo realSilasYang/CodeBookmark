@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `BookmarkRepository`。
+ *
+ * 实现要点：统一读取、校验、原子写入和重定位事务，维护磁盘配置的权威身份。
+ * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
+ * 主要入口：`ScriptRelocationChange`、`BookmarkConfigurationFolderImportResult`、`bookmarkRepository`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -121,8 +129,8 @@ class CodeBookmarksRepository {
 		exists: filePath => pathExists(filePath),
 		readJson: filePath => fileUtils.readJsonFileAsync(filePath),
 		writeJson: (filePath, value) => fileUtils.writeJsonFileAsync(filePath, value),
-		// Workspace order is derived from script configurations. Migrating it in
-		// place avoids leaving a backup that would keep an obsolete scope alive.
+		// 工作区顺序可由脚本配置重新推导，因此直接原位迁移；若留下备份，
+		// 旧备份可能被目录发现逻辑误认为仍有效的作用域。
 		migrateJson: (filePath, value) => fileUtils.writeJsonFileAsync(filePath, value),
 		deleteFile: filePath => this.deleteFile(filePath),
 	})
@@ -352,7 +360,7 @@ class CodeBookmarksRepository {
 			throwIfReadCancelled(signal)
 			data.bookmarks = mergeSerializedBookmarks(data.bookmarks, duplicateData.bookmarks, primary.metadata.path)
 		}
-		// Once the first write starts, finish the duplicate cleanup as one integrity-preserving unit.
+		// 第一次写入开始后，重复配置清理必须作为一个保持完整性的单元执行到底。
 		throwIfReadCancelled(signal)
 		await this.writeEnvelope(primary.filePath, data)
 		for (const duplicate of duplicates) {
@@ -633,10 +641,8 @@ class CodeBookmarksRepository {
 		const matches: Array<{ entry: ScriptIndexEntry, data: BookmarkFileEnvelope }> = []
 		for (const entry of this.scriptIndex.values()) {
 			throwIfReadCancelled(signal)
-			// A missingSince marker is a tombstone, not a permanent opt-out from
-			// relocation. External moves can arrive as delete + create events, so a
-			// tombstoned configuration remains eligible for fingerprint/inode/content
-			// matching against the active file.
+			// missingSince 只是墓碑，不代表永久退出重定位。外部移动可能表现为“删除＋创建”，
+			// 因此墓碑配置仍须参与针对活动文件的指纹、inode 与内容匹配。
 			if (await this.originalPathIsAvailable(entry)) continue
 			throwIfReadCancelled(signal)
 			try {
@@ -826,9 +832,8 @@ class CodeBookmarksRepository {
 			const workspaceFolder = activeUri
 				? vscode.workspace.getWorkspaceFolder(activeUri)
 				: vscode.workspace.workspaceFolders?.[0]
-			// A workspace-root move carries ordering information for every child. Resolve
-			// that aggregate operation before per-file fingerprint recovery; otherwise the
-			// directory scan can append files in arbitrary order and destroy the saved order.
+			// 工作区根目录移动携带所有子项的顺序信息，必须先解析这项聚合操作，
+			// 再执行逐文件指纹恢复；否则目录扫描可能按任意顺序追加文件并破坏已保存顺序。
 			if (activeAbsolutePath) await this.resolveActiveFileRelocation(storageRoot, activeAbsolutePath, signal)
 			let ambiguousRelocationTargets = new Set<string>()
 			let workspaceCandidates: SourceCandidateIndex | undefined
@@ -924,8 +929,8 @@ class CodeBookmarksRepository {
 			return bookmarks
 		} catch (error) {
 			if (isBookmarkReadCancelled(error)) {
-				// A cancelled incremental refresh may have touched only part of the shared index.
-				// Force the next active request to rebuild it instead of observing a partial snapshot.
+				// 被取消的增量刷新可能只改动共享索引的一部分；强制下一次有效请求完整重建，
+				// 避免调用方读到半更新快照。
 				this.indexReady = false
 				return []
 			}
@@ -1002,9 +1007,8 @@ class CodeBookmarksRepository {
 				if (fileNode.scriptId) {
 					const persistedPath = this.scriptIndex.get(fileNode.scriptId)?.metadata.path
 					if (persistedPath && absolutePathKey(persistedPath) !== absolutePathKey(absolutePath)) {
-						// A filesystem relocation may have updated the repository before
-						// this queued in-memory snapshot was flushed. Keep the repository's
-						// binding authoritative instead of resurrecting the old path.
+						// 文件系统重定位可能在此排队内存快照落盘前已更新仓库。
+						// 此时以仓库绑定为准，不能让延迟保存复活旧路径。
 						desiredIds.add(fileNode.scriptId)
 						continue
 					}
@@ -1095,9 +1099,8 @@ class CodeBookmarksRepository {
 	}
 
 	/**
-	 * Reconcile a source path that has just appeared on disk. File-system
-	 * providers are allowed to report a move as delete + create (or only create),
-	 * so this path must be independent from onDidRenameFiles.
+	 * 对刚出现在磁盘上的源路径执行对账。文件系统提供器允许把移动报告成
+	 * “删除＋创建”，甚至只报告创建，因此此流程不能依赖 onDidRenameFiles。
 	 */
 	async handleFileAppearance(absolutePath: string): Promise<ScriptRelocationChange[]> {
 		return this.enqueueRelocation(() => this.performFileAppearance(absolutePath))
@@ -1150,8 +1153,7 @@ class CodeBookmarksRepository {
 		}
 		if (!stat.isFile()) return []
 
-		// Changes to an already-bound file are the common case. Avoid scanning
-		// every stored configuration unless this path is genuinely unbound.
+		// 已绑定文件发生变化是常见路径；只有目标确实未绑定时才扫描全部存储配置。
 		if (this.entriesAtAbsolutePath(targetPath).length > 0) return []
 		const fingerprint = await fingerprintSourceFile(targetPath)
 		if (!fingerprint) return []

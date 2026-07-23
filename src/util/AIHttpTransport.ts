@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIHttpTransport`。
+ *
+ * 实现要点：执行受限网络传输并校验响应大小、状态和取消信号。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`AIHttpStatusError`、`postAIJson`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as http from 'http'
 import * as https from 'https'
 import { urlToHttpOptions } from 'url'

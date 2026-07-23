@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `FileUtils`。
+ *
+ * 实现要点：集中实现 `FileUtils` 的无界面规则和边界处理，供多个上层流程复用。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`fileUtils`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as fs from "fs"
 import * as vscode from 'vscode'
 import { logger } from './Logger'
@@ -182,7 +190,7 @@ class FileUtils {
 				return false
 			}
 			contentHash = preparation.contentHash
-			// Atomic write (see writeJsonFile): temp file in the same directory + atomic rename.
+			// 原子写入：先在同目录写临时文件，再通过重命名一次替换目标文件。
 			await fs.promises.writeFile(tmpPath, jsonData, 'utf8')
 			if (!await fileChangeFingerprints.isCurrentHash(filePath, preparation.expectedDiskHash)) {
 				throw new Error(localize(`书签文件在写入期间被外部修改：${filePath}`, `Bookmark file changed externally during write: ${filePath}`))
@@ -194,8 +202,8 @@ class FileUtils {
 			if (contentHash) fileChangeFingerprints.markWriteFailed(filePath, contentHash)
 			logger.error(localize(`无法写入 JSON 文件：${filePath}`, `Cannot write JSON file: ${filePath}`))
 			logger.error(error)
-			// Best-effort cleanup of a leftover temp file on failure.
-			try { await fs.promises.unlink(tmpPath) } catch { /* ignore */ }
+			// 写入失败后尽力清理遗留临时文件，但不能让清理错误覆盖主错误。
+			try { await fs.promises.unlink(tmpPath) } catch { /* 忽略临时文件清理失败 */ }
 			return false
 		}
 	}
@@ -223,18 +231,16 @@ class FileUtils {
 		for (const item of bookmarks) {
 			if (state.signal?.aborted) return state.relocatedCount
 			try {
-				// File container nodes have no semantic content fingerprint.
-				// They must be skipped by the sticky engine, otherwise their empty content would
-				// get overwritten with line-0 text and their contextValue downgraded to Bookmark,
-				// which removes them (and all their children) from the tree view.
+				// 文件容器节点没有语义内容指纹，粘性引擎必须跳过它们；否则空内容会被首行文本覆盖，
+				// contextValue 也会降级成普通书签，最终导致容器及全部子节点从树视图消失。
 				if (item.isFile) {
 					if (item.subs.size > 0) {
 						await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
 					}
 						continue
 					}
-					// Automatic TODO/FIXME/BUG bookmarks are synchronized from comment tokens.
-					// The generic sticky engine must not keep or invalidate them after the token vanishes.
+					// 自动 TODO/FIXME/BUG 书签由注释标记扫描器对账；标记消失后，
+					// 通用粘性引擎既不能擅自保留它们，也不能把它们改成失效手动书签。
 					if (item.isCodeMarker) {
 						if (item.subs.size > 0) {
 							await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
@@ -242,8 +248,8 @@ class FileUtils {
 						continue
 					}
 
-					// Resource optimization: when a targetPath is given (e.g. after editing one file),
-				// only re-anchor bookmarks belonging to that file. Others keep their cached state.
+					// 指定 targetPath（例如只编辑一个文件）时，仅重新锚定属于该文件的书签；
+					// 其他文件继续使用缓存状态，避免一次局部编辑触发全工作区扫描。
 				if (targetPath !== undefined && item.path !== targetPath) {
 					if (item.subs.size > 0) {
 						await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
@@ -295,8 +301,7 @@ class FileUtils {
 							) === item.start.line
 						}
 
-						// A matching line is accepted only when its stored context does not identify a
-						// better duplicate elsewhere in the document.
+						// 只有已保存上下文未在文档其他位置识别出更优重复项时，才接受当前位置的匹配行。
 						if (currentMatches && currentCandidateIsBest) {
 							if (item.contextValue !== ContextBookmark.Bookmark) {
 								state.relocatedCount++;
@@ -304,12 +309,10 @@ class FileUtils {
 							item.contextValue = ContextBookmark.Bookmark;
 							if (this.updateBookmarkContextAnchors(item, doc)) state.relocatedCount++
 						} else {
-							// The text at the bookmark's recorded position no longer matches the fingerprint.
-							// Decide between: the line MOVED (relocate by fingerprint) vs. IN-LINE EDIT
-							// (same physical line was edited → refresh fingerprint) vs. truly INVALID.
+							// 记录位置的文本已不再匹配指纹，需要区分三种情况：整行移动（按指纹重定位）、
+							// 原位置行内编辑（刷新指纹），以及位置与内容都消失（真正失效）。
 							const isMultiLine = trimmedItemContent.includes('\n');
-							// Score all exact matches by surrounding context, then use line distance as
-							// the tie-breaker. This disambiguates adjacent repeated lines.
+							// 先按上下文为全部精确匹配评分，再用行距打破平局，以区分相邻重复代码行。
 							let bestIndex = -1;
 							let bestScore = Number.NEGATIVE_INFINITY;
 							if (trimmedItemContent !== '') {
@@ -330,8 +333,8 @@ class FileUtils {
 							}
 
 							if (bestIndex !== -1) {
-								// The fingerprint still exists somewhere → the bookmarked line MOVED.
-								// Re-anchor to the closest occurrence. Precise follow for cut / move / reorder.
+								// 指纹仍存在，说明书签行发生了移动；重新锚定到最优候选，
+								// 使剪切、移动与重排后的书签继续精确跟随。
 								const newStartPos = doc.positionAt(bestIndex);
 								const newEndPos = doc.positionAt(bestIndex + trimmedItemContent.length);
 								item.start.line = newStartPos.line;
@@ -343,10 +346,8 @@ class FileUtils {
 								if (this.updateBookmarkContextAnchors(item, doc)) state.relocatedCount++
 								state.relocatedCount++;
 							} else if (item.start.line < doc.lineCount && currentTrimmed !== '') {
-								// The fingerprint is gone from the file, BUT the bookmark's recorded line
-								// still exists and holds non-empty text → treat as an IN-LINE EDIT of the
-								// bookmarked line. Keep the bookmark alive and refresh its fingerprint.
-								// (Position unchanged + content changed → not an invalidation.)
+								// 指纹已消失，但记录行仍存在且包含文本，视为原书签行被就地编辑。
+								// 保留书签并刷新指纹；位置未变而内容变化不属于失效。
 								item.content = currentLineContent;
 								if (item.contextValue !== ContextBookmark.Bookmark) {
 									state.relocatedCount++;
@@ -354,8 +355,8 @@ class FileUtils {
 								item.contextValue = ContextBookmark.Bookmark;
 								if (this.updateBookmarkContextAnchors(item, doc)) state.relocatedCount++
 							} else {
-								// Fingerprint gone AND position no longer valid (line removed or now empty)
-								// → position and fingerprint both changed → declare the bookmark invalid.
+								// 指纹消失且记录位置也已无效（行被删除或变空），说明位置和内容都已改变，
+								// 此时才把书签标记为失效。
 								if (item.contextValue !== ContextBookmark.BookmarkInvalid) {
 									state.relocatedCount++;
 								}

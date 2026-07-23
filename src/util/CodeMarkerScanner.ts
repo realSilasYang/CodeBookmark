@@ -1,8 +1,15 @@
+/**
+ * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `CodeMarkerScanner`。
+ *
+ * 实现要点：按受控规则扫描输入并生成结构化结果，同时限制范围、容量和误匹配。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`CODE_MARKER_ICON`、`MAX_CODE_MARKERS_PER_FILE`、`CodeMarkerMetadata`、`CodeMarkerOccurrence`、`CodeMarkerLineCommentToken`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as path from 'path'
 
 export const CODE_MARKER_ICON = 'status_idea_yellow.svg'
 export const MAX_CODE_MARKERS_PER_FILE = 5_000
-export const CODE_MARKER_FILE_GLOB = '**/*.{ahk,ahk2,c,cc,cpp,cxx,h,hpp,cs,css,dart,go,htm,html,java,js,jsx,kt,kts,less,lua,m,md,mm,php,pl,ps1,py,r,rb,rs,scss,sh,sql,svelte,swift,toml,ts,tsx,vue,xml,yaml,yml}'
 
 type CodeMarkerKind = 'TODO' | 'FIXME' | 'BUG'
 
@@ -64,14 +71,13 @@ const HASH_PROFILE: CodeMarkerSyntaxProfile = {
 	blockComments: [],
 }
 const AUTOHOTKEY_PROFILE: CodeMarkerSyntaxProfile = {
-	// AutoHotkey treats ';' as a comment delimiter at the first non-whitespace
-	// position or when it is preceded by whitespace. It also supports C-style
-	// block comments in the supported AutoHotkey dialects.
+	// AutoHotkey 仅在分号位于首个非空白位置，或前面存在空白时把它视为注释分隔符；
+	// 当前支持的 AutoHotkey 方言同时允许 C 风格块注释。
 	lineComments: [{ value: ';', requiresWhitespaceBefore: true }],
 	blockComments: [['/*', '*/']],
 }
 
-function fallbackProfileFor(languageId: string | undefined, fileName: string): CodeMarkerSyntaxProfile {
+function syntaxHintsFor(languageId: string | undefined, fileName: string): CodeMarkerSyntaxProfile {
 	const language = languageId?.toLowerCase() ?? ''
 	if (language === 'json') return EMPTY_PROFILE
 	if (language === 'ahk' || language === 'ahk2' || language === 'autohotkey' || language === 'autohotkey2') return AUTOHOTKEY_PROFILE
@@ -112,20 +118,28 @@ function fallbackProfileFor(languageId: string | undefined, fileName: string): C
 }
 
 function mergeProfile(
-	fallback: CodeMarkerSyntaxProfile,
-	discovered?: CodeMarkerSyntaxProfile,
+	hints: CodeMarkerSyntaxProfile,
+	discovered: CodeMarkerSyntaxProfile,
 ): CodeMarkerSyntaxProfile {
-	if (!discovered) return fallback
 	const lineComments = discovered.lineComments.map(token => {
-		const known = fallback.lineComments.find(candidate => candidate.value === token.value)
+		const known = hints.lineComments.find(candidate => candidate.value === token.value)
 		return known ? { ...known, ...token } : token
 	})
 	return {
 		lineComments,
 		blockComments: discovered.blockComments,
-		multilineStrings: discovered.multilineStrings ?? fallback.multilineStrings,
-		persistentQuotes: discovered.persistentQuotes ?? fallback.persistentQuotes,
+		multilineStrings: discovered.multilineStrings ?? hints.multilineStrings,
+		persistentQuotes: discovered.persistentQuotes ?? hints.persistentQuotes,
 	}
+}
+
+function recognizedProfile(
+	languageId: string | undefined,
+	fileName: string,
+	discovered?: CodeMarkerSyntaxProfile,
+): CodeMarkerSyntaxProfile {
+	if (!discovered) return EMPTY_PROFILE
+	return mergeProfile(syntaxHintsFor(languageId, fileName), discovered)
 }
 
 function startsWithLineComment(lineText: string, index: number, token: CodeMarkerLineCommentToken): boolean {
@@ -140,29 +154,53 @@ export function supportsCodeMarkerSyntax(
 	fileName = '',
 	discoveredProfile?: CodeMarkerSyntaxProfile,
 ): boolean {
-	const profile = mergeProfile(fallbackProfileFor(languageId, fileName), discoveredProfile)
+	const profile = recognizedProfile(languageId, fileName, discoveredProfile)
 	return profile.lineComments.length > 0 || profile.blockComments.length > 0
 }
 
-function isIdentifierCharacter(value: string | undefined): boolean {
-	return value !== undefined && /[a-z0-9_]/i.test(value)
-}
-
-function markerMatches(segment: string): Array<{ marker: CodeMarkerKind, offset: number, length: number }> {
-	const result: Array<{ marker: CodeMarkerKind, offset: number, length: number }> = []
-	const pattern = /TODO|FIXME|BUG/ig
-	let match: RegExpExecArray | null
-	while ((match = pattern.exec(segment)) !== null) {
-		if (isIdentifierCharacter(segment[match.index - 1]) || isIdentifierCharacter(segment[match.index + match[0].length])) continue
-		result.push({ marker: match[0].toUpperCase() as CodeMarkerKind, offset: match.index, length: match[0].length })
+function markerDirective(segment: string): { marker: CodeMarkerKind, offset: number, descriptionStart: number } | undefined {
+	// 标记必须是显式指令，不能只是注释说明中恰好出现的普通单词。
+	// JSDoc 星号、@TODO 和 [TODO] 属于显式结构；裸标记后若带说明必须使用标点，
+	// 这样“BUG Icon”一类普通标题仍会被判定为说明文字。
+	const prefix = /^[\t ]*(?:\*[\t ]*)?/u.exec(segment)?.[0] ?? ''
+	let cursor = prefix.length
+	const atForm = segment[cursor] === '@'
+	if (atForm) cursor++
+	const bracketForm = segment[cursor] === '['
+	if (bracketForm) {
+		cursor++
+		while (segment[cursor] === ' ' || segment[cursor] === '\t') cursor++
 	}
-	return result
+	const markerMatch = /^(TODO|FIXME|BUG)/iu.exec(segment.slice(cursor))
+	if (!markerMatch) return undefined
+	const rawMarker = markerMatch[1]
+	const marker = rawMarker.toUpperCase() as CodeMarkerKind
+	const markerOffset = cursor
+	cursor += rawMarker.length
+	if (bracketForm) {
+		while (segment[cursor] === ' ' || segment[cursor] === '\t') cursor++
+		if (segment[cursor] !== ']') return undefined
+		cursor++
+	}
+	const suffix = segment.slice(cursor)
+	const emptySuffix = /^[\t ]*$/u.test(suffix)
+	const punctuatedSuffix = /^[\t ]*[:：]/u.test(suffix)
+		|| /^[\t ]*[-–—][\t ]*\S/u.test(suffix)
+		|| /^[\t ]*\([^\r\n)]{1,80}\)[\t ]*[:：]/u.test(suffix)
+	const explicitContainerSuffix = (atForm || bracketForm) && (emptySuffix || /^[\t ]+\S/u.test(suffix))
+	const explicitSuffix = punctuatedSuffix || explicitContainerSuffix || (rawMarker === marker && emptySuffix)
+	if (!explicitSuffix) return undefined
+	return {
+		marker,
+		offset: markerOffset,
+		descriptionStart: bracketForm ? cursor : markerOffset + rawMarker.length,
+	}
 }
 
 function normalizedLabel(value: string, fallback: CodeMarkerKind): string {
 	const cleaned = value
-		.replace(/^[:\-\s]+/, '')
-		.replace(/[\s*-]+$/, '')
+		.replace(/^[:：\-–—\s]+/u, '')
+		.replace(/[\s*\-–—]+$/u, '')
 		.trim()
 	const label = cleaned === '' ? fallback : `${fallback}: ${cleaned}`
 	return label.replace(/\s+/g, ' ').slice(0, 80)
@@ -178,20 +216,17 @@ function scanCommentSegment(
 ): boolean {
 	if (end <= start) return false
 	const segment = lineText.slice(start, end)
-	const matches = markerMatches(segment)
-	for (let index = 0; index < matches.length; index++) {
-		if (occurrences.length >= limit) return true
-		const match = matches[index]
-		const nextOffset = matches[index + 1]?.offset ?? segment.length
-		const description = segment.slice(match.offset + match.length, nextOffset)
-		occurrences.push({
-			marker: match.marker,
-			line,
-			column: start + match.offset,
-			label: normalizedLabel(description, match.marker),
-			lineText,
-		})
-	}
+	const directive = markerDirective(segment)
+	if (!directive) return false
+	if (occurrences.length >= limit) return true
+	const description = segment.slice(directive.descriptionStart)
+	occurrences.push({
+		marker: directive.marker,
+		line,
+		column: start + directive.offset,
+		label: normalizedLabel(description, directive.marker),
+		lineText,
+	})
 	return false
 }
 
@@ -202,7 +237,7 @@ export function scanCodeMarkers(
 	limit = MAX_CODE_MARKERS_PER_FILE,
 	discoveredProfile?: CodeMarkerSyntaxProfile,
 ): CodeMarkerScanResult {
-	const profile = mergeProfile(fallbackProfileFor(languageId, fileName), discoveredProfile)
+	const profile = recognizedProfile(languageId, fileName, discoveredProfile)
 	if (profile.lineComments.length === 0 && profile.blockComments.length === 0) {
 		return { occurrences: [], truncated: false }
 	}

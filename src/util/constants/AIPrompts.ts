@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责跨模块常量与稳定标识符，具体对象为 `AIPrompts`。
+ *
+ * 实现要点：集中维护跨运行时与生成脚本共享的稳定常量，避免字符串和顺序发生漂移。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`DEFAULT_AI_GENERATION_PROMPT`、`DEFAULT_AI_GENERATION_PROMPT_EN`、`DEFAULT_AI_OPTIMIZATION_PROMPT`、`DEFAULT_AI_OPTIMIZATION_PROMPT_EN`、`AI_GENERATION_ICON_RUNTIME_CONTRACT`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import { AI_ICON_SELECTION_PROMPT, AI_ICON_SELECTION_PROMPT_EN } from '../AIIconCatalog'
 
 export const DEFAULT_AI_GENERATION_PROMPT = [

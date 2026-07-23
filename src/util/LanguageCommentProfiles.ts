@@ -1,8 +1,15 @@
+/**
+ * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `LanguageCommentProfiles`。
+ *
+ * 实现要点：集中实现 `LanguageCommentProfiles` 的无界面规则和边界处理，供多个上层流程复用。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`parseLanguageConfigurationJson`、`LanguageCommentProfileRegistry`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as path from 'path'
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
 import {
-	CODE_MARKER_FILE_GLOB,
 	supportsCodeMarkerSyntax,
 	type CodeMarkerLineCommentToken,
 	type CodeMarkerSyntaxProfile,
@@ -323,6 +330,16 @@ export class LanguageCommentProfileRegistry {
 
 	private async load(): Promise<void> {
 		const next = emptyState()
+		const highlightedLanguages = new Set<string>()
+		for (const extension of vscode.extensions.all) {
+			const grammars = extension.packageJSON?.contributes?.grammars
+			if (!Array.isArray(grammars)) continue
+			for (const grammar of grammars) {
+				if (isRecord(grammar) && typeof grammar.language === 'string' && grammar.language.trim()) {
+					highlightedLanguages.add(grammar.language.toLowerCase())
+				}
+			}
+		}
 		const contributions: Array<{ extensionUri: vscode.Uri, language: LanguageContribution }> = []
 		for (const extension of vscode.extensions.all) {
 			const languages = extension.packageJSON?.contributes?.languages
@@ -343,6 +360,7 @@ export class LanguageCommentProfileRegistry {
 				const { extensionUri, language } = contributions[cursor++]
 				if (typeof language.id !== 'string' || !language.id.trim()) continue
 				const languageId = language.id.toLowerCase()
+				if (!highlightedLanguages.has(languageId)) continue
 				const configUri = safeConfigurationUri(extensionUri, language.configuration)
 				if (!configUri) continue
 				const cacheKey = configUri.toString()
@@ -361,10 +379,8 @@ export class LanguageCommentProfileRegistry {
 		}
 		await Promise.all(Array.from({ length: Math.min(8, contributions.length) }, () => worker()))
 
-		// VS Code frequently splits one language across multiple contributions: one owns
-		// the configuration, while others add filenames or extensions. Associate files
-		// only after every profile has been collected so those config-less entries inherit
-		// the comment rules registered under the same language id.
+		// VS Code 经常把同一种语言拆成多项贡献：一项提供配置，其他项补充文件名或扩展名。
+		// 必须收集完全部配置后再关联文件，才能让无配置条目继承同一语言 ID 下的注释规则。
 		for (const { language } of contributions) {
 			if (typeof language.id !== 'string' || !language.id.trim()) continue
 			const languageId = language.id.toLowerCase()
@@ -376,7 +392,7 @@ export class LanguageCommentProfileRegistry {
 					next.discoveryExtensions.add(extension)
 					continue
 				}
-				// A few built-in contributions use an exact filename in `extensions`.
+				// 少数内置语言贡献会在 extensions 字段中填写精确文件名而不是扩展名。
 				const filename = safeFilename(rawExtension)
 				if (filename) {
 					addAssociation(next.languagesByFilename, filename, languageId)
@@ -406,8 +422,8 @@ export class LanguageCommentProfileRegistry {
 		this.state = next
 		if (failedConfigurations > 0) {
 			logger.error(localize(
-				`有 ${failedConfigurations} 个语言注释配置无法读取；对应语言将使用内置兜底规则。`,
-				`${failedConfigurations} language comment configurations could not be read; the affected languages will use built-in fallback rules.`,
+				`有 ${failedConfigurations} 个语言注释配置无法读取；对应语言将不参与自动标记识别。`,
+				`${failedConfigurations} language comment configurations could not be read; the affected languages will not participate in automatic marker detection.`,
 			))
 		}
 		if (failedPatterns > 0) logger.error(localize(
@@ -418,8 +434,7 @@ export class LanguageCommentProfileRegistry {
 
 	profileFor(languageId: string | undefined, fileName: string): CodeMarkerSyntaxProfile | undefined {
 		if (languageId) {
-			const direct = this.state.profilesByLanguage.get(languageId.toLowerCase())
-			if (direct) return direct
+			return this.state.profilesByLanguage.get(languageId.toLowerCase())
 		}
 		const languageIds = new Set<string>()
 		const basename = path.basename(fileName)
@@ -452,7 +467,6 @@ export class LanguageCommentProfileRegistry {
 		const simplePatterns = patterns.filter(pattern => !/[{},]/.test(pattern))
 		const complexPatterns = patterns.filter(pattern => /[{},]/.test(pattern)).map(pattern => `**/${pattern}`)
 		const globs = [
-			CODE_MARKER_FILE_GLOB,
 			...braceGlobs('**/*', extensions),
 			...braceGlobs('**/', filenames),
 			...braceGlobs('**/', simplePatterns),

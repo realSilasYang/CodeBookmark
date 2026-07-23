@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `ScriptRelocationJournal`。
+ *
+ * 实现要点：围绕脚本配置的读取、索引、迁移或恢复拆分单一职责，并由仓库统一提交副作用。
+ * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
+ * 主要入口：`ScriptRelocationRecord`、`createScriptRelocation`、`readPendingScriptRelocations`、`resolveRelocationRecord`、`completeScriptRelocation`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as fs from 'fs'
 import * as path from 'path'
 import { localize } from '../i18n/Localization'
@@ -136,7 +144,7 @@ export async function readPendingScriptRelocations(storageRoot: string): Promise
 				pending.push({ record, journalPath })
 			}
 		} catch {
-			// Leave malformed journals untouched so they remain available for manual recovery.
+			// 保留损坏的日志原文件，便于用户或维护工具进行人工恢复。
 		}
 	}
 	return pending
@@ -157,7 +165,7 @@ export async function completeScriptRelocation(journalPath: string): Promise<voi
 	try {
 		await fs.promises.rmdir(path.dirname(journalPath))
 	} catch {
-		// Other pending journals keep the directory non-empty.
+		// 仍有其他待处理日志时目录会保持非空，此处无需视为清理失败。
 	}
 }
 

@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责跨模块常量与稳定标识符，具体对象为 `Commands`。
+ *
+ * 实现要点：集中声明稳定命令标识、菜单位置和可用条件，供清单生成与运行时共用。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`Commands`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import { ContextBookmark } from '../ContextValue'
 import { DEFAULT_AI_GENERATION_PROMPT, DEFAULT_AI_OPTIMIZATION_PROMPT } from './AIPrompts'
 import { UNDO_ACTION_LABELS } from '../UndoActions'
@@ -66,7 +74,7 @@ export class Commands {
 	}))
 
 	static bookmarkCommands = {
-		// keyboard shortcut
+		// 编辑器键盘快捷命令。
 		toggleBookmark: {
 			'command': Commands.nameExtension + '.toggleBookmark',
 			'title': '添加/删除书签',
@@ -89,7 +97,7 @@ export class Commands {
 			'when': 'editorTextFocus',
 		},
 
-		// Button on item
+		// 书签树节点上的行内操作按钮。
 		deleteBookmark: {
 			'command': Commands.nameExtension + '.deleteBookmark',
 			'title': '删除',
@@ -144,7 +152,7 @@ export class Commands {
 			'group': 'inline@2'
 		},
 
-		// Top Bar Buttons
+		// 书签视图顶部工具栏按钮。
 		undo: {
 			'command': Commands.nameExtension + '.undo',
 			'title': '撤销：暂无可撤销操作',

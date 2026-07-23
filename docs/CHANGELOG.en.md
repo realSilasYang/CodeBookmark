@@ -2,6 +2,18 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.0.2 - 2026-07-23
+
+### 🚀 Improvements
+
+- **Project script documentation:** Added detailed Chinese documentation to 279 first-party TypeScript, JavaScript, MJS, and YAML scripts, plus an automated guard that prevents future scripts from omitting their module responsibility, implementation notes, core boundaries, or maintenance constraints.
+
+---
+
+### 🐛 Fixed
+
+- **Automatic marker false positives:** `TODO`, `FIXME`, and `BUG` now create bookmarks only when they appear as explicit comment directives in languages for which VS Code registers both syntax highlighting and formal comment rules. SVG icon descriptions, asset metadata, incidental prose, Plain Text, and files without syntax highlighting no longer create automatic bookmarks.
+
 ## 🎉 Version 3.0.1 - 2026-07-23
 
 ### 🚀 Improvements

@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责集成测试启动与环境隔离，具体对象为 `run-integration-tests`。
+ *
+ * 实现要点：创建隔离用户数据与测试工作区，并复用本机 VS Code 启动真实 Extension Host。
+ * 核心边界：脚本失败时应以非零状态退出，且不得静默改写不属于本任务的用户文件。
+ * 主要入口：`outputSink`、`stripKnownExternalDiagnostics`、`assertNoUnexpectedExtensionHostDiagnostics`、`isKnownExternalProjectLogDiagnostic`、`findProjectDiagnosticsInLog`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const path = require('node:path')
 const os = require('node:os')
 const fs = require('node:fs/promises')
@@ -314,8 +322,8 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
     path.join(root, 'tests', 'integration', 'fixture', 'sample.ts'),
     path.join(fixturePath, 'sample.ts'),
   )
-  // Commands launched from a VS Code extension host inherit this flag. Electron
-  // would then treat the workspace argument as a Node.js entry module.
+  // 从 VS Code Extension Host 启动的命令会继承此标志；若不清理，Electron 会把
+  // 工作区参数误当成 Node.js 入口模块，而不是要打开的测试工作区。
   const inheritedElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE
   const inheritedTestLocale = process.env.CODEBOOKMARK_TEST_LOCALE
   delete process.env.ELECTRON_RUN_AS_NODE

@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责VS Code 事件订阅与生命周期清理，具体对象为 `fileEditorSubscriber`。
+ *
+ * 实现要点：订阅编辑器与文件系统事件，把事件转换为可取消的提供器操作并统一登记释放。
+ * 核心边界：每个监听器都必须随扩展上下文释放，事件回调不得阻塞 Extension Host。
+ * 主要入口：`fileEditorSubscriber`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as vscode from 'vscode'
 import * as path from 'path'
 import { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
@@ -75,7 +83,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 	const focusEditor = vscode.window.onDidChangeActiveTextEditor(editor => {
 		if (editor) {
 			const scheme = editor.document.uri.scheme;
-			// Non-file editors must not switch or overwrite the current workspace bookmark scope.
+			// 非文件编辑器不能切换或覆盖当前工作区的书签作用域。
 			if (scheme !== 'file') return
 			void bookmarkProvider.reloadActiveTab().catch(error => logger.error(localize(
 				`切换文件后加载书签失败: ${error}`,

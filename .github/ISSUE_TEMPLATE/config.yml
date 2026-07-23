@@ -1,3 +1,7 @@
+# 配置说明：本文件负责项目维护脚本，入口文件为 `config.yml`。
+# 实现要点：约束 Issue 创建入口与外部链接，使问题信息按仓库维护流程收集。
+# 核心边界：步骤顺序、权限和触发条件共同构成发布安全边界，调整时必须保持最小权限。
+# 维护约束：键名、权限、触发条件和步骤顺序都属于行为契约，修改后必须通过仓库完整验证。
 blank_issues_enabled: false
 contact_links:
   - name: 私密报告安全漏洞 / Report a security vulnerability privately

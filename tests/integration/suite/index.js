@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责真实 Extension Host 集成测试，具体对象为 `index`。
+ *
+ * 实现要点：在真实宿主内执行用户路径，并对持久化结果、语言环境与移动恢复进行端到端断言。
+ * 核心边界：测试使用可重复的输入与隔离环境验证公开行为，不依赖人工界面判断。
+ * 主要入口：`markerDirectiveFixture`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const assert = require('node:assert/strict')
 const fs = require('node:fs/promises')
 const path = require('node:path')
@@ -137,6 +145,50 @@ async function run() {
   assert.equal(persistedAfterMove.schemaVersion, 1)
   assert.equal(path.resolve(persistedAfterMove.script.path), path.resolve(externallyMovedPath))
   assert.equal(persistedAfterMove.bookmarks[0].id, bookmarkId)
+
+  const markerUri = vscode.Uri.joinPath(workspaceFolder.uri, 'marker-directives.ts')
+  await fs.writeFile(markerUri.fsPath, [
+    'export function markerDirectiveFixture(): boolean {',
+    '\t// Automatic TODO/FIXME/BUG bookmarks are synchronized from explicit directives.',
+    '\t// TODO: first task',
+    '\t// FIXME: second task',
+    '\t// BUG: third task',
+    '\treturn true',
+    '}',
+  ].join('\n'), 'utf8')
+  const markerDocument = await vscode.workspace.openTextDocument(markerUri)
+  await vscode.window.showTextDocument(markerDocument)
+  assert.equal(markerDocument.languageId, 'typescript')
+  await extensionApi.integration.synchronizeCodeMarkers()
+  snapshot = extensionApi.integration.snapshot()
+  const markerRoot = snapshot.roots.find(root => root.path === 'marker-directives.ts')
+  assert.ok(markerRoot, 'Explicit TypeScript marker directives were not synchronized')
+  assert.deepEqual(markerRoot.children.map(child => child.label), [
+    'TODO: first task',
+    'FIXME: second task',
+    'BUG: third task',
+  ])
+
+  const svgUri = vscode.Uri.joinPath(workspaceFolder.uri, 'status_bug.svg')
+  await fs.writeFile(svgUri.fsPath, [
+    '<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">',
+    '\t<!-- Minimalist Flat Code Bug -->',
+    '\t<!-- TODO Icon Metadata -->',
+    '\t<!-- FIXME Icon Metadata -->',
+    '\t<!-- BUG Icon Metadata -->',
+    '\t<circle cx="64" cy="64" r="32" />',
+    '</svg>',
+  ].join('\n'), 'utf8')
+  const svgDocument = await vscode.workspace.openTextDocument(svgUri)
+  await vscode.window.showTextDocument(svgDocument)
+  assert.notEqual(svgDocument.languageId, 'plaintext')
+  await extensionApi.integration.synchronizeCodeMarkers()
+  snapshot = extensionApi.integration.snapshot()
+  assert.equal(
+    snapshot.roots.some(root => root.path === 'status_bug.svg'),
+    false,
+    'SVG metadata prose was incorrectly treated as a TODO/FIXME/BUG directive',
+  )
   await vscode.commands.executeCommand('workbench.action.closeAllEditors')
 }
 

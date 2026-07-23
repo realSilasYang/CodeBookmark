@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责图标资源整理与词典生成，具体对象为 `download-extra-icons`。
+ *
+ * 实现要点：把来源、语义别名和输出名称转换为可审计的图标资源清单。
+ * 核心边界：资源名称、语义词典和输出文件必须稳定，避免搜索结果或 AI 图标选择发生无意漂移。
+ * 主要入口：`fail`、`validateItem`、`fetchSvg`、`validateSvg`、`writeIcon`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const fs = require('fs')
 const path = require('path')
 const https = require('https')

@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `BookmarkConfigurationCatalog`。
+ *
+ * 实现要点：维护经过审计的静态条目与查找元数据，使展示和语义匹配保持稳定。
+ * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
+ * 主要入口：`BookmarkConfigurationEntry`、`BookmarkConfigurationDeleteRequest`、`BookmarkConfigurationDeletionResult`、`listBookmarkConfigurationFiles`、`removeBookmarkConfigurationFiles`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -254,7 +262,7 @@ async function inspectBookmarkConfigurationFile(
 	try {
 		parsed = decodePersistenceRecord(parsed, PersistenceFormats.script).value
 	} catch {
-		// The health result below reports the unsupported envelope as invalid.
+		// 下方健康检查会把不受支持的持久化信封统一报告为无效配置。
 		parsed = undefined
 	}
 	const script = isJsonRecord(parsed) && isJsonRecord(parsed.script) ? parsed.script : undefined

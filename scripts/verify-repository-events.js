@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-repository-events`。
+ *
+ * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-repository-events` 对应契约。
+ * 核心边界：通过断言锁定“verify-repository-events”相关行为，任何失败都表示实现偏离既有契约。
+ * 主要入口：`main`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { installModuleMocks } = require('./test-support/module-mocks')
@@ -127,10 +135,8 @@ async function main() {
     .find(data => path.resolve(data.script.path) === path.resolve(externallyRenamed))
   assert.equal(path.resolve(relinked.bookmarks[0].path), path.resolve(externallyRenamed))
 
-  // A move can be observed as delete + create by external tools. The delete
-  // side marks the configuration as missing; the later read must still use
-  // its fingerprint to rebind it to the new file instead of leaving a stale
-  // tombstone forever.
+  // 外部工具执行移动时，监听器可能只看到“删除＋创建”。删除事件会先把配置
+  // 标记为缺失；随后读取时仍必须利用原指纹绑定到新文件，不能永久留下墓碑记录。
   const tombstoneId = '10000000-0000-9000-1000-000000000023'
   const tombstoneSource = path.join(renamedDirectory, 'tombstone.ts')
   const tombstoneTarget = path.join(renamedDirectory, 'recovered-tombstone.ts')

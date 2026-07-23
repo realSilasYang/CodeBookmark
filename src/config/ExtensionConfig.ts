@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责扩展配置读取与约束，具体对象为 `ExtensionConfig`。
+ *
+ * 实现要点：缓存并规范化设置值，在配置变化时集中失效，避免调用方自行解释原始配置。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`ExtensionConfig`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';

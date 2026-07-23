@@ -1,3 +1,10 @@
+/**
+ * 模块说明：本文件负责对外契约测试，具体对象为 `release-supply-chain.test`。
+ *
+ * 实现要点：从生成清单与工作流文件读取实际配置，验证扩展边界和发布供应链约束。
+ * 核心边界：测试使用可重复的输入与隔离环境验证公开行为，不依赖人工界面判断。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')

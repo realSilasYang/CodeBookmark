@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkConfigurationManagerWebview`。
+ *
+ * 实现要点：生成受 CSP 约束的界面资源，并通过结构化消息处理用户操作。
+ * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
+ * 主要入口：`BookmarkConfigurationManagerWebview`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as crypto from 'crypto'
 import * as vscode from 'vscode'
 import { currentFormattingLocale, localize } from '../i18n/Localization'

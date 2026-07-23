@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-script-identity`。
+ *
+ * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-script-identity` 对应契约。
+ * 核心边界：通过断言锁定“verify-script-identity”相关行为，任何失败都表示实现偏离既有契约。
+ * 主要入口：`fingerprint`、`main`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
@@ -190,9 +198,8 @@ async function main() {
     assert.equal(typeof tombstone.script.missingSince, 'number')
     assert.equal(typeof tombstone.script.fingerprint.sha256, 'string')
 
-    // A delayed in-memory save may race with the delete event. It must retain
-    // the last good source fingerprint or later create/appearance recovery has
-    // no durable identity evidence left.
+    // 延迟的内存保存可能与删除事件竞争；必须保留最后一次有效的源文件指纹，
+    // 否则后续创建事件或文件出现恢复流程将失去可持久化的身份判断依据。
     assert.equal(await bookmarkRepository.saveBookmarksToFile(new BookmarkSet(rebound), [renamedScript]), true)
     tombstone = JSON.parse(fs.readFileSync(configPath, 'utf8'))
     assert.equal(typeof tombstone.script.fingerprint.sha256, 'string')

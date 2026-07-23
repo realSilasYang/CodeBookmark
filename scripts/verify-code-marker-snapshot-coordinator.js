@@ -1,3 +1,10 @@
+/**
+ * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-code-marker-snapshot-coordinator`。
+ *
+ * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-code-marker-snapshot-coordinator` 对应契约。
+ * 核心边界：通过断言锁定“verify-code-marker-snapshot-coordinator”相关行为，任何失败都表示实现偏离既有契约。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const assert = require('node:assert/strict')
 const { installModuleMocks } = require('./test-support/module-mocks')
 const { createVscodeFake } = require('./test-support/vscode-fake')
@@ -15,18 +22,21 @@ try {
   const { BookmarkSet } = require('../out/models/BookmarkSet')
   const { CodeMarkerSnapshotCoordinator } = require('../out/providers/CodeMarkerSnapshotCoordinator')
 
+  const cLikeProfile = { lineComments: [{ value: '//' }], blockComments: [['/*', '*/']] }
+
   function createHarness(maxMarkers = 1) {
     const events = []
     const bookmarks = new BookmarkSet()
     const coordinator = new CodeMarkerSnapshotCoordinator(maxMarkers)
     let currentScope = true
+    let currentProfile = cLikeProfile
     const port = {
       isFileUri: uri => uri.scheme === 'file',
       isCurrentScope: () => currentScope,
       filePath: uri => uri.fsPath,
       relativeBookmarkPath: filePath => filePath.replace('C:/workspace/', ''),
       bookmarks: () => bookmarks,
-      profileFor: () => undefined,
+      profileFor: () => currentProfile,
       warnFileTruncated: (filePath, limit) => events.push(`warning:truncated:${filePath}:${limit}`),
       warnFileCapacityLimited: filePath => events.push(`warning:capacity:${filePath}`),
       warnWorkspaceDiscoveryTruncated: (scope, limit) => events.push(`warning:workspace:${scope}:${limit}`),
@@ -34,7 +44,14 @@ try {
       saveBookmarks: paths => events.push(`save:${paths.join(',')}`),
       refreshDecorations: () => events.push('refresh'),
     }
-    return { bookmarks, coordinator, events, port, setCurrentScope: value => { currentScope = value } }
+    return {
+      bookmarks,
+      coordinator,
+      events,
+      port,
+      setCurrentScope: value => { currentScope = value },
+      setProfile: value => { currentProfile = value },
+    }
   }
 
   const uri = { scheme: 'file', fsPath: 'C:/workspace/src/main.ts' }
@@ -57,6 +74,29 @@ try {
   assert.equal(synchronized.events.length, 1)
   assert.equal(synchronized.bookmarks.size, 1)
   assert.equal(synchronized.coordinator.fileNodeHasCodeMarkers(synchronized.bookmarks.values[0]), true)
+
+  const removedAfterDirectiveBecameProse = synchronized.coordinator.synchronizeSnapshot(
+    uri,
+    ['// Automatic TODO/FIXME/BUG bookmarks are synchronized from explicit directives.'],
+    'typescript',
+    synchronized.port,
+  )
+  assert.equal(removedAfterDirectiveBecameProse.removed, 1)
+  assert.equal(synchronized.bookmarks.size, 0)
+
+  synchronized.coordinator.synchronizeSnapshot(uri, ['// TODO: restored'], 'typescript', synchronized.port)
+  synchronized.setProfile(undefined)
+  const removedAfterLanguageSupportDisappeared = synchronized.coordinator.synchronizeSnapshot(
+    uri,
+    ['// TODO: first'],
+    'plaintext',
+    synchronized.port,
+  )
+  assert.equal(removedAfterLanguageSupportDisappeared.removed, 1)
+  assert.equal(synchronized.bookmarks.size, 0)
+
+  synchronized.setProfile(cLikeProfile)
+  synchronized.coordinator.synchronizeSnapshot(uri, ['// TODO: restored'], 'typescript', synchronized.port)
 
   const ignored = createHarness()
   ignored.setCurrentScope(false)

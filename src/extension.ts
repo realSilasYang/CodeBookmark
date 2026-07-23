@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责扩展激活入口与资源装配，具体对象为 `extension`。
+ *
+ * 实现要点：同步装配命令、视图和订阅，再把慢速加载交给后台生命周期处理。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`activate`、`deactivate`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as vscode from 'vscode'
 
 import { fileEditorSubscriber } from './subscriptions/fileEditorSubscriber'
@@ -46,9 +54,8 @@ function hasWorkspaceFolder(): boolean {
 }
 
 export function activate(context: vscode.ExtensionContext): CodeBookmarkExtensionApi {
-	// Register the provider and all commands synchronously before starting any I/O.
-	// VS Code may request the contributed view immediately; awaiting even a setContext
-	// command here can leave the view with no registered data provider.
+	// 在启动任何 I/O 前同步注册数据提供器与全部命令。VS Code 可能立即请求贡献视图；
+	// 即使这里只等待一次 setContext，也可能让视图在数据提供器尚未注册时被创建。
 	initializeLocalization(vscode.env.language)
 	initializeBookmarkIconRoot(context.extensionUri)
 	context.globalState.setKeysForSync(SyncedGlobalStateKeys)
@@ -87,8 +94,8 @@ export function activate(context: vscode.ExtensionContext): CodeBookmarkExtensio
 		`Failed to initialize the bookmark view context: ${error}`,
 	)))
 
-	// Activation must complete immediately. The provider owns loading state and error
-	// recovery, so slow disks or a large workspace cannot trigger VS Code's 10s timeout.
+	// 激活函数必须立即返回。加载状态和错误恢复由提供器负责，避免慢速磁盘或大型工作区
+	// 触发 VS Code 的 10 秒激活超时。
 	codeBookmarkProvider.init(viewCodeBookmark)
 	const language = currentLanguage()
 	return process.env.CODEBOOKMARK_INTEGRATION_TEST === '1'

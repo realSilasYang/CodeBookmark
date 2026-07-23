@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-code-markers`。
+ *
+ * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-code-markers` 对应契约。
+ * 核心边界：通过断言锁定“verify-code-markers”相关行为，任何失败都表示实现偏离既有契约。
+ * 主要入口：`occurrence`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { installModuleMocks } = require('./test-support/module-mocks')
@@ -58,67 +66,127 @@ function occurrence(marker, line, column, label, lineText) {
   return { marker, line, column, label, lineText }
 }
 
+const cLikeProfile = { lineComments: [{ value: '//' }], blockComments: [['/*', '*/']] }
+const hashProfile = { lineComments: [{ value: '#' }], blockComments: [] }
+const cssProfile = { lineComments: [], blockComments: [['/*', '*/']] }
+const markupProfile = { lineComments: [], blockComments: [['<!--', '-->']] }
+const autohotkeyProfile = { lineComments: [{ value: ';' }], blockComments: [['/*', '*/']] }
+
 const javascript = [
   'const text = "// TODO: string literal"',
   'const TODO_value = true',
   '// TODO: first task',
-  'run() // fixme repair this',
+  'run() // FIXME: repair this',
   '/* BUG: block issue */',
   'const template = `// TODO: template literal`',
   '/*',
   ' * TODO: multiline block',
   ' */',
-  '// TODO one FIXME two BUG three',
 ]
-const scan = scanCodeMarkers(javascript, 'typescript', 'sample.ts')
+const scan = scanCodeMarkers(javascript, 'typescript', 'sample.ts', 100, cLikeProfile)
 assert.equal(scan.truncated, false)
 assert.deepEqual(scan.occurrences.map(item => [item.marker, item.line]), [
   ['TODO', 2],
   ['FIXME', 3],
   ['BUG', 4],
   ['TODO', 7],
-  ['TODO', 9],
-  ['FIXME', 9],
-  ['BUG', 9],
 ])
 assert.equal(scan.occurrences[0].label, 'TODO: first task')
 assert.equal(scanCodeMarkers(['{"value":"TODO"}'], 'json', 'data.json').occurrences.length, 0)
 assert.deepEqual(
-  scanCodeMarkers(['value = "# TODO string"', '# BUG: python issue'], 'python', 'sample.py').occurrences.map(item => item.marker),
+  scanCodeMarkers(['value = "# TODO string"', '# BUG: python issue'], 'python', 'sample.py', 100, hashProfile).occurrences.map(item => item.marker),
   ['BUG']
 )
 assert.deepEqual(
-  scanCodeMarkers(['"""', 'TODO inside docstring', '"""', '# fixme: real marker'], 'python', 'sample.py').occurrences.map(item => item.marker),
+  scanCodeMarkers(['"""', '# TODO inside docstring', '"""', '# FIXME: real marker'], 'python', 'sample.py', 100, hashProfile).occurrences.map(item => item.marker),
   ['FIXME']
 )
 assert.deepEqual(
-  scanCodeMarkers(['// TODO not valid CSS', '/* BUG: valid CSS */'], 'css', 'sample.css').occurrences.map(item => item.marker),
+  scanCodeMarkers(['// TODO not valid CSS', '/* BUG: valid CSS */'], 'css', 'sample.css', 100, cssProfile).occurrences.map(item => item.marker),
   ['BUG']
 )
 assert.deepEqual(
-  scanCodeMarkers(['<div>TODO visible text</div>', '<!-- TODO: html comment -->'], 'html', 'sample.html').occurrences.map(item => item.marker),
+  scanCodeMarkers(['<div>TODO visible text</div>', '<!-- TODO: html comment -->'], 'html', 'sample.html', 100, markupProfile).occurrences.map(item => item.marker),
   ['TODO']
 )
+const incidentalMarkerWords = [
+  '// Automatic TODO/FIXME/BUG bookmarks are synchronized from comment tokens.',
+  '// This TODO item mentions a FIXME and a BUG in prose.',
+  '// TODO one FIXME two BUG three',
+  '/* Security Bug / Vulnerability */',
+]
+assert.equal(scanCodeMarkers(incidentalMarkerWords, 'typescript', 'prose.ts', 100, cLikeProfile).occurrences.length, 0)
+assert.equal(
+  scanCodeMarkers([
+    '<!-- Minimalist Flat Code Bug -->',
+    '<!-- TODO Icon Metadata -->',
+    '<!-- FIXME Icon Metadata -->',
+    '<!-- BUG Icon Metadata -->',
+  ], 'xml', 'status_bug.svg', 100, markupProfile).occurrences.length,
+  0,
+)
+const explicitDirectives = scanCodeMarkers([
+  '// @TODO first',
+  '// [FIXME] second',
+  '/** BUG: third */',
+  '// TODO',
+  '// FIXME - fifth',
+  '// BUG(owner): sixth',
+  '// TODO：第七项',
+  '// todo: eighth',
+  '// @fixme ninth',
+  '// [bug] tenth',
+], 'typescript', 'directives.ts', 100, cLikeProfile).occurrences
+assert.deepEqual(
+  explicitDirectives.map(item => item.marker),
+  ['TODO', 'FIXME', 'BUG', 'TODO', 'FIXME', 'BUG', 'TODO', 'TODO', 'FIXME', 'BUG'],
+)
+assert.deepEqual(
+  explicitDirectives.map(item => item.label),
+  [
+    'TODO: first', 'FIXME: second', 'BUG: third', 'TODO', 'FIXME: fifth',
+    'BUG: (owner): sixth', 'TODO: 第七项', 'TODO: eighth', 'FIXME: ninth', 'BUG: tenth',
+  ],
+)
+assert.equal(
+  scanCodeMarkers(['// todo item in prose', '// fixme note in prose', '// bug icon metadata'], 'typescript', 'lower.ts', 100, cLikeProfile).occurrences.length,
+  0,
+)
+const iconMetadataFalsePositives = fs.readdirSync('resources/custom_icons')
+  .filter(fileName => fileName.endsWith('.svg'))
+  .flatMap(fileName => {
+    const lines = fs.readFileSync(`resources/custom_icons/${fileName}`, 'utf8').split(/\r\n|\n|\r/)
+    return scanCodeMarkers(lines, 'xml', fileName, 100, markupProfile).occurrences
+      .map(item => `${fileName}:${item.line + 1}:${item.marker}`)
+  })
+assert.deepEqual(iconMetadataFalsePositives, [])
+const repositoryProseFalsePositives = [
+  ['src/util/FileUtils.ts', 'typescript', cLikeProfile],
+  ['src/util/CodeMarkerScanner.ts', 'typescript', cLikeProfile],
+  ['README.md', 'markdown', markupProfile],
+  ['docs/README.en.md', 'markdown', markupProfile],
+].flatMap(([fileName, languageId, profile]) => {
+  const lines = fs.readFileSync(fileName, 'utf8').split(/\r\n|\n|\r/)
+  return scanCodeMarkers(lines, languageId, fileName, 100, profile).occurrences
+    .map(item => `${fileName}:${item.line + 1}:${item.marker}:${item.label}`)
+})
+assert.deepEqual(repositoryProseFalsePositives, [])
 const autohotkey = [
   'text := "; TODO inside string"',
   'value;TODO is not a comment delimiter without whitespace',
   '; TODO: line comment',
   'Run "app.exe" ; FIXME: inline comment',
   '/* BUG: one-line block */',
-  '/* todo: multiline block',
+  '/* TODO: multiline block',
   'still comment */',
 ]
 assert.deepEqual(
-  scanCodeMarkers(autohotkey, 'ahk', 'process-guard.ahk').occurrences.map(item => [item.marker, item.line]),
+  scanCodeMarkers(autohotkey, 'ahk', 'process-guard.ahk', 100, autohotkeyProfile).occurrences.map(item => [item.marker, item.line]),
   [['TODO', 2], ['FIXME', 3], ['BUG', 4], ['TODO', 5]]
 )
-assert.deepEqual(
-  scanCodeMarkers(['/* todo sdf'], 'plaintext', 'process-guard.ahk').occurrences.map(item => item.label),
-  ['TODO: sdf']
-)
-assert.match(require('../out/util/CodeMarkerScanner').CODE_MARKER_FILE_GLOB, /ahk,ahk2/)
-assert.equal(scanCodeMarkers(['// METHODTODO TODO_value'], 'typescript', 'sample.ts').occurrences.length, 0)
-assert.equal(scanCodeMarkers(['// TODO one FIXME two'], 'typescript', 'limit.ts', 1).truncated, true)
+assert.equal(scanCodeMarkers(['/* TODO: not highlighted'], 'plaintext', 'process-guard.ahk').occurrences.length, 0)
+assert.equal(scanCodeMarkers(['// METHODTODO TODO_value'], 'typescript', 'sample.ts', 100, cLikeProfile).occurrences.length, 0)
+assert.equal(scanCodeMarkers(['// TODO: first', '// FIXME: second'], 'typescript', 'limit.ts', 1, cLikeProfile).truncated, true)
 assert.equal(isExcludedSourceRelativePath('.history/example_20260717223142.ahk'), true)
 assert.equal(isExcludedSourceRelativePath('src/history-service.ts'), false)
 assert.match(SOURCE_SCAN_EXCLUDE_GLOB, /\.history/)
@@ -197,6 +265,31 @@ assert.equal(root.values.length, 1)
 assert.equal(root.values[0].subs.values.some(bookmark => bookmark.isCodeMarker), false)
 assert.equal(root.values[0].subs.values.includes(manual), true)
 assert.equal(root.values[0].subs.values.includes(nestedManual), true)
+
+const staleProseRoot = new BookmarkSet()
+const staleProseLine = '// Automatic TODO/FIXME/BUG bookmarks are synchronized from comment tokens.'
+synchronizeCodeMarkerBookmarks(staleProseRoot, 'src/util/FileUtils.ts', [staleProseLine], [
+  occurrence('TODO', 0, 13, 'TODO: /', staleProseLine),
+  occurrence('FIXME', 0, 18, 'FIXME: /', staleProseLine),
+  occurrence('BUG', 0, 24, 'BUG: bookmarks are synchronized from comment tokens.', staleProseLine),
+])
+assert.equal(staleProseRoot.values[0].subs.size, 3)
+const currentProseScan = scanCodeMarkers(
+  [staleProseLine],
+  'typescript',
+  'src/util/FileUtils.ts',
+  100,
+  cLikeProfile,
+)
+assert.deepEqual(currentProseScan.occurrences, [])
+const staleProseCleanup = synchronizeCodeMarkerBookmarks(
+  staleProseRoot,
+  'src/util/FileUtils.ts',
+  [staleProseLine],
+  currentProseScan.occurrences,
+)
+assert.equal(staleProseCleanup.removed, 3)
+assert.equal(staleProseRoot.size, 0)
 
 const automaticOnly = new BookmarkSet()
 synchronizeCodeMarkerBookmarks(automaticOnly, 'only.ts', ['// TODO'], [occurrence('TODO', 0, 3, 'TODO', '// TODO')])

@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIService`。
+ *
+ * 实现要点：封装外部服务调用、协议选择、取消、限额与错误转换。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`isAIAuthenticationError`、`isAIRateLimitError`、`AIService`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ExtensionConfig } from '../config/ExtensionConfig';
@@ -214,9 +222,7 @@ export class AIService {
 		return (await this.sendRequestWithTarget(messages, onProgress, token)).content
 	}
 
-	/**
-	 * Test the API connection
-	 */
+	/** 测试当前 AI 配置是否能够完成一次有效 API 请求。 */
 	public static async testConnection(): Promise<string> {
 		try {
 			const result = await this.sendRequestWithTarget([
@@ -229,9 +235,7 @@ export class AIService {
 		}
 	}
 
-	/**
-	 * Generate bookmarks for a given code block
-	 */
+	/** 根据指定代码内容生成结构化书签，并执行响应校验与规范化。 */
 	public static async generateBookmarks(codeContent: string, filePath: string, onProgress?: (msg: string) => void, token?: vscode.CancellationToken): Promise<AIBookmark[]> {
 		onProgress?.(localize('正在提取源码及文件路径环境信息...', 'Collecting source and file context…'));
 		const prompt = this.generationPrompt();
@@ -263,9 +267,7 @@ export class AIService {
 		}
 	}
 
-	/**
-	 * Optimize existing bookmarks
-	 */
+	/** 在保留书签身份和层级约束的前提下优化现有书签。 */
 	public static async optimizeBookmarks(codeContent: string, filePath: string, existingBookmarks: ExistingBookmark[], onProgress?: (msg: string) => void, token?: vscode.CancellationToken): Promise<AIOptimizedBookmark[]> {
 		onProgress?.(localize('正在提取源码及现有书签特征...', 'Collecting source and existing bookmark context…'));
 		if (existingBookmarks.length === 0) return []

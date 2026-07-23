@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `BookmarkConfigurationImportScanner`。
+ *
+ * 实现要点：按受控规则扫描输入并生成结构化结果，同时限制范围、容量和误匹配。
+ * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
+ * 主要入口：`BookmarkConfigurationImportCandidate`、`collectBookmarkConfigurationImportCandidates`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as fs from 'fs'
 import * as path from 'path'
 import { localize } from '../i18n/Localization'

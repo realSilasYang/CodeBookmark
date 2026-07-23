@@ -2,6 +2,18 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 版本 3.0.2 - 2026-07-23
+
+### 🚀 优化
+
+- **项目脚本注释**：为 279 个一方维护的 TypeScript、JavaScript、MJS 与 YAML 脚本补充详细中文说明，并新增自动守卫，防止后续脚本遗漏中文模块职责、实现要点、核心边界或维护约束。
+
+---
+
+### 🐛 修复
+
+- **自动标记误识别**：`TODO`、`FIXME` 和 `BUG` 现在只会在 VS Code 已注册语法高亮与正式注释规则的语言中，以明确的注释指令形式生成书签；SVG 图标说明、资源元数据、普通文字提及、纯文本及无语法高亮的文件不再误生成自动书签。
+
 ## 🎉 版本 3.0.1 - 2026-07-23
 
 ### 🚀 优化

@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责图标选择界面与资源检索，具体对象为 `IconPickerWebview`。
+ *
+ * 实现要点：生成受 CSP 约束的界面资源，并通过结构化消息处理用户操作。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`shouldShowRestoreDefaultIcon`、`IconPickerWebview`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { normalizeBookmarkIconName } from '../BookmarkIconName';
@@ -224,7 +232,7 @@ export class IconPickerWebview {
             </div>
         `).join('');
 
-        // Generate Recent Tab dynamically
+        // 根据同步后的最近图标状态动态生成“最近使用”标签页。
         let recentInnerGrid = '';
         const showRestoreDefault = shouldShowRestoreDefaultIcon(this._currentIcon, this._defaultIcon);
         

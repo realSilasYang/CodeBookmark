@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIRequestPolicy`。
+ *
+ * 实现要点：集中表达允许、拒绝和限额规则，让安全边界不散落在调用流程中。
+ * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
+ * 主要入口：`AI_SOURCE_WARNING_BYTES`、`AI_RESPONSE_WARNING_BYTES`、`AI_SOURCE_MAX_BYTES`、`AI_REQUEST_MAX_BYTES`、`AI_RESPONSE_MAX_BYTES`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import { isLocalAIHostname } from './AIAddressClassifier'
 
 const DEFAULT_TIMEOUT_S = 60

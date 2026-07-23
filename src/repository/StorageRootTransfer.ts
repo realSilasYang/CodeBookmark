@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `StorageRootTransfer`。
+ *
+ * 实现要点：围绕脚本配置的读取、索引、迁移或恢复拆分单一职责，并由仓库统一提交副作用。
+ * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
+ * 主要入口：`transferStorageRoot`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -87,7 +95,7 @@ function mergeJson(source: unknown, target: unknown): unknown | undefined {
 			return workspaceOrderPersistence([...new Set([...targetOrder, ...sourceOrder])])
 		}
 	} catch {
-		// Try the script-envelope format below.
+		// 旧列表格式解析失败后，继续尝试下方的脚本信封格式。
 	}
 	try {
 		source = decodePersistenceRecord(source, PersistenceFormats.script).value
@@ -101,8 +109,8 @@ function mergeJson(source: unknown, target: unknown): unknown | undefined {
 	const targetScript = scriptIdentity(target)
 	if (!sourceScript || !targetScript || sourceScript.id !== targetScript.id) return undefined
 
-	// The source root is flushed immediately before transfer, so its lastSeenAt normally wins.
-	// On ties keep the target root as the authority because it may already contain newer user data.
+	// 来源根目录会在转移前立即刷新，因此通常其 lastSeenAt 更新。
+	// 时间相同时以目标根目录为准，因为其中可能已存在更晚写入的用户数据。
 	const sourceIsAuthoritative = sourceScript.lastSeenAt > targetScript.lastSeenAt
 	const primary = sourceIsAuthoritative ? source : target
 	const secondaryBookmarks = sourceIsAuthoritative ? target.bookmarks : source.bookmarks
@@ -158,7 +166,7 @@ async function listFiles(root: string): Promise<string[]> {
 }
 
 async function removeSourceStorageEntries(root: string): Promise<void> {
-	// A storage root may share a parent with unrelated user files. Remove only entries owned by CodeBookmark.
+	// 存储根目录可能与无关用户文件共用父目录，只能删除明确归 CodeBookmark 所有的条目。
 	for (const directory of OWNED_STORAGE_DIRECTORIES) {
 		await fs.promises.rm(path.join(root, directory), { recursive: true, force: true })
 	}
@@ -290,7 +298,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		if (merged !== undefined) {
 			const mergedContent = JSON.stringify(merged, null, 2)
 			if (targetContent.toString('utf8') === mergedContent) continue
-			// Keep every overwritten target snapshot, not only the first transfer backup.
+			// 每次覆盖目标前都保存快照，不能只保留第一次转移生成的备份。
 			await preserveTransferSnapshot(targetFile, targetContent)
 			await atomicWriteFile(targetFile, mergedContent)
 			result.mergedFiles++

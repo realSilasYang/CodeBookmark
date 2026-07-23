@@ -1,7 +1,15 @@
+/**
+ * 模块说明：本文件负责图标资源整理与词典生成，具体对象为 `build-curated-list`。
+ *
+ * 实现要点：把来源、语义别名和输出名称转换为可审计的图标资源清单。
+ * 核心边界：资源名称、语义词典和输出文件必须稳定，避免搜索结果或 AI 图标选择发生无意漂移。
+ * 主要入口：`sourceLabel`、`generateEmojiSources`、`generateExplicitSources`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 const fs = require('fs');
 const path = require('path');
 
-// Iconify sources used for the same semantic concept.
+// 同一语义概念可对应多个 Iconify 来源；后续会按稳定的输出名称合并这些候选资源。
 const emojiSources = ['fluent-emoji-flat', 'twemoji', 'noto-v1', 'fxemoji'];
 const sourceLabels = new Map([
     ['fluent-emoji-flat', 'fluent'],
@@ -17,7 +25,7 @@ function sourceLabel(source) {
     return sourceLabels.get(source) || source.replace(/-/g, '_');
 }
 
-// Helper for CLDR emojis
+// 将 CLDR Emoji 名称转换为统一候选项结构，避免各分类重复拼装 URL。
 function generateEmojiSources(prefix, cldrNames) {
     let results = [];
     cldrNames.forEach(name => {
@@ -32,11 +40,11 @@ function generateEmojiSources(prefix, cldrNames) {
     return results;
 }
 
-// Helper for explicit URLs
+// 为显式 URL 建立候选项；用于无法通过通用集合名称表达的精选图标。
 function generateExplicitSources(prefix, urls) {
     let results = [];
     urls.forEach(url => {
-        // e.g. logos/javascript -> url
+// 例如把 logos/javascript 这类集合路径转换为可下载 URL。
         const [source, rawName] = url.split('/');
         const baseName = rawName.replace(/-/g, '_');
         results.push({
@@ -148,11 +156,11 @@ const brandExplicit = [
     'logos/microsoft-word', 'logos/microsoft-excel', 'logos/microsoft-powerpoint', 'logos/microsoft-outlook', 
     'logos/zoom', 'logos/google-drive', 'logos/google-gmail', 'logos/wikipedia', 'logos/stackoverflow-icon', 'logos/figma', 'logos/sketch', 'logos/invision-icon',
 
-    // Supplement with vscode-icons for beautiful flat tech icons
+    // 使用 vscode-icons 补充清晰的扁平技术图标，同时保持既有输出命名规则。
     'vscode-icons/file-type-js-official', 'vscode-icons/file-type-typescript-official', 'vscode-icons/file-type-python', 'vscode-icons/file-type-java', 'vscode-icons/file-type-cpp3', 'vscode-icons/file-type-csharp2', 'vscode-icons/file-type-go-gopher', 'vscode-icons/file-type-rust', 'vscode-icons/file-type-reactjs', 'vscode-icons/file-type-vue', 'vscode-icons/file-type-angular', 'vscode-icons/file-type-node', 'vscode-icons/file-type-docker', 'vscode-icons/file-type-git'
 ];
 
-// Combine all
+// 汇总所有分类后再统一去重，确保分类顺序不会造成下载结果漂移。
 const generatedIcons = [
     ...generateEmojiSources('status', statusEmojis),
     ...generateExplicitSources('status', statusExplicit),
@@ -168,7 +176,7 @@ const generatedIcons = [
     ...generateExplicitSources('brand', brandExplicit)
 ];
 
-// Some concepts intentionally overlap across categories. Keep one download per output file.
+// 部分概念会有意跨分类重复出现；每个输出文件只保留一次下载任务。
 const allCuratedIcons = [...new Map(generatedIcons.map(icon => [icon.name, icon])).values()];
 
 const outputData = {

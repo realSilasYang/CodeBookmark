@@ -123,9 +123,11 @@ Without any AI connection, the extension can display `TODO`, `FIXME`, and `BUG` 
 
 ### 🔎 What is recognized
 
-The extension reads comment rules contributed by built-in VS Code languages and installed language extensions. Rules refresh when language extensions are installed, removed, enabled, or disabled.
+The extension reads only VS Code built-in languages and language extensions that register both a syntax-highlighting grammar and formal comment rules. Rules refresh when language extensions are installed, removed, enabled, or disabled. No automatic bookmark is created when the active language mode is Plain Text or when a file extension has no registered syntax highlighter.
 
-Only markers inside actual line or block comments are recognized. Strings, ordinary identifiers, and JSON without comment support do not create false automatic bookmarks. One line may contain several distinct markers.
+A marker must be inside a real line or block comment and appear as an independent directive at the beginning of the comment content, such as `// TODO: add validation`, `# FIXME: handle the edge case`, `/* BUG: recover from the failure */`, `* @TODO improve the docs`, or `// [FIXME] revise the implementation`. A plain uppercase form may contain only the marker; a description requires an explicit separator such as a colon, full-width colon, dash, or owner parentheses followed by a colon. Lowercase forms are accepted only in an explicit structure such as `todo:`, `@fixme`, or `[bug]`, and are normalized to uppercase when stored. Each comment segment can create at most one automatic bookmark per line.
+
+Strings, ordinary identifiers, JSON without comment support, and prose or asset metadata that merely mentions marker names—such as “this module handles TODO/FIXME/BUG,” `<!-- Minimalist Flat Code Bug -->`, or `<!-- TODO Icon Metadata -->`—do not create automatic bookmarks. Lowercase prose such as `todo item`, `fixme note`, or `bug icon` is not treated as an explicit directive either.
 
 ### 📌 How automatic bookmarks are displayed and stored
 

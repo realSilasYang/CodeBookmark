@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责书签领域模型与展示投影，具体对象为 `BookmarkCodec`。
+ *
+ * 实现要点：解析并校验外部或持久化数据，只向调用方返回满足当前格式契约的结构。
+ * 核心边界：领域对象负责维持自身不变量；序列化字段、父子关系和展示状态不得被调用方绕过。
+ * 主要入口：`BookmarkJSON`、`BookmarkParseState`、`ParsedBookmark`、`MAX_BOOKMARK_NODES`、`parseBookmarkJSON`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import { normalizeBookmarkIconName } from '../util/BookmarkIconName'
 import { parseCodeMarkerMetadata, type CodeMarkerMetadata } from '../util/CodeMarkerScanner'
 import { isJsonRecord } from '../util/JsonRecord'

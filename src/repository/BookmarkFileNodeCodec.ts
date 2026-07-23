@@ -1,3 +1,11 @@
+/**
+ * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `BookmarkFileNodeCodec`。
+ *
+ * 实现要点：解析并校验外部或持久化数据，只向调用方返回满足当前格式契约的结构。
+ * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
+ * 主要入口：`updateBookmarkFileNodePath`、`createBookmarkFileNode`、`absoluteBookmarkFileNodePath`、`createBookmarkFileEnvelope`。
+ * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ */
 import * as path from 'path'
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
