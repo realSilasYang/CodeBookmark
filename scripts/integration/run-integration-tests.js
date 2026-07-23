@@ -53,6 +53,15 @@ function assertNoUnexpectedExtensionHostDiagnostics(stdout, stderr) {
   return cleanedStdout.count + cleanedStderr.count
 }
 
+function isKnownExternalProjectLogDiagnostic(entry, normalizedRoot) {
+  const normalizedEntry = entry.replaceAll('\\', '/').toLowerCase()
+  return /\[error\]\s+proxyresolver#resolveproxy undefined canceled: canceled\b/iu.test(entry)
+    && normalizedEntry.includes(`${normalizedRoot}/.vscode-test/`)
+    && normalizedEntry.includes('/resources/app/out/vs/workbench/api/node/extensionhostprocess.js')
+    && !normalizedEntry.includes(`${normalizedRoot}/out/extension.js`)
+    && !normalizedEntry.includes('realsilasyang.codebookmark')
+}
+
 function findProjectDiagnosticsInLog(logContent, root, logFile = '<log>') {
   const normalizedRoot = path.resolve(root).replaceAll('\\', '/').toLowerCase()
   const diagnostics = []
@@ -65,6 +74,7 @@ function findProjectDiagnosticsInLog(logContent, root, logFile = '<log>') {
     }
     const entry = entryLines.join('\n')
     const normalizedEntry = entry.replaceAll('\\', '/').toLowerCase()
+    if (isKnownExternalProjectLogDiagnostic(entry, normalizedRoot)) continue
     if (normalizedEntry.includes(normalizedRoot)
       || normalizedEntry.includes('realsilasyang.codebookmark')) {
       diagnostics.push(`${logFile}: ${entry.trim()}`)

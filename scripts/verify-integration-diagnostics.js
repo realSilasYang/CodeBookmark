@@ -69,6 +69,31 @@ assert.deepEqual(findProjectDiagnosticsInLog(
   root,
   'exthost.log',
 ), [])
+const downloadedHostStack = path.join(
+  root,
+  '.vscode-test',
+  'vscode-win32-x64-archive-1.130.0',
+  'resources',
+  'app',
+  'out',
+  'vs',
+  'workbench',
+  'api',
+  'node',
+  'extensionHostProcess.js',
+)
+assert.deepEqual(findProjectDiagnosticsInLog(
+  '2026-07-23 13:00:00.000 [error] ProxyResolver#resolveProxy undefined Canceled: Canceled\n'
+    + `  at terminate (${downloadedHostStack}:411:1546)`,
+  root,
+  'exthost.log',
+), [])
+assert.equal(findProjectDiagnosticsInLog(
+  '2026-07-23 13:00:00.000 [error] ProxyResolver#resolveProxy undefined Canceled: Canceled\n'
+    + `  at extension (${path.join(root, 'out', 'extension.js')}:10:2)`,
+  root,
+  'exthost.log',
+).length, 1)
 assert.deepEqual(findProjectDiagnosticsInLog(
   '[ERROR] Failed to initialize CodeBookmark',
   root,
