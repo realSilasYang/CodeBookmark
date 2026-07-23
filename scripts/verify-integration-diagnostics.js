@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 
 const {
   assertNoUnexpectedExtensionHostDiagnostics,
+  createLanguagePacksConfiguration,
   findProjectDiagnosticsInLog,
   stripKnownExternalDiagnostics,
 } = require('./run-integration-tests')
@@ -37,6 +38,31 @@ assert.deepEqual(findProjectDiagnosticsInLog(
   root,
   'exthost.log',
 ).length, 1)
+
+const languagePackRoot = path.resolve('language-pack')
+const languagePacks = createLanguagePacksConfiguration({
+  publisher: 'MS-CEINTL',
+  name: 'vscode-language-pack-zh-hans',
+  version: '1.130.0',
+  contributes: {
+    localizations: [{
+      languageId: 'zh-cn',
+      localizedLanguageName: '中文（简体）',
+      translations: [
+        { id: 'vscode', path: './translations/main.i18n.json' },
+        { id: 'sample.extension', path: './translations/sample.i18n.json' },
+      ],
+    }],
+  },
+}, languagePackRoot)
+assert.match(languagePacks['zh-cn'].hash, /^[a-f\d]{32}$/u)
+assert.equal(languagePacks['zh-cn'].extensions[0].extensionIdentifier.id, 'ms-ceintl.vscode-language-pack-zh-hans')
+assert.equal(languagePacks['zh-cn'].translations.vscode, path.join(languagePackRoot, 'translations', 'main.i18n.json'))
+assert.equal(languagePacks['zh-cn'].label, '中文（简体）')
+assert.throws(
+  () => createLanguagePacksConfiguration({ publisher: 'example', name: 'other' }, languagePackRoot),
+  /不是受支持的简体中文语言包/,
+)
 assert.deepEqual(findProjectDiagnosticsInLog(
   '2026-07-23 13:00:00.000 [warning] Built-in warning\n'
     + '  at vscode.git (extension.js:10:2)',
