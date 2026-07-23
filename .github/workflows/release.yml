@@ -102,7 +102,7 @@ jobs:
             ${{ steps.artifacts.outputs.sbom }}
             SHA256SUMS
       - name: Attest software bill of materials
-        uses: actions/attest-sbom@51e74621a501c89df81fc1391c5a8f4cfc9fab2f # v3
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3
         with:
           subject-path: ${{ steps.artifacts.outputs.vsix }}
           sbom-path: ${{ steps.artifacts.outputs.sbom }}
