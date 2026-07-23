@@ -28,6 +28,9 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: npm run test:integration
+        env:
+          CODEBOOKMARK_ALLOW_VSCODE_DOWNLOAD: 'true'
+          CODEBOOKMARK_VSCODE_TEST_VERSION: '1.130.0'
       - name: Validate Marketplace publishing configuration
         shell: pwsh
         env:

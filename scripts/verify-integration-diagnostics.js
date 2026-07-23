@@ -27,10 +27,11 @@ assert.throws(
   /Unexpected Extension Host diagnostics/,
 )
 
-const root = 'D:\\workspace\\CodeBookmark'
+const path = require('node:path')
+const root = path.resolve('workspace', 'CodeBookmark')
 assert.deepEqual(findProjectDiagnosticsInLog(
   '2026-07-23 13:00:00.000 [error] Error: Channel closed\n'
-    + '  at Logger.error (D:\\workspace\\CodeBookmark\\out\\extension.js:10:2)\n'
+    + `  at Logger.error (${path.join(root, 'out', 'extension.js')}:10:2)\n`
     + '2026-07-23 13:00:01.000 [info] Extension host stopped',
   root,
   'exthost.log',

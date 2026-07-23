@@ -5,7 +5,7 @@ const fsSync = require('node:fs')
 const { spawnSync } = require('node:child_process')
 const { Writable } = require('node:stream')
 const { pathToFileURL } = require('node:url')
-const { runTests } = require('@vscode/test-electron')
+const { downloadAndUnzipVSCode, runTests } = require('@vscode/test-electron')
 
 const knownExternalDiagnosticPatterns = [
   /^(?:Warning: 'cached-data' is not in the list of known options, but still passed to Electron\/Chromium\.|警告: "cached-data"不在已知选项列表中，但仍传递给 Electron\/Chromium。)\r?\n?/gmu,
@@ -290,11 +290,16 @@ async function main() {
   }
   const configuredExecutablePath = executableArgument?.slice(executablePrefix.length)
     || process.env.CODEBOOKMARK_VSCODE_EXECUTABLE_PATH?.trim()
-  const vscodeExecutablePath = configuredExecutablePath
+  let vscodeExecutablePath = configuredExecutablePath
     ? existingFile(path.resolve(configuredExecutablePath))
     : findInstalledVSCodeExecutable()
   if (configuredExecutablePath && !vscodeExecutablePath) {
     throw new Error(`指定的 VS Code 程序不存在或不是文件：${path.resolve(configuredExecutablePath)}`)
+  }
+  if (!vscodeExecutablePath && process.env.CODEBOOKMARK_ALLOW_VSCODE_DOWNLOAD === 'true') {
+    const version = process.env.CODEBOOKMARK_VSCODE_TEST_VERSION?.trim() || 'stable'
+    console.log(`未找到已安装的 VS Code；远端测试已显式允许下载 VS Code ${version}。`)
+    vscodeExecutablePath = await downloadAndUnzipVSCode(version)
   }
   if (!vscodeExecutablePath) {
     throw new Error('未找到本机已安装的 VS Code。请安装 VS Code，或通过 CODEBOOKMARK_VSCODE_EXECUTABLE_PATH 指定 Code 可执行文件。')
