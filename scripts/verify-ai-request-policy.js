@@ -15,6 +15,10 @@ assert.equal(isRemoteHttpEndpoint('http://example.com/v1/chat/completions'), tru
 assert.equal(isRemoteHttpEndpoint('https://example.com/v1/chat/completions'), false)
 assert.equal(isRemoteHttpEndpoint('http://localhost:11434/v1/chat/completions'), false)
 assert.equal(isRemoteHttpEndpoint('http://127.0.0.1:8080/v1/chat/completions'), false)
+assert.equal(isRemoteHttpEndpoint('http://0.0.0.0:11434/api/chat'), false)
+assert.equal(isRemoteHttpEndpoint('http://[::1]:11434/api/chat'), false)
+assert.equal(isRemoteHttpEndpoint('http://host.docker.internal:11434/api/chat'), false)
+assert.equal(isRemoteHttpEndpoint('http://192.168.1.10:11434/api/chat'), true)
 
 for (const source of [
   'component.mjs', 'component.cjs', 'component.mts', 'component.cts',

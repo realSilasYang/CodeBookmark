@@ -6,6 +6,7 @@ import { Commands } from '../util/constants/Commands'
 import { logger } from '../util/Logger'
 import { canonicalBookmarkPath, isSameOrDescendantBookmarkPath, renamedBookmarkPath } from '../util/BookmarkPath'
 import { UNDO_ACTION_LABELS, type UndoAction } from '../util/UndoActions'
+import { localize } from '../i18n/Localization'
 import {
 	isSameOrDescendantAbsolutePath,
 	normalizedAbsolutePath,
@@ -91,6 +92,7 @@ export class UndoManager {
 	private sessionId: string | undefined
 	private persistenceTimer: NodeJS.Timeout | undefined
 	private persistencePromise: Promise<void> = Promise.resolve()
+	private persistenceDirty = false
 	private contextUpdateGeneration = 0
 	private contextUpdateRunning = false
 
@@ -124,6 +126,7 @@ export class UndoManager {
 
 	private schedulePersistence(): void {
 		if (!this.persistence || !this.sessionId) return
+		this.persistenceDirty = true
 		if (this.persistenceTimer) clearTimeout(this.persistenceTimer)
 		this.persistenceTimer = setTimeout(() => {
 			this.persistenceTimer = undefined
@@ -135,6 +138,11 @@ export class UndoManager {
 		if (this.persistenceTimer) clearTimeout(this.persistenceTimer)
 		this.persistenceTimer = undefined
 		if (!this.persistence || !this.sessionId) return
+		if (!this.persistenceDirty) {
+			await this.persistencePromise
+			return
+		}
+		this.persistenceDirty = false
 		const state: PersistedUndoSession = {
 			sessionId: this.sessionId,
 			sequence: this.sequence,
@@ -146,15 +154,13 @@ export class UndoManager {
 		}
 		const persistence = this.persistence
 		const update = this.persistencePromise
-			.catch(error => logger.error(`Previous undo session persistence failed: ${error}`))
 			.then(() => persistence.update(UNDO_SESSION_STATE_KEY, state))
 			.then(() => undefined)
-		this.persistencePromise = update
-		try {
-			await update
-		} catch (error) {
-			logger.error(`Failed to persist undo session: ${error}`)
-		}
+		this.persistencePromise = update.catch(error => {
+			this.persistenceDirty = true
+			logger.error(localize(`撤销会话持久化失败：${error}`, `Failed to persist undo session: ${error}`))
+		})
+		await this.persistencePromise
 	}
 
 	private scopeKey(scope?: string): string {
@@ -193,7 +199,7 @@ export class UndoManager {
 					vscode.commands.executeCommand('setContext', Commands.varRedoOperation, redoAction),
 				])
 			} catch (error) {
-				logger.error(`Failed to update undo contexts: ${error}`)
+				logger.error(localize(`更新撤销命令上下文失败：${error}`, `Failed to update undo contexts: ${error}`))
 			}
 			if (generation === this.contextUpdateGeneration) {
 				this.contextUpdateRunning = false
@@ -218,15 +224,15 @@ export class UndoManager {
 
 	private restore(bookmarks: BookmarkSet, state: string): string[] | null {
 		const data = JSON.parse(state) as unknown
-		if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('Undo state is not an object')
+		if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error(localize('撤销状态不是对象', 'Undo state is not an object'))
 		const serialized = data as Partial<SerializedUndoState>
-		if (!Array.isArray(serialized.bookmarks)) throw new Error('Undo bookmarks state is not an array')
+		if (!Array.isArray(serialized.bookmarks)) throw new Error(localize('撤销书签状态不是数组', 'Undo bookmarks state is not an array'))
 		if (serialized.workspaceOrder !== null && serialized.workspaceOrder !== undefined
 			&& (!Array.isArray(serialized.workspaceOrder) || serialized.workspaceOrder.some(item => typeof item !== 'string'))) {
-			throw new Error('Undo workspace order is invalid')
+			throw new Error(localize('撤销工作区顺序无效', 'Undo workspace order is invalid'))
 		}
 		const restored = serialized.bookmarks.map(item => {
-			if (typeof item !== 'object' || item === null) throw new Error('Undo state contains an invalid bookmark')
+			if (typeof item !== 'object' || item === null) throw new Error(localize('撤销状态包含无效书签', 'Undo state contains an invalid bookmark'))
 			const undoItem = item as UndoBookmarkData
 			const bookmark = Bookmark.fromJSON(undoItem)
 			if (undoItem.undoContextValue !== ContextBookmark.File) return bookmark
@@ -436,7 +442,9 @@ export class UndoManager {
 		try {
 			return this.restore(currentBookmarks, state)
 		} catch (error) {
-			logger.error(`Failed to ${operation} bookmarks state`)
+			logger.error(operation === 'undo'
+				? localize('无法应用撤销书签状态', 'Failed to apply the undo bookmark state')
+				: localize('无法应用重做书签状态', 'Failed to apply the redo bookmark state'))
 			logger.error(error)
 			return undefined
 		}

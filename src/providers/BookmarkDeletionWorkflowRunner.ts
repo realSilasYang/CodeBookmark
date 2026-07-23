@@ -3,6 +3,7 @@ import { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
 import { formatBookmarkLevelSummary, summarizeBookmarks, summarizeBookmarkTrees } from '../util/BookmarkStatistics'
 import { logger } from '../util/Logger'
+import { localize } from '../i18n/Localization'
 
 type BookmarkDeletionUndoAction = 'clearInvalidBookmarks' | 'deleteBookmarks'
 
@@ -66,13 +67,23 @@ export function runClearInvalidBookmarks(port: BookmarkDeletionWorkflowPort): vo
 	port.saveBookmarks(changedPaths)
 }
 
-async function confirmDeletion(targets: Bookmark[]): Promise<'是' | '保留' | undefined> {
+type DeletionMode = 'delete' | 'keepChildren'
+
+async function confirmDeletion(targets: Bookmark[]): Promise<DeletionMode | undefined> {
 	const prompt = targets.length > 1
-		? `选中了 ${targets.length} 项，其中包含带子书签的文件夹，确定要删除吗？`
-		: '确定要删除包含子书签的文件夹吗？'
-	const confirm = await vscode.window.showInformationMessage(prompt, '是', '保留子书签，仅删除当前项', '否')
-	if (!confirm || confirm === '否') return undefined
-	return confirm === '保留子书签，仅删除当前项' ? '保留' : '是'
+		? localize(
+			`选中了 ${targets.length} 项，其中包含带子书签的文件夹，确定要删除吗？`,
+			`${targets.length} items are selected, including folders with child bookmarks. Delete them?`,
+		)
+		: localize('确定要删除包含子书签的文件夹吗？', 'Delete the folder that contains child bookmarks?')
+	const choices = [
+		{ title: localize('是', 'Delete'), mode: 'delete' as const },
+		{ title: localize('保留子书签，仅删除当前项', 'Keep Children and Delete This Item'), mode: 'keepChildren' as const },
+		{ title: localize('否', 'Cancel'), mode: 'cancel' as const },
+	]
+	const confirm = await vscode.window.showInformationMessage(prompt, ...choices)
+	if (!confirm || confirm.mode === 'cancel') return undefined
+	return confirm.mode
 }
 
 export async function runDeleteBookmarks(
@@ -95,7 +106,7 @@ export async function runDeleteBookmarks(
 	if (targets.length === 0) return
 
 	const hasAnySubs = targets.some(target => target.subs.size > 0)
-	let confirmMode: '是' | '保留' = '是'
+	let confirmMode: DeletionMode = 'delete'
 	if (hasAnySubs) {
 		const confirmed = await confirmDeletion(targets)
 		if (!confirmed) return
@@ -103,13 +114,13 @@ export async function runDeleteBookmarks(
 	}
 
 	let hasChanges = false
-	const deletedSummary = confirmMode === '保留'
+	const deletedSummary = confirmMode === 'keepChildren'
 		? summarizeBookmarks(targets)
 		: summarizeBookmarkTrees(targets)
 	const changedPaths = targets.map(target => port.absoluteBookmarkPath(target.path))
 	port.saveUndoState('deleteBookmarks')
 	for (const target of targets) {
-		if (target.subs.size > 0 && confirmMode === '保留') {
+		if (target.subs.size > 0 && confirmMode === 'keepChildren') {
 			if (moveChildrenToParentWhenDelete(target, port)) hasChanges = true
 		} else {
 			port.deleteBookmark(target.id)
@@ -120,5 +131,11 @@ export async function runDeleteBookmarks(
 	if (!hasChanges) return
 	port.saveBookmarks(changedPaths)
 	port.refreshDecoration()
-	if (targets.length > 1) logger.showMessage(`批量删除完成，删除结果：${formatBookmarkLevelSummary(deletedSummary)}。`)
+	if (targets.length > 1) {
+		const summary = formatBookmarkLevelSummary(deletedSummary)
+		logger.showMessage(localize(
+			`批量删除完成，删除结果：${summary}。`,
+			`Batch deletion completed. Deleted: ${summary}.`,
+		))
+	}
 }

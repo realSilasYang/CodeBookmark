@@ -3,7 +3,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
 
-const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+const { loadLocalizedManifest } = require('./localized-manifest')
+const manifest = loadLocalizedManifest('zh-cn')
 
 function visibleText(value) {
   return value
@@ -86,8 +87,13 @@ for (const file of sourceFiles('src')) {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
 
   const checkTextNodes = node => {
+    if (ts.isCallExpression(node) && callName(node.expression) === 'localize') {
+      if (node.arguments[0]) checkTextNodes(node.arguments[0])
+      return
+    }
     if (stringNodeKinds.has(node.kind)) {
       const text = visibleText(node.text)
+      if (!/[\u3400-\u9fff]/u.test(text)) return
       const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
       assert.doesNotMatch(
         text,

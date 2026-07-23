@@ -19,3 +19,23 @@ export const UNDO_ACTION_LABELS = {
 } as const
 
 export type UndoAction = keyof typeof UNDO_ACTION_LABELS
+
+export const UNDO_ACTION_LABELS_EN: Record<UndoAction, string> = {
+	modifyBookmarks: 'Modify Bookmarks',
+	reorderFiles: 'Reorder Files',
+	moveBookmarks: 'Move Bookmarks',
+	addBookmarks: 'Add Bookmarks',
+	toggleBookmarks: 'Add/Remove Bookmarks',
+	deleteBookmarks: 'Delete Bookmarks',
+	generateAIBookmarks: 'Generate Bookmarks with AI',
+	optimizeAIBookmarks: 'Improve Bookmark Labels with AI',
+	importBookmarks: 'Import Bookmark Configuration',
+	renameBookmarks: 'Rename Bookmarks',
+	updateBookmarkPosition: 'Update Bookmark Position',
+	updateBookmarkAndRename: 'Update Position and Rename',
+	changeBookmarkIcons: 'Change Bookmark Icons',
+	restoreBookmarkIcons: 'Restore Default Icons',
+	clearInvalidBookmarks: 'Clear Invalid Bookmarks',
+	setBookmarkContainer: 'Set New Bookmark Container',
+	unsetBookmarkContainer: 'Unset New Bookmark Container',
+}

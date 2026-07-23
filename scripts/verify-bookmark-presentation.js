@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { installModuleMocks } = require('./test-support/module-mocks')
 const { createVscodeFake } = require('./test-support/vscode-fake')
@@ -16,6 +17,9 @@ try {
   const { Bookmark, CursorIndex } = require('../out/models/Bookmark')
   const { BookmarkSet } = require('../out/models/BookmarkSet')
   const { ContextBookmark } = require('../out/util/ContextValue')
+  const { initializeBookmarkIconRoot } = require('../out/util/BookmarkIcon')
+
+  initializeBookmarkIconRoot({ scheme: 'file', fsPath: path.resolve('extension-root') })
 
   const root = new Bookmark({ id: 'root', label: 'Root', path: 'src/example.ts' })
   assert.equal(root.contextValue, ContextBookmark.Bookmark)
@@ -42,7 +46,10 @@ try {
   assert.equal(child.iconPath.color.id, 'codebookmark.color.Lvl2Blue')
 
   const custom = new Bookmark({ id: 'custom', label: 'Custom', path: 'src/example.ts', icon: 'status_idea_red.svg' })
-  assert.equal(custom.iconPath.light.fsPath.endsWith('status_idea_red.svg'), true)
+  assert.equal(
+    custom.iconPath.light.fsPath,
+    path.resolve('extension-root', 'resources', 'custom_icons', 'status_idea_red.svg'),
+  )
 
   const invalid = new Bookmark({ id: 'invalid', label: 'Invalid', path: 'src/example.ts', isInvalid: true })
   assert.equal(invalid.contextValue, ContextBookmark.BookmarkInvalid)

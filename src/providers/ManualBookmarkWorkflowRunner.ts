@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import { Bookmark, CursorIndex } from '../models/Bookmark'
 import { formatBookmarkLevelSummary, summarizeBookmarks } from '../util/BookmarkStatistics'
 import { logger } from '../util/Logger'
+import { localize } from '../i18n/Localization'
 
 type ManualBookmarkUndoAction = 'addBookmarks' | 'deleteBookmarks' | 'toggleBookmarks'
 
@@ -31,7 +32,7 @@ function uniqueSelections(selections: readonly vscode.Selection[]): vscode.Selec
 
 function defaultLabel(document: vscode.TextDocument, selection: vscode.Selection, maxLength: number): string {
 	const selected = document.getText(selection).split(/\r?\n/, 1)[0].trim()
-	const value = selected || document.lineAt(selection.start.line).text.trim() || '未命名'
+	const value = selected || document.lineAt(selection.start.line).text.trim() || localize('未命名', 'Untitled')
 	return value.slice(0, maxLength)
 }
 
@@ -69,12 +70,12 @@ async function prepareBookmarks(
 	if (deduplicated.length === 1) {
 		const selection = deduplicated[0]
 		const label = await vscode.window.showInputBox({
-			prompt: '请输入书签标签',
+			prompt: localize('请输入书签标签', 'Enter a bookmark label'),
 			value: defaultLabel(editor.document, selection, 80),
 		})
 		if (label === undefined) return undefined
 		if (label.trim() === '') {
-			logger.showWarningMessage('标签不能为空')
+			logger.showWarningMessage(localize('标签不能为空', 'The label cannot be empty.'))
 			return undefined
 		}
 		return [createBookmarkFromDocument(
@@ -89,7 +90,10 @@ async function prepareBookmarks(
 
 	const defaultLabels = deduplicated.map(selection => defaultLabel(editor.document, selection, 30))
 	const labelString = await vscode.window.showInputBox({
-		prompt: `请输入 ${deduplicated.length} 个书签标签（使用“│”分隔）`,
+		prompt: localize(
+			`请输入 ${deduplicated.length} 个书签标签（使用“│”分隔）`,
+			`Enter ${deduplicated.length} bookmark labels, separated by “│”`,
+		),
 		value: defaultLabels.join(' │ '),
 	})
 	if (labelString === undefined) return undefined
@@ -136,7 +140,11 @@ export async function runForceAddBookmark(
 	port.saveBookmarks([editor.document.uri.fsPath])
 	port.refreshDecoration()
 	if (bookmarks.length > 1) {
-		logger.showMessage(`批量添加完成，新增结果：${formatBookmarkLevelSummary(summarizeBookmarks(bookmarks))}。`)
+		const summary = formatBookmarkLevelSummary(summarizeBookmarks(bookmarks))
+		logger.showMessage(localize(
+			`批量添加完成，新增结果：${summary}。`,
+			`Batch add completed. Added: ${summary}.`,
+		))
 	}
 }
 

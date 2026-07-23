@@ -106,13 +106,27 @@ const {
   parseLanguageConfigurationJson,
 } = require('../out/util/LanguageCommentProfiles')
 
+async function captureExpectedLoggerErrors(operation) {
+  const errors = []
+  const originalConsoleError = console.error
+  console.error = (...args) => errors.push(args)
+  try {
+    await operation()
+  } finally {
+    console.error = originalConsoleError
+  }
+  return errors
+}
+
 ;(async () => {
   const parsed = parseLanguageConfigurationJson('{ "url": "https://example.invalid/a//b", /* note */ "items": [1,], }')
   assert.equal(parsed.url, 'https://example.invalid/a//b')
   assert.deepEqual(parsed.items, [1])
 
   const registry = new LanguageCommentProfileRegistry()
-  await registry.initialize()
+  const initializationErrors = await captureExpectedLoggerErrors(() => registry.initialize())
+  assert.equal(initializationErrors.length, 1)
+  assert.match(String(initializationErrors[0][0]), /已跳过 1 个无效的语言文件匹配模式/)
   assert.equal(registry.isInitialized, true)
 
   const direct = registry.profileFor('fiction', '/workspace/no-extension')
@@ -148,7 +162,9 @@ const {
   files.set('/extensions/fiction/language-configuration.json', Buffer.from(`{
     "comments": { "lineComment": "##" }
   }`))
-  await registry.reload()
+  const reloadErrors = await captureExpectedLoggerErrors(() => registry.reload())
+  assert.equal(reloadErrors.length, 1)
+  assert.match(String(reloadErrors[0][0]), /已跳过 1 个无效的语言文件匹配模式/)
   const reloaded = registry.profileFor('fiction', '/workspace/story.fic')
   assert.deepEqual(
     scanCodeMarkers(['run ;; TODO old', 'run ## FIXME refreshed'], 'fiction', 'story.fic', 100, reloaded).occurrences.map(item => item.marker),

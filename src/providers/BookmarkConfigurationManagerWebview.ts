@@ -1,5 +1,6 @@
 import * as crypto from 'crypto'
 import * as vscode from 'vscode'
+import { currentFormattingLocale, localize } from '../i18n/Localization'
 import type {
 	BookmarkConfigurationDeleteRequest,
 	BookmarkConfigurationEntry,
@@ -38,7 +39,7 @@ export class BookmarkConfigurationManagerWebview {
 		}
 		const panel = vscode.window.createWebviewPanel(
 			'codebookmark.configurationManager',
-			'书签配置文件管理',
+			localize('书签配置文件管理', 'Bookmark Configuration Manager'),
 			column,
 			{
 				enableScripts: true,
@@ -88,8 +89,11 @@ export class BookmarkConfigurationManagerWebview {
 					return
 			}
 		} catch (error) {
-			logger.error(`处理书签配置管理消息失败: ${error}`)
-			void vscode.window.showErrorMessage(`书签配置文件管理失败：${error instanceof Error ? error.message : String(error)}`)
+			logger.error(localize(`处理书签配置管理消息失败: ${error}`, `Failed to process a bookmark configuration manager message: ${error}`))
+			void vscode.window.showErrorMessage(localize(
+				`书签配置文件管理失败：${error instanceof Error ? error.message : String(error)}`,
+				`Bookmark configuration manager failed: ${error instanceof Error ? error.message : String(error)}`,
+			))
 			this.post({ type: 'operationComplete' })
 		}
 	}
@@ -139,7 +143,7 @@ export class BookmarkConfigurationManagerWebview {
 			})
 		} catch (error) {
 			if (this.disposed || generation !== this.loadGeneration) return
-			logger.error(`读取书签配置目录失败: ${error}`)
+			logger.error(localize(`读取书签配置目录失败: ${error}`, `Failed to read the bookmark configuration folder: ${error}`))
 			this.post({
 				type: 'loadError',
 				message: error instanceof Error ? error.message : String(error),
@@ -166,13 +170,117 @@ export class BookmarkConfigurationManagerWebview {
 
 	private html(): string {
 		const nonce = crypto.randomBytes(16).toString('base64')
+		const locale = currentFormattingLocale()
+		const text = {
+			title: localize('书签配置文件管理', 'Bookmark Configuration Manager'),
+			openStorageFolder: localize('打开存储目录', 'Open Storage Folder'),
+			readingStorageFolder: localize('正在读取存储目录…', 'Reading storage folder…'),
+			statisticsAria: localize('书签存储记录统计', 'Bookmark storage record statistics'),
+			metrics: [
+				localize('存储记录', 'Storage Records'),
+				localize('所含书签', 'Bookmarks'),
+				localize('正常绑定', 'Bound'),
+				localize('备份与冲突', 'Backups and Conflicts'),
+				localize('历史元数据', 'Historical Metadata'),
+				localize('需要关注', 'Needs Attention'),
+			],
+			searchPlaceholder: localize('搜索脚本路径、工作区、记录或书签标签', 'Search script paths, workspaces, records, or bookmark labels'),
+			searchAria: localize('搜索书签存储记录', 'Search bookmark storage records'),
+			filterAria: localize('筛选书签存储记录', 'Filter bookmark storage records'),
+			filters: [
+				localize('全部状态', 'All Statuses'), localize('正式配置', 'Primary Configurations'),
+				localize('正常绑定', 'Bound'), localize('脚本缺失', 'Script Missing'),
+				localize('备份与冲突', 'Backups and Conflicts'), localize('历史元数据', 'Historical Metadata'),
+				localize('无法解析', 'Unparseable'),
+			],
+			sortAria: localize('配置文件排序', 'Sort configuration files'),
+			sorts: [
+				localize('最近修改', 'Recently Modified'), localize('书签数量', 'Bookmark Count'),
+				localize('脚本路径', 'Script Path'), localize('文件大小', 'File Size'),
+			],
+			initialResult: localize('当前显示 0 条记录，共 0 条', 'Showing 0 of 0 records'),
+			refresh: localize('刷新', 'Refresh'),
+			deleteSelected: localize('删除所选', 'Delete Selected'),
+			selectCurrentResults: localize('选择当前结果', 'Select current results'),
+			columns: [
+				localize('脚本、工作区与记录', 'Script, Workspace, or Record'),
+				localize('状态', 'Status'), localize('内容摘要', 'Content Summary'),
+				localize('时间与大小', 'Time and Size'),
+			],
+			readingConfigurations: localize('正在读取配置文件…', 'Reading configuration files…'),
+			showMore: localize('继续显示', 'Show More'),
+			defaultDeleteTitle: localize('确定清理所选书签存储记录吗？', 'Remove the selected bookmark storage records?'),
+			cancel: localize('取消', 'Cancel'),
+			delete: localize('删除', 'Delete'),
+			roleLabels: {
+				primary: localize('正式配置', 'Primary Configuration'), backup: localize('迁移备份', 'Transfer Backup'),
+				conflict: localize('冲突副本', 'Conflict Copy'), superseded: localize('已取代', 'Superseded'),
+				workspaceOrder: localize('工作区排序', 'Workspace Order'), transferJournal: localize('存储迁移记录', 'Storage Transfer Journal'),
+				unknown: localize('其他文件', 'Other File'),
+			},
+			healthLabels: {
+				bound: localize('已绑定', 'Bound'), missing: localize('脚本缺失', 'Script Missing'), empty: localize('空配置', 'Empty Configuration'),
+				snapshot: localize('历史副本', 'Historical Copy'), metadata: localize('历史元数据', 'Historical Metadata'), invalid: localize('无法解析', 'Unparseable'),
+			},
+			unknown: localize('未知', 'Unknown'),
+			levelLabels: [
+				localize('一级', 'Level 1'), localize('二级', 'Level 2'), localize('三级', 'Level 3'), localize('四级', 'Level 4'),
+				localize('五级', 'Level 5'), localize('六级', 'Level 6'), localize('七级', 'Level 7'), localize('八级', 'Level 8'),
+			],
+			levelFallback: localize('第 {level} 级', 'Level {level}'),
+			levelCount: localize('{level} {count} 个', '{level}: {count}'),
+			noLevelBookmarks: localize('无分级书签', 'No leveled bookmarks'),
+			totalBookmarksWithLevels: localize('共 {total} 个书签；{levels}', '{total} bookmarks; {levels}'),
+			transferComplete: localize('已完成', 'Completed'),
+			transferInProgress: localize('进行中', 'In Progress'),
+			deleteQuestion: localize('确定清理 {count} 条书签存储记录吗？', 'Remove {count} bookmark storage records?'),
+			deleteSummary: localize('清理前会重新核对记录内容；已经被其他程序修改的记录会自动跳过。', 'Records are rechecked before removal; records modified by another program are skipped automatically.'),
+			deleteScriptDetails: localize('书签配置：{count} 条；{summary}', 'Bookmark configurations: {count}; {summary}'),
+			deleteWorkspaceDetails: localize('工作区排序记录：{count} 条（只影响文件顺序，不删除书签）', 'Workspace order records: {count} (affects file order only; bookmarks are not deleted)'),
+			deleteTransferDetails: localize('存储迁移记录：{count} 条（只清理历史记录，不影响当前书签）', 'Storage transfer journals: {count} (removes history only; current bookmarks are not affected)'),
+			deleteWarning: localize('删除书签配置后无法通过书签撤销功能恢复。', 'Deleted bookmark configurations cannot be restored with bookmark undo.'),
+			deleteSelectedCount: localize('删除所选（{count}）', 'Delete Selected ({count})'),
+			unidentifiedScript: localize('无法识别对应脚本', 'Unable to identify the corresponding script'),
+			workspace: localize('工作区：{value}', 'Workspace: {value}'),
+			pathHash: localize('路径哈希：{value}', 'Path hash: {value}'),
+			additionalRecords: localize(' · 另有 {count} 条', ' · {count} more'),
+			transferJournal: localize('存储迁移记录', 'Storage Transfer Journal'),
+			source: localize('来源：{value}', 'Source: {value}'),
+			target: localize('目标：{value}', 'Target: {value}'),
+			orderedPaths: localize('排序路径 {count} 条', '{count} ordered paths'),
+			workspaceOrderPurpose: localize('用于恢复该工作区的脚本显示顺序', 'Restores script display order for this workspace'),
+			transferState: localize('迁移{status}', 'Transfer {status}'),
+			transferCounts: localize('复制 {copied} 个 · 合并 {merged} 个 · 冲突 {conflicts} 个', 'Copied {copied} · Merged {merged} · Conflicts {conflicts}'),
+			totalBookmarks: localize('共 {count} 个书签', '{count} bookmarks'),
+			automaticBookmarks: localize('自动书签 {count} 个', 'Automatic bookmarks: {count}'),
+			invalidBookmarks: localize('失效或异常 {count} 个', 'Invalid or abnormal: {count}'),
+			selectRecord: localize('选择 {path}', 'Select {path}'),
+			bindingUpdated: localize('绑定信息更新：{date}', 'Binding updated: {date}'),
+			transferStarted: localize('迁移开始：{date}', 'Transfer started: {date}'),
+			transferCompleted: localize('迁移完成：{date}', 'Transfer completed: {date}'),
+			recordType: localize('记录类型：{type}', 'Record type: {type}'),
+			fileModified: localize('文件修改：{date}', 'File modified: {date}'),
+			size: localize('大小：{size}', 'Size: {size}'),
+			openScript: localize('打开脚本', 'Open Script'),
+			revealFile: localize('定位文件', 'Reveal File'),
+			deleteConfiguration: localize('删除配置', 'Delete Configuration'),
+			cleanRecord: localize('清理记录', 'Remove Record'),
+			readingRecords: localize('正在读取书签存储记录…', 'Reading bookmark storage records…'),
+			emptyRecords: localize('暂无符合条件的书签存储记录', 'No bookmark storage records match the current filters'),
+			resultAll: localize('当前显示 {shown} 条记录，共 {total} 条', 'Showing {shown} of {total} records'),
+			resultFiltered: localize('当前显示 {shown} 条记录，符合条件 {matched} 条，共 {total} 条', 'Showing {shown} of {matched} matching records; {total} total'),
+			loadFailed: localize('读取失败：{message}', 'Failed to load: {message}'),
+			storageFolder: localize('存储目录：{path}', 'Storage folder: {path}'),
+			revealStorageFolder: localize('在文件资源管理器中打开：{path}', 'Open in the file explorer: {path}'),
+		}
+		const serializedText = JSON.stringify(text).replace(/</g, '\\u003c')
 		return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${locale}">
 <head>
 	<meta charset="UTF-8">
 	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'nonce-${nonce}'; script-src ${this.panel.webview.cspSource} 'nonce-${nonce}';">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>书签配置文件管理</title>
+	<title>${text.title}</title>
 	<style nonce="${nonce}">
 		* { box-sizing: border-box; letter-spacing: 0; }
 		html, body { min-height: 100%; margin: 0; }
@@ -280,59 +388,59 @@ export class BookmarkConfigurationManagerWebview {
 <body>
 	<main class="page">
 	<header class="header">
-		<div class="title-row"><h1>书签配置文件管理</h1></div>
-		<button class="storage-root" id="storage-root" type="button" title="打开存储目录" disabled>正在读取存储目录…</button>
+		<div class="title-row"><h1>${text.title}</h1></div>
+		<button class="storage-root" id="storage-root" type="button" title="${text.openStorageFolder}" disabled>${text.readingStorageFolder}</button>
 	</header>
-			<section class="summary" aria-label="书签存储记录统计">
-				<div class="metric"><span class="metric-value" id="metric-files">0</span><span class="metric-label">存储记录</span></div>
-				<div class="metric"><span class="metric-value" id="metric-bookmarks">0</span><span class="metric-label">所含书签</span></div>
-				<div class="metric"><span class="metric-value" id="metric-bound">0</span><span class="metric-label">正常绑定</span></div>
-				<div class="metric"><span class="metric-value" id="metric-snapshots">0</span><span class="metric-label">备份与冲突</span></div>
-				<div class="metric"><span class="metric-value" id="metric-metadata">0</span><span class="metric-label">历史元数据</span></div>
-				<div class="metric"><span class="metric-value" id="metric-attention">0</span><span class="metric-label">需要关注</span></div>
+			<section class="summary" aria-label="${text.statisticsAria}">
+				<div class="metric"><span class="metric-value" id="metric-files">0</span><span class="metric-label">${text.metrics[0]}</span></div>
+				<div class="metric"><span class="metric-value" id="metric-bookmarks">0</span><span class="metric-label">${text.metrics[1]}</span></div>
+				<div class="metric"><span class="metric-value" id="metric-bound">0</span><span class="metric-label">${text.metrics[2]}</span></div>
+				<div class="metric"><span class="metric-value" id="metric-snapshots">0</span><span class="metric-label">${text.metrics[3]}</span></div>
+				<div class="metric"><span class="metric-value" id="metric-metadata">0</span><span class="metric-label">${text.metrics[4]}</span></div>
+				<div class="metric"><span class="metric-value" id="metric-attention">0</span><span class="metric-label">${text.metrics[5]}</span></div>
 	</section>
 	<div class="toolbar">
-				<div class="search"><input id="search" type="search" placeholder="搜索脚本路径、工作区、记录或书签标签" aria-label="搜索书签存储记录"></div>
+				<div class="search"><input id="search" type="search" placeholder="${text.searchPlaceholder}" aria-label="${text.searchAria}"></div>
 		<div class="dropdown" id="filter" data-value="all">
-					<button class="dropdown-trigger" type="button" role="combobox" aria-label="筛选书签存储记录" aria-haspopup="listbox" aria-expanded="false" aria-controls="filter-options"><span class="dropdown-label">全部状态</span><span class="dropdown-chevron" aria-hidden="true"></span></button>
+					<button class="dropdown-trigger" type="button" role="combobox" aria-label="${text.filterAria}" aria-haspopup="listbox" aria-expanded="false" aria-controls="filter-options"><span class="dropdown-label">${text.filters[0]}</span><span class="dropdown-chevron" aria-hidden="true"></span></button>
 			<div class="dropdown-menu" id="filter-options" role="listbox" hidden>
-				<button class="dropdown-option" id="filter-option-all" type="button" role="option" data-value="all" aria-selected="true">全部状态</button>
-				<button class="dropdown-option" id="filter-option-primary" type="button" role="option" data-value="primary" aria-selected="false">正式配置</button>
-				<button class="dropdown-option" id="filter-option-bound" type="button" role="option" data-value="bound" aria-selected="false">正常绑定</button>
-				<button class="dropdown-option" id="filter-option-missing" type="button" role="option" data-value="missing" aria-selected="false">脚本缺失</button>
-					<button class="dropdown-option" id="filter-option-snapshot" type="button" role="option" data-value="snapshot" aria-selected="false">备份与冲突</button>
-					<button class="dropdown-option" id="filter-option-metadata" type="button" role="option" data-value="metadata" aria-selected="false">历史元数据</button>
-				<button class="dropdown-option" id="filter-option-invalid" type="button" role="option" data-value="invalid" aria-selected="false">无法解析</button>
+				<button class="dropdown-option" id="filter-option-all" type="button" role="option" data-value="all" aria-selected="true">${text.filters[0]}</button>
+				<button class="dropdown-option" id="filter-option-primary" type="button" role="option" data-value="primary" aria-selected="false">${text.filters[1]}</button>
+				<button class="dropdown-option" id="filter-option-bound" type="button" role="option" data-value="bound" aria-selected="false">${text.filters[2]}</button>
+				<button class="dropdown-option" id="filter-option-missing" type="button" role="option" data-value="missing" aria-selected="false">${text.filters[3]}</button>
+					<button class="dropdown-option" id="filter-option-snapshot" type="button" role="option" data-value="snapshot" aria-selected="false">${text.filters[4]}</button>
+					<button class="dropdown-option" id="filter-option-metadata" type="button" role="option" data-value="metadata" aria-selected="false">${text.filters[5]}</button>
+				<button class="dropdown-option" id="filter-option-invalid" type="button" role="option" data-value="invalid" aria-selected="false">${text.filters[6]}</button>
 			</div>
 		</div>
 		<div class="dropdown" id="sort" data-value="modified">
-			<button class="dropdown-trigger" type="button" role="combobox" aria-label="配置文件排序" aria-haspopup="listbox" aria-expanded="false" aria-controls="sort-options"><span class="dropdown-label">最近修改</span><span class="dropdown-chevron" aria-hidden="true"></span></button>
+			<button class="dropdown-trigger" type="button" role="combobox" aria-label="${text.sortAria}" aria-haspopup="listbox" aria-expanded="false" aria-controls="sort-options"><span class="dropdown-label">${text.sorts[0]}</span><span class="dropdown-chevron" aria-hidden="true"></span></button>
 			<div class="dropdown-menu" id="sort-options" role="listbox" hidden>
-				<button class="dropdown-option" id="sort-option-modified" type="button" role="option" data-value="modified" aria-selected="true">最近修改</button>
-				<button class="dropdown-option" id="sort-option-bookmarks" type="button" role="option" data-value="bookmarks" aria-selected="false">书签数量</button>
-				<button class="dropdown-option" id="sort-option-path" type="button" role="option" data-value="path" aria-selected="false">脚本路径</button>
-				<button class="dropdown-option" id="sort-option-size" type="button" role="option" data-value="size" aria-selected="false">文件大小</button>
+				<button class="dropdown-option" id="sort-option-modified" type="button" role="option" data-value="modified" aria-selected="true">${text.sorts[0]}</button>
+				<button class="dropdown-option" id="sort-option-bookmarks" type="button" role="option" data-value="bookmarks" aria-selected="false">${text.sorts[1]}</button>
+				<button class="dropdown-option" id="sort-option-path" type="button" role="option" data-value="path" aria-selected="false">${text.sorts[2]}</button>
+				<button class="dropdown-option" id="sort-option-size" type="button" role="option" data-value="size" aria-selected="false">${text.sorts[3]}</button>
 			</div>
 		</div>
 		<div class="toolbar-spacer"></div>
-				<span class="result-count" id="result-count">当前显示 0 条记录，共 0 条</span>
-		<button class="secondary icon-button" id="refresh" title="刷新" aria-label="刷新">↻</button>
-		<button class="danger" id="delete-selected" disabled>删除所选</button>
+				<span class="result-count" id="result-count">${text.initialResult}</span>
+		<button class="secondary icon-button" id="refresh" title="${text.refresh}" aria-label="${text.refresh}">↻</button>
+		<button class="danger" id="delete-selected" disabled>${text.deleteSelected}</button>
 	</div>
 	<div class="table-wrap">
 		<table>
 			<colgroup><col class="select-col"><col class="script-col"><col class="status-col"><col class="count-col"><col class="info-col"><col class="action-col"></colgroup>
-			<thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前结果"></th><th>脚本、工作区与记录</th><th>状态</th><th>内容摘要</th><th>时间与大小</th><th></th></tr></thead>
-			<tbody id="rows"><tr><td class="empty" colspan="6">正在读取配置文件…</td></tr></tbody>
+			<thead><tr><th><input id="select-all" type="checkbox" aria-label="${text.selectCurrentResults}"></th><th>${text.columns[0]}</th><th>${text.columns[1]}</th><th>${text.columns[2]}</th><th>${text.columns[3]}</th><th></th></tr></thead>
+			<tbody id="rows"><tr><td class="empty" colspan="6">${text.readingConfigurations}</td></tr></tbody>
 		</table>
 	</div>
-	<div class="pagination" id="pagination" hidden><button class="secondary" id="show-more">继续显示</button></div>
+	<div class="pagination" id="pagination" hidden><button class="secondary" id="show-more">${text.showMore}</button></div>
 	</main>
 	<div id="delete-confirmation" class="modal-backdrop" hidden>
 		<section class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-summary">
 			<header class="modal-header">
 				<div class="modal-title-mark" aria-hidden="true">!</div>
-				<h2 class="modal-title" id="delete-dialog-title">确定清理所选书签存储记录吗？</h2>
+				<h2 class="modal-title" id="delete-dialog-title">${text.defaultDeleteTitle}</h2>
 			</header>
 			<div class="modal-content">
 				<p class="modal-summary" id="delete-dialog-summary"></p>
@@ -340,34 +448,37 @@ export class BookmarkConfigurationManagerWebview {
 				<p class="modal-warning" id="delete-dialog-warning" hidden></p>
 			</div>
 			<footer class="modal-actions">
-				<button class="secondary" id="cancel-delete" type="button">取消</button>
-				<button class="confirm-delete" id="confirm-delete" type="button">删除</button>
+				<button class="secondary" id="cancel-delete" type="button">${text.cancel}</button>
+				<button class="confirm-delete" id="confirm-delete" type="button">${text.delete}</button>
 			</footer>
 		</section>
 	</div>
 	<script nonce="${nonce}">
 		const vscode = acquireVsCodeApi();
+		const text = ${serializedText};
+		const locale = ${JSON.stringify(locale)};
 		const PAGE_SIZE = 200;
 		const state = { entries: [], selected: new Set(), pendingDeletePaths: [], previousFocus: null, loading: true, deleting: false, visibleLimit: PAGE_SIZE };
-		const roleLabels = { primary: '正式配置', backup: '迁移备份', conflict: '冲突副本', superseded: '已取代', workspaceOrder: '工作区排序', transferJournal: '存储迁移记录', unknown: '其他文件' };
-		const healthLabels = { bound: '已绑定', missing: '脚本缺失', empty: '空配置', snapshot: '历史副本', metadata: '历史元数据', invalid: '无法解析' };
+		const roleLabels = text.roleLabels;
+		const healthLabels = text.healthLabels;
 		const byId = id => document.getElementById(id);
+		const formatText = (template, values = {}) => template.replace(/{([a-zA-Z]+)}/g, (_match, key) => String(values[key] ?? ''));
 		const create = (tag, className, text) => {
 			const element = document.createElement(tag);
 			if (className) element.className = className;
 			if (text !== undefined) element.textContent = text;
 			return element;
 		};
-		const formatNumber = value => new Intl.NumberFormat('zh-CN').format(value || 0);
-		const formatDate = value => value ? new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '未知';
+		const formatNumber = value => new Intl.NumberFormat(locale).format(value || 0);
+		const formatDate = value => value ? new Intl.DateTimeFormat(locale, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : text.unknown;
 		const formatSize = value => {
 			if (value < 1024) return value + ' B';
 			if (value < 1024 * 1024) return (value / 1024).toFixed(value < 10240 ? 1 : 0) + ' KiB';
 			return (value / 1024 / 1024).toFixed(1) + ' MiB';
 		};
-		const levelName = index => ['一级', '二级', '三级', '四级', '五级', '六级', '七级', '八级'][index] || ('第 ' + (index + 1) + ' 级');
-		const levelSummary = entry => (entry.bookmarkSummary.levelCounts || []).map((count, index) => levelName(index) + ' ' + formatNumber(count) + ' 个').join(' · ') || '无分级书签';
-		const transferStatusLabel = status => status === 'complete' ? '已完成' : status === 'in_progress' ? '进行中' : '未知';
+		const levelName = index => text.levelLabels[index] || formatText(text.levelFallback, { level: index + 1 });
+		const levelSummary = entry => (entry.bookmarkSummary.levelCounts || []).map((count, index) => formatText(text.levelCount, { level: levelName(index), count: formatNumber(count) })).join(' · ') || text.noLevelBookmarks;
+		const transferStatusLabel = status => status === 'complete' ? text.transferComplete : status === 'in_progress' ? text.transferInProgress : text.unknown;
 		const selectedEntriesForPaths = storagePaths => {
 			const requested = new Set(storagePaths);
 			return state.entries.filter(entry => requested.has(entry.storagePath));
@@ -383,8 +494,8 @@ export class BookmarkConfigurationManagerWebview {
 		};
 		const aggregateLevelSummary = entries => {
 			const summary = aggregateBookmarkSummary(entries);
-			const levels = summary.levelCounts.map((count, index) => levelName(index) + ' ' + formatNumber(count) + ' 个').join(' · ');
-			return '共 ' + formatNumber(summary.total) + ' 个书签；' + (levels || '无分级书签');
+			const levels = summary.levelCounts.map((count, index) => formatText(text.levelCount, { level: levelName(index), count: formatNumber(count) })).join(' · ');
+			return formatText(text.totalBookmarksWithLevels, { total: formatNumber(summary.total), levels: levels || text.noLevelBookmarks });
 		};
 		const closeDeleteConfirmation = restoreFocus => {
 			const modal = byId('delete-confirmation');
@@ -400,19 +511,19 @@ export class BookmarkConfigurationManagerWebview {
 			if (entries.length === 0) return;
 			state.pendingDeletePaths = entries.map(entry => entry.storagePath);
 			state.previousFocus = document.activeElement;
-			byId('delete-dialog-title').textContent = '确定清理 ' + entries.length + ' 条书签存储记录吗？';
-			byId('delete-dialog-summary').textContent = '清理前会重新核对记录内容；已经被其他程序修改的记录会自动跳过。';
+			byId('delete-dialog-title').textContent = formatText(text.deleteQuestion, { count: formatNumber(entries.length) });
+			byId('delete-dialog-summary').textContent = text.deleteSummary;
 			const details = byId('delete-dialog-details');
 			details.replaceChildren();
 			const scripts = entries.filter(entry => entry.kind === 'script');
 			const workspaceOrders = entries.filter(entry => entry.kind === 'workspaceOrder');
 			const transferJournals = entries.filter(entry => entry.kind === 'transferJournal');
-			if (scripts.length) details.appendChild(create('li', 'modal-detail', '书签配置：' + scripts.length + ' 条；' + aggregateLevelSummary(scripts)));
-			if (workspaceOrders.length) details.appendChild(create('li', 'modal-detail', '工作区排序记录：' + workspaceOrders.length + ' 条（只影响文件顺序，不删除书签）'));
-			if (transferJournals.length) details.appendChild(create('li', 'modal-detail', '存储迁移记录：' + transferJournals.length + ' 条（只清理历史记录，不影响当前书签）'));
+			if (scripts.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteScriptDetails, { count: formatNumber(scripts.length), summary: aggregateLevelSummary(scripts) })));
+			if (workspaceOrders.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteWorkspaceDetails, { count: formatNumber(workspaceOrders.length) })));
+			if (transferJournals.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteTransferDetails, { count: formatNumber(transferJournals.length) })));
 			const warning = byId('delete-dialog-warning');
 			warning.hidden = scripts.length === 0;
-			warning.textContent = scripts.length ? '删除书签配置后无法通过书签撤销功能恢复。' : '';
+			warning.textContent = scripts.length ? text.deleteWarning : '';
 			byId('confirm-delete').disabled = false;
 			byId('delete-confirmation').hidden = false;
 			byId('cancel-delete').focus();
@@ -432,18 +543,18 @@ export class BookmarkConfigurationManagerWebview {
 			return true;
 		};
 		const visibleEntries = () => {
-			const query = byId('search').value.trim().toLocaleLowerCase('zh-CN');
+			const query = byId('search').value.trim().toLocaleLowerCase(locale);
 			const entries = state.entries.filter(entry => {
 				if (!matchesFilter(entry)) return false;
 				if (!query) return true;
 				return [entry.storagePath, entry.fileName, entry.filePath, entry.scriptPath, entry.workspaceName,
 					entry.workspacePathHash, entry.transferSource, entry.transferTarget, ...(entry.orderedPaths || []), ...(entry.labelPreview || [])]
-					.filter(Boolean).some(value => String(value).toLocaleLowerCase('zh-CN').includes(query));
+					.filter(Boolean).some(value => String(value).toLocaleLowerCase(locale).includes(query));
 			});
 			const sort = byId('sort').dataset.value;
 			return entries.sort((left, right) => {
 				if (sort === 'bookmarks') return right.bookmarkSummary.total - left.bookmarkSummary.total || right.modifiedAt - left.modifiedAt;
-				if (sort === 'path') return (left.scriptPath || left.workspaceName || left.transferSource || left.storagePath).localeCompare(right.scriptPath || right.workspaceName || right.transferSource || right.storagePath, 'zh-CN');
+				if (sort === 'path') return (left.scriptPath || left.workspaceName || left.transferSource || left.storagePath).localeCompare(right.scriptPath || right.workspaceName || right.transferSource || right.storagePath, locale);
 				if (sort === 'size') return right.sizeBytes - left.sizeBytes || right.modifiedAt - left.modifiedAt;
 				return right.modifiedAt - left.modifiedAt || left.storagePath.localeCompare(right.storagePath);
 			});
@@ -457,7 +568,7 @@ export class BookmarkConfigurationManagerWebview {
 			selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
 			const button = byId('delete-selected');
 			button.disabled = state.deleting || state.selected.size === 0;
-			button.textContent = state.selected.size > 0 ? '删除所选（' + state.selected.size + '）' : '删除所选';
+			button.textContent = state.selected.size > 0 ? formatText(text.deleteSelectedCount, { count: formatNumber(state.selected.size) }) : text.deleteSelected;
 		}
 		function addAction(container, label, action, entry, disabled) {
 			const button = create('button', 'secondary', label);
@@ -466,49 +577,49 @@ export class BookmarkConfigurationManagerWebview {
 			container.appendChild(button);
 		}
 		function appendScriptDetails(cell, entry) {
-			cell.appendChild(create('div', 'primary-text', entry.scriptPath || '无法识别对应脚本'));
+			cell.appendChild(create('div', 'primary-text', entry.scriptPath || text.unidentifiedScript));
 			cell.appendChild(create('div', 'secondary-text', entry.storagePath));
 			if (entry.labelPreview && entry.labelPreview.length) cell.appendChild(create('div', 'preview', entry.labelPreview.join(' · ')));
 		}
 		function appendWorkspaceDetails(cell, entry) {
-			cell.appendChild(create('div', 'primary-text', '工作区：' + (entry.workspaceName || '未知')));
-			cell.appendChild(create('div', 'secondary-text', '路径哈希：' + (entry.workspacePathHash || '未知')));
+			cell.appendChild(create('div', 'primary-text', formatText(text.workspace, { value: entry.workspaceName || text.unknown })));
+			cell.appendChild(create('div', 'secondary-text', formatText(text.pathHash, { value: entry.workspacePathHash || text.unknown })));
 			cell.appendChild(create('div', 'secondary-text', entry.storagePath));
 			const paths = entry.orderedPaths || [];
 			if (paths.length) {
-				const preview = paths.slice(0, 8).join(' · ') + (paths.length > 8 ? ' · 另有 ' + (paths.length - 8) + ' 条' : '');
+				const preview = paths.slice(0, 8).join(' · ') + (paths.length > 8 ? formatText(text.additionalRecords, { count: formatNumber(paths.length - 8) }) : '');
 				cell.appendChild(create('div', 'preview', preview));
 			}
 		}
 		function appendTransferDetails(cell, entry) {
-			cell.appendChild(create('div', 'primary-text', '存储迁移记录'));
-			cell.appendChild(create('div', 'secondary-text', '来源：' + (entry.transferSource || '未知')));
-			cell.appendChild(create('div', 'secondary-text', '目标：' + (entry.transferTarget || '未知')));
+			cell.appendChild(create('div', 'primary-text', text.transferJournal));
+			cell.appendChild(create('div', 'secondary-text', formatText(text.source, { value: entry.transferSource || text.unknown })));
+			cell.appendChild(create('div', 'secondary-text', formatText(text.target, { value: entry.transferTarget || text.unknown })));
 			cell.appendChild(create('div', 'secondary-text', entry.storagePath));
 		}
 		function appendContentSummary(cell, entry) {
 			if (entry.kind === 'workspaceOrder') {
-				cell.appendChild(create('div', 'count', '排序路径 ' + formatNumber((entry.orderedPaths || []).length) + ' 条'));
-				cell.appendChild(create('div', 'levels', '用于恢复该工作区的脚本显示顺序'));
+				cell.appendChild(create('div', 'count', formatText(text.orderedPaths, { count: formatNumber((entry.orderedPaths || []).length) })));
+				cell.appendChild(create('div', 'levels', text.workspaceOrderPurpose));
 				return;
 			}
 			if (entry.kind === 'transferJournal') {
-				cell.appendChild(create('div', 'count', '迁移' + transferStatusLabel(entry.transferStatus)));
-				cell.appendChild(create('div', 'levels', '复制 ' + formatNumber(entry.transferCopiedFiles) + ' 个 · 合并 ' + formatNumber(entry.transferMergedFiles) + ' 个 · 冲突 ' + formatNumber(entry.transferConflictFiles) + ' 个'));
+				cell.appendChild(create('div', 'count', formatText(text.transferState, { status: transferStatusLabel(entry.transferStatus) })));
+				cell.appendChild(create('div', 'levels', formatText(text.transferCounts, { copied: formatNumber(entry.transferCopiedFiles), merged: formatNumber(entry.transferMergedFiles), conflicts: formatNumber(entry.transferConflictFiles) })));
 				return;
 			}
-			cell.appendChild(create('div', 'count', '共 ' + formatNumber(entry.bookmarkSummary.total) + ' 个书签'));
+			cell.appendChild(create('div', 'count', formatText(text.totalBookmarks, { count: formatNumber(entry.bookmarkSummary.total) })));
 			cell.appendChild(create('div', 'levels', levelSummary(entry)));
 			const auxiliary = [];
-			if (entry.automaticBookmarkCount) auxiliary.push('自动书签 ' + formatNumber(entry.automaticBookmarkCount) + ' 个');
-			if (entry.invalidBookmarkCount) auxiliary.push('失效或异常 ' + formatNumber(entry.invalidBookmarkCount) + ' 个');
+			if (entry.automaticBookmarkCount) auxiliary.push(formatText(text.automaticBookmarks, { count: formatNumber(entry.automaticBookmarkCount) }));
+			if (entry.invalidBookmarkCount) auxiliary.push(formatText(text.invalidBookmarks, { count: formatNumber(entry.invalidBookmarkCount) }));
 			if (auxiliary.length) cell.appendChild(create('div', 'aux-counts', auxiliary.join(' · ')));
 		}
 		function renderRow(entry) {
 			const row = document.createElement('tr');
 			const selectCell = document.createElement('td');
 			const checkbox = document.createElement('input');
-			checkbox.type = 'checkbox'; checkbox.checked = state.selected.has(entry.storagePath); checkbox.setAttribute('aria-label', '选择 ' + entry.storagePath);
+			checkbox.type = 'checkbox'; checkbox.checked = state.selected.has(entry.storagePath); checkbox.setAttribute('aria-label', formatText(text.selectRecord, { path: entry.storagePath }));
 			checkbox.addEventListener('change', () => { checkbox.checked ? state.selected.add(entry.storagePath) : state.selected.delete(entry.storagePath); render(); });
 			selectCell.appendChild(checkbox); row.appendChild(selectCell);
 			const scriptCell = document.createElement('td');
@@ -525,19 +636,19 @@ export class BookmarkConfigurationManagerWebview {
 			appendContentSummary(countCell, entry);
 			row.appendChild(countCell);
 			const infoCell = document.createElement('td');
-			if (entry.kind === 'script') infoCell.appendChild(create('div', 'time-line', '绑定信息更新：' + formatDate(entry.lastSeenAt)));
+			if (entry.kind === 'script') infoCell.appendChild(create('div', 'time-line', formatText(text.bindingUpdated, { date: formatDate(entry.lastSeenAt) })));
 			else if (entry.kind === 'transferJournal') {
-				infoCell.appendChild(create('div', 'time-line', '迁移开始：' + formatDate(entry.transferStartedAt)));
-				infoCell.appendChild(create('div', 'time-line', '迁移完成：' + formatDate(entry.transferCompletedAt)));
-			} else infoCell.appendChild(create('div', 'time-line', '记录类型：' + (roleLabels[entry.role] || entry.role)));
-			infoCell.appendChild(create('div', 'time-line', '文件修改：' + formatDate(entry.modifiedAt)));
-			infoCell.appendChild(create('div', 'time-line', '大小：' + formatSize(entry.sizeBytes)));
+				infoCell.appendChild(create('div', 'time-line', formatText(text.transferStarted, { date: formatDate(entry.transferStartedAt) })));
+				infoCell.appendChild(create('div', 'time-line', formatText(text.transferCompleted, { date: formatDate(entry.transferCompletedAt) })));
+			} else infoCell.appendChild(create('div', 'time-line', formatText(text.recordType, { type: roleLabels[entry.role] || entry.role })));
+			infoCell.appendChild(create('div', 'time-line', formatText(text.fileModified, { date: formatDate(entry.modifiedAt) })));
+			infoCell.appendChild(create('div', 'time-line', formatText(text.size, { size: formatSize(entry.sizeBytes) })));
 			row.appendChild(infoCell);
 			const actionCell = document.createElement('td'); const actions = create('div', 'actions');
-			if (entry.kind === 'script') addAction(actions, '打开脚本', 'openSource', entry, !entry.sourceExists);
+			if (entry.kind === 'script') addAction(actions, text.openScript, 'openSource', entry, !entry.sourceExists);
 			else actions.classList.add('metadata-actions');
-			addAction(actions, '定位文件', 'revealConfiguration', entry, false);
-			const deleteButton = create('button', 'danger delete-action', entry.kind === 'script' ? '删除配置' : '清理记录'); deleteButton.disabled = state.deleting;
+			addAction(actions, text.revealFile, 'revealConfiguration', entry, false);
+			const deleteButton = create('button', 'danger delete-action', entry.kind === 'script' ? text.deleteConfiguration : text.cleanRecord); deleteButton.disabled = state.deleting;
 			deleteButton.addEventListener('click', () => openDeleteConfirmation([entry.storagePath])); actions.appendChild(deleteButton);
 			actionCell.appendChild(actions); row.appendChild(actionCell);
 			return row;
@@ -547,13 +658,13 @@ export class BookmarkConfigurationManagerWebview {
 			const displayedEntries = entries.slice(0, state.visibleLimit);
 			const rows = byId('rows'); rows.replaceChildren();
 			if (state.loading) {
-				const row = document.createElement('tr'); const cell = create('td', 'empty', '正在读取书签存储记录…'); cell.colSpan = 6; row.appendChild(cell); rows.appendChild(row);
+				const row = document.createElement('tr'); const cell = create('td', 'empty', text.readingRecords); cell.colSpan = 6; row.appendChild(cell); rows.appendChild(row);
 			} else if (entries.length === 0) {
-				const row = document.createElement('tr'); const cell = create('td', 'empty', '暂无符合条件的书签存储记录'); cell.colSpan = 6; row.appendChild(cell); rows.appendChild(row);
+				const row = document.createElement('tr'); const cell = create('td', 'empty', text.emptyRecords); cell.colSpan = 6; row.appendChild(cell); rows.appendChild(row);
 			} else displayedEntries.forEach(entry => rows.appendChild(renderRow(entry)));
 			byId('result-count').textContent = entries.length === state.entries.length
-				? '当前显示 ' + displayedEntries.length + ' 条记录，共 ' + state.entries.length + ' 条'
-				: '当前显示 ' + displayedEntries.length + ' 条记录，符合条件 ' + entries.length + ' 条，共 ' + state.entries.length + ' 条';
+				? formatText(text.resultAll, { shown: formatNumber(displayedEntries.length), total: formatNumber(state.entries.length) })
+				: formatText(text.resultFiltered, { shown: formatNumber(displayedEntries.length), matched: formatNumber(entries.length), total: formatNumber(state.entries.length) });
 			byId('pagination').hidden = state.loading || displayedEntries.length >= entries.length;
 			updateSelection(entries);
 		}
@@ -648,13 +759,13 @@ export class BookmarkConfigurationManagerWebview {
 			if (message.type === 'loadError') {
 				state.loading = false; state.deleting = false; state.entries = []; updateMetrics();
 				byId('pagination').hidden = true;
-				const rows = byId('rows'); rows.replaceChildren(); const row = document.createElement('tr'); const cell = create('td', 'error', '读取失败：' + message.message); cell.colSpan = 6; row.appendChild(cell); rows.appendChild(row); return;
+				const rows = byId('rows'); rows.replaceChildren(); const row = document.createElement('tr'); const cell = create('td', 'error', formatText(text.loadFailed, { message: message.message })); cell.colSpan = 6; row.appendChild(cell); rows.appendChild(row); return;
 			}
 			if (message.type === 'state' && Array.isArray(message.entries)) {
 				state.loading = false; state.deleting = false; state.entries = message.entries; state.visibleLimit = PAGE_SIZE;
 				const storageRoot = byId('storage-root');
-				storageRoot.textContent = '存储目录：' + message.storageRoot;
-				storageRoot.title = '在文件资源管理器中打开：' + message.storageRoot;
+				storageRoot.textContent = formatText(text.storageFolder, { path: message.storageRoot });
+				storageRoot.title = formatText(text.revealStorageFolder, { path: message.storageRoot });
 				storageRoot.disabled = false;
 				updateMetrics(); render();
 			}

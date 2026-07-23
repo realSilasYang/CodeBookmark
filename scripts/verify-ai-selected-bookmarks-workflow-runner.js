@@ -26,6 +26,7 @@ const { vscode } = createVscodeFake({
 })
 const restoreModules = installModuleMocks({ vscode })
 const { AIService } = require('../out/util/AIService')
+const { UserCancelledError } = require('../out/i18n/Localization')
 const { AITaskRegistry } = require('../out/providers/AITaskRegistry')
 const { AIWorkflowGuard } = require('../out/providers/AIWorkflowGuard')
 const { runOptimizeSelectedBookmarks } = require('../out/providers/AISelectedBookmarksWorkflowRunner')
@@ -127,7 +128,7 @@ async function main() {
     assert.equal(informationMessages.at(-1), '选中的项不包含可优化的书签。')
 
     AIService.optimizeBookmarks = async () => {
-      throw new Error('主动取消')
+      throw new UserCancelledError('主动取消', 'Cancelled')
     }
     await runOptimizeSelectedBookmarks(a1, undefined, port)
     assert.match(informationMessages.at(-1), /已取消 AI 选中书签优化任务：a\.ts/)

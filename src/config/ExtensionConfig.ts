@@ -3,12 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { normalizeAIRequestTimeoutSeconds } from '../util/AIRequestPolicy';
 import { resolveStoragePath } from '../util/StoragePath';
+import { localize } from '../i18n/Localization';
 export class ExtensionConfig {
 	private static validatedStoragePath: string | undefined
 	private static snapshot: {
 		globalStoragePath: string
-		aiEndpoint: string
-		aiApiKey: string
+		aiAddress: string
+		aiAPIKey: string
 		aiModel: string
 		aiTimeoutS: number
 		aiPrompt: string
@@ -26,8 +27,8 @@ export class ExtensionConfig {
 			const expandLevel = root.get<number>('defaultExpandLevel') ?? 3
 			this.snapshot = {
 				globalStoragePath: String(root.get('globalStoragePath') || ''),
-				aiEndpoint: String(ai.get('endpoint') || '').trim(),
-				aiApiKey: String(ai.get('apiKey') || '').trim(),
+				aiAddress: String(ai.get('address') || '').trim(),
+				aiAPIKey: String(ai.get('APIKey') || '').trim(),
 				aiModel: String(ai.get('model') || '').trim(),
 				aiTimeoutS: normalizeAIRequestTimeoutSeconds(ai.get('timeoutS')),
 				aiPrompt: String(ai.get('prompt') || '').trim(),
@@ -54,11 +55,11 @@ export class ExtensionConfig {
 		return resolveStoragePath(this.globalStoragePath)
 	}
 
-	static get aiEndpoint(): string {
-		return this.values().aiEndpoint;
+	static get aiAddress(): string {
+		return this.values().aiAddress;
 	}
-	static get aiApiKey(): string {
-		return this.values().aiApiKey;
+	static get aiAPIKey(): string {
+		return this.values().aiAPIKey;
 	}
 	static get aiModel(): string {
 		return this.values().aiModel;
@@ -85,15 +86,33 @@ export class ExtensionConfig {
 		return this.values().defaultExpandLevel;
 	}
 
+	static async updateAIAddress(address: string): Promise<boolean> {
+		const successfulAddress = address.trim()
+		if (!successfulAddress || successfulAddress === this.aiAddress) return false
+
+		const configuration = vscode.workspace.getConfiguration('codebookmark.AI')
+		const inspection = configuration.inspect<string>('address')
+		const target = inspection?.workspaceFolderValue !== undefined
+			? vscode.ConfigurationTarget.WorkspaceFolder
+			: inspection?.workspaceValue !== undefined
+				? vscode.ConfigurationTarget.Workspace
+				: vscode.ConfigurationTarget.Global
+		await configuration.update('address', successfulAddress, target)
+		this.invalidate()
+		return true
+	}
+
 	static ensureAIConfigured(): boolean {
 		const missing: string[] = []
-		if (!this.aiEndpoint) missing.push('Endpoint')
-		if (!this.aiApiKey) missing.push('API Key')
-		if (!this.aiModel) missing.push('模型名称')
+		if (!this.aiAddress) missing.push(localize('接口地址', 'API address'))
+		if (!this.aiModel) missing.push(localize('模型名称', 'model name'))
 		if (missing.length === 0) return true
 
 		void vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.AI')
-		void vscode.window.showErrorMessage(`请先补全 AI 配置：${missing.join('、')}。`)
+		void vscode.window.showErrorMessage(localize(
+			`请先补全 AI 配置：${missing.join('、')}。`,
+			`Complete the AI settings first: ${missing.join(', ')}.`,
+		))
 		return false
 	}
 
@@ -101,18 +120,27 @@ export class ExtensionConfig {
 		let folder = ExtensionConfig.globalStoragePath;
 		if (!folder || folder.trim() === '') {
 			void vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.globalStoragePath');
-			void vscode.window.showErrorMessage('请先配置全局书签存储路径；该设置不能为空。');
+			void vscode.window.showErrorMessage(localize(
+				'请先配置全局书签存储路径；该设置不能为空。',
+				'Configure the global bookmark storage path first; this setting cannot be empty.',
+			));
 			return false;
 		}
 
 		try {
 			folder = ExtensionConfig.resolveStoragePath();
 		} catch (error) {
-			void vscode.window.showErrorMessage(`书签存储路径无效：${error instanceof Error ? error.message : String(error)}`)
+			void vscode.window.showErrorMessage(localize(
+				`书签存储路径无效：${error instanceof Error ? error.message : String(error)}`,
+				`The bookmark storage path is invalid: ${error instanceof Error ? error.message : String(error)}`,
+			))
 			return false
 		}
 		if (!path.isAbsolute(folder)) {
-			void vscode.window.showErrorMessage(`书签存储路径必须是绝对路径：${folder}`)
+			void vscode.window.showErrorMessage(localize(
+				`书签存储路径必须是绝对路径：${folder}`,
+				`The bookmark storage path must be absolute: ${folder}`,
+			))
 			return false
 		}
 		if (folder === this.validatedStoragePath) return true;
@@ -121,7 +149,10 @@ export class ExtensionConfig {
 			try {
 				fs.mkdirSync(folder, { recursive: true });
 			} catch {
-				vscode.window.showErrorMessage(`无法创建书签配置文件夹： ${folder}，请检查是否具有权限或路径是否合法。`);
+				vscode.window.showErrorMessage(localize(
+					`无法创建书签配置文件夹：${folder}。请检查路径是否合法以及是否具有访问权限。`,
+					`Unable to create the bookmark configuration folder: ${folder}. Check that the path is valid and accessible.`,
+				));
 				return false;
 			}
 		}
@@ -129,12 +160,18 @@ export class ExtensionConfig {
 		try {
 			const stat = fs.statSync(folder);
 			if (!stat.isDirectory()) {
-				vscode.window.showErrorMessage(`书签配置路径必须是一个文件夹，不能是文件： ${folder}`);
+				vscode.window.showErrorMessage(localize(
+					`书签配置路径必须是文件夹，不能是文件：${folder}`,
+					`The bookmark configuration path must be a folder, not a file: ${folder}`,
+				));
 				return false;
 			}
 			fs.accessSync(folder, fs.constants.W_OK | fs.constants.R_OK);
 		} catch {
-			vscode.window.showErrorMessage(`指定的书签配置文件夹无读写权限或不可用： ${folder}`);
+			vscode.window.showErrorMessage(localize(
+				`指定的书签配置文件夹无读写权限或不可用：${folder}`,
+				`The selected bookmark configuration folder is unavailable or does not allow reading and writing: ${folder}`,
+			));
 			return false;
 		}
 

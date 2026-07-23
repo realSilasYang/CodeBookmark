@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import { localize } from '../i18n/Localization'
 import type { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
 import { SortModeBookmark } from '../models/ViewMode'
@@ -69,7 +70,7 @@ export function sortBookmarkTreeItems(items: Bookmark[]): Bookmark[] {
 export function runBookmarkTreeDrag(source: Bookmark[], treeDataTransfer: vscode.DataTransfer): void {
 	for (const bookmark of source) {
 		if (!bookmark.isBookmarkInvalid) continue
-		logger.showWarningMessage('请编辑失效的书签')
+		logger.showWarningMessage(localize('请编辑失效的书签', 'Edit the invalid bookmark before moving it.'))
 		return
 	}
 	treeDataTransfer.set(BOOKMARK_TREE_MIME_TYPE, new vscode.DataTransferItem(source))
@@ -83,13 +84,13 @@ async function reorderWorkspaceFiles(
 	const fileSources = sourceItems.filter(bookmark => bookmark.contextValue === ContextBookmark.File)
 	if (fileSources.length === 0) return false
 	if (fileSources.length !== sourceItems.length) {
-		logger.showWarningMessage('不能同时拖动文件节点和书签节点。')
+		logger.showWarningMessage(localize('不能同时拖动文件节点和书签节点。', 'File nodes and bookmark nodes cannot be dragged together.'))
 		return true
 	}
 	const sourcePaths = [...new Set(fileSources.map(bookmark => bookmark.path))]
 	if (sourcePaths.length === 0) return true
 	if (target && !target.isFile) {
-		logger.showWarningMessage('文件节点只能拖放到文件节点之间或列表空白处。')
+		logger.showWarningMessage(localize('文件节点只能拖放到文件节点之间或列表空白处。', 'File nodes can only be dropped between file nodes or onto empty space in the list.'))
 		return true
 	}
 
@@ -151,7 +152,7 @@ function moveBookmarks(
 	if (source.size === 0) return
 	const sourcePaths = new Set(source.values.map(bookmark => bookmarkPathKey(bookmark.path)))
 	if (sourcePaths.size !== 1) {
-		logger.showWarningMessage('不能同时移动来自不同文件的书签。')
+		logger.showWarningMessage(localize('不能同时移动来自不同文件的书签。', 'Bookmarks from different files cannot be moved together.'))
 		return
 	}
 
@@ -163,7 +164,7 @@ function moveBookmarks(
 	}
 	if (!destination) return
 	if (bookmarkPathKey(destination.path) !== [...sourcePaths][0]) {
-		logger.showWarningMessage('暂不支持跨文件移动书签。')
+		logger.showWarningMessage(localize('暂不支持跨文件移动书签。', 'Moving bookmarks between files is not supported.'))
 		return
 	}
 	for (const bookmark of source) {
@@ -191,7 +192,10 @@ export async function runBookmarkTreeDrop(
 	if (!transferItem) return
 	if (SortModeBookmark.mode !== SortModeBookmark.Custom) {
 		SortModeBookmark.mode = SortModeBookmark.Custom
-		void vscode.window.showInformationMessage('检测到拖拽操作，已自动切换回“自定义排序”模式。')
+		void vscode.window.showInformationMessage(localize(
+			'检测到拖拽操作，已自动切换回“自定义排序”模式。',
+			'Dragging detected. The view automatically switched back to Custom Order.',
+		))
 	}
 
 	const sourceItems = Array.isArray(transferItem.value) ? transferItem.value as Bookmark[] : []
@@ -211,7 +215,10 @@ function hasReachedDefaultExpandLevel(port: BookmarkTreeInteractionPort): boolea
 export function publishExpandCollapseContext(port: BookmarkTreeInteractionPort): void {
 	const expanded = hasReachedDefaultExpandLevel(port)
 	void port.setExpandCollapseContext(expanded)
-		.catch(error => logger.error(`更新书签展开按钮状态失败: ${errorMessage(error)}`))
+		.catch(error => logger.error(localize(
+			`更新书签展开按钮状态失败: ${errorMessage(error)}`,
+			`Failed to update the bookmark expand/collapse button state: ${errorMessage(error)}`,
+		)))
 }
 
 export async function runToggleExpandCollapse(port: BookmarkTreeInteractionPort): Promise<void> {
@@ -260,24 +267,24 @@ export async function runExpandFolderTreeView(
 export async function runSearchBookmarksInActiveFile(port: BookmarkTreeInteractionPort): Promise<void> {
 	const editor = vscode.window.activeTextEditor
 	if (!editor) {
-		logger.showWarningMessage('当前没有打开的文件')
+		logger.showWarningMessage(localize('当前没有打开的文件', 'No file is currently open.'))
 		return
 	}
 	const bookmarkPath = port.absoluteToRelative(editor.document.uri.fsPath)
 	const bookmarks = port.bookmarksForPath(bookmarkPath)
 	if (bookmarks.length === 0) {
-		logger.showWarningMessage('当前文件无书签')
+		logger.showWarningMessage(localize('当前文件无书签', 'The current file has no bookmarks.'))
 		return
 	}
 
 	const items: (vscode.QuickPickItem & { bookmark: Bookmark })[] = bookmarks.map(bookmark => ({
 		label: `$(bookmark) ${bookmark.label}`,
-		description: `第 ${bookmark.start.line + 1} 行`,
+		description: localize(`第 ${bookmark.start.line + 1} 行`, `Line ${bookmark.start.line + 1}`),
 		detail: bookmark.content,
 		bookmark,
 	}))
 	const selected = await vscode.window.showQuickPick(items, {
-		placeHolder: '搜索当前文件的书签',
+		placeHolder: localize('搜索当前文件的书签', 'Search bookmarks in the current file'),
 		matchOnDescription: true,
 		matchOnDetail: true,
 	})
@@ -285,21 +292,18 @@ export async function runSearchBookmarksInActiveFile(port: BookmarkTreeInteracti
 }
 
 export async function runSelectBookmarkSortMode(port: BookmarkTreeInteractionPort): Promise<void> {
-	const options: vscode.QuickPickItem[] = [
-		{ label: '自定义排序', description: SortModeBookmark.mode === SortModeBookmark.Custom ? '（当前）' : '' },
-		{ label: '按时间升序', description: SortModeBookmark.mode === SortModeBookmark.TimeAsc ? '（当前）' : '最早添加在前' },
-		{ label: '按时间降序', description: SortModeBookmark.mode === SortModeBookmark.TimeDesc ? '（当前）' : '最新添加在前' },
-		{ label: '按位置升序', description: SortModeBookmark.mode === SortModeBookmark.LineAsc ? '（当前）' : '从上到下' },
-		{ label: '按位置降序', description: SortModeBookmark.mode === SortModeBookmark.LineDesc ? '（当前）' : '从下到上' },
+	const current = localize('（当前）', '(Current)')
+	const options: Array<vscode.QuickPickItem & { mode: number }> = [
+		{ mode: SortModeBookmark.Custom, label: localize('自定义排序', 'Custom Order'), description: SortModeBookmark.mode === SortModeBookmark.Custom ? current : '' },
+		{ mode: SortModeBookmark.TimeAsc, label: localize('按时间升序', 'Time Ascending'), description: SortModeBookmark.mode === SortModeBookmark.TimeAsc ? current : localize('最早添加在前', 'Oldest first') },
+		{ mode: SortModeBookmark.TimeDesc, label: localize('按时间降序', 'Time Descending'), description: SortModeBookmark.mode === SortModeBookmark.TimeDesc ? current : localize('最新添加在前', 'Newest first') },
+		{ mode: SortModeBookmark.LineAsc, label: localize('按位置升序', 'Position Ascending'), description: SortModeBookmark.mode === SortModeBookmark.LineAsc ? current : localize('从上到下', 'Top to bottom') },
+		{ mode: SortModeBookmark.LineDesc, label: localize('按位置降序', 'Position Descending'), description: SortModeBookmark.mode === SortModeBookmark.LineDesc ? current : localize('从下到上', 'Bottom to top') },
 	]
 	const selected = await vscode.window.showQuickPick(options, {
-		placeHolder: '选择视图排序方式（不影响底层拖拽原始顺序）',
+		placeHolder: localize('选择视图排序方式（不影响底层拖拽原始顺序）', 'Choose the view order (does not change the underlying drag order)'),
 	})
 	if (!selected) return
-	if (selected.label === '自定义排序') SortModeBookmark.mode = SortModeBookmark.Custom
-	else if (selected.label === '按时间升序') SortModeBookmark.mode = SortModeBookmark.TimeAsc
-	else if (selected.label === '按时间降序') SortModeBookmark.mode = SortModeBookmark.TimeDesc
-	else if (selected.label === '按位置升序') SortModeBookmark.mode = SortModeBookmark.LineAsc
-	else if (selected.label === '按位置降序') SortModeBookmark.mode = SortModeBookmark.LineDesc
+	SortModeBookmark.mode = selected.mode
 	port.fireTreeChanged()
 }

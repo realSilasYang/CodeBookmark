@@ -15,9 +15,9 @@ const { vscode } = createVscodeFake({
   ProgressLocation: { Notification: 15 },
   window: {
     showInformationMessage: message => { informationMessages.push(message) },
-    showWarningMessage: async message => {
+    showWarningMessage: async (message, _options, confirmAction) => {
       warningMessages.push(message)
-      return '确定'
+      return confirmAction
     },
     showErrorMessage: message => { errorMessages.push(message) },
     setStatusBarMessage: message => {
@@ -173,28 +173,37 @@ async function main() {
       failedRequests++
       throw new Error('temporary failure')
     }
-    await runGenerateBookmarksForFolder(target, 'append', port)
-    assert.equal(failedRequests, 3)
-    assert.match(errorMessages.at(-1), /AI 请求连续失败 3 次/)
-    assert.match(informationMessages.at(-1), /AI 文件夹任务已停止/)
+    const expectedLoggedErrors = []
+    const originalConsoleError = console.error
+    console.error = (...args) => expectedLoggedErrors.push(args)
+    try {
+      await runGenerateBookmarksForFolder(target, 'append', port)
+      assert.equal(failedRequests, 3)
+      assert.match(errorMessages.at(-1), /AI 请求连续失败 3 次/)
+      assert.match(informationMessages.at(-1), /AI 文件夹任务已停止/)
 
-    let authenticationRequests = 0
-    AIService.generateBookmarks = async () => {
-      authenticationRequests++
-      throw new AIHttpStatusError(401, 'invalid key')
-    }
-    await runGenerateBookmarksForFolder(target, 'append', port)
-    assert.equal(authenticationRequests, 1)
-    assert.match(errorMessages.at(-1), /请检查 API Key 配置/)
+      let authenticationRequests = 0
+      AIService.generateBookmarks = async () => {
+        authenticationRequests++
+        throw new AIHttpStatusError(401, 'invalid key')
+      }
+      await runGenerateBookmarksForFolder(target, 'append', port)
+      assert.equal(authenticationRequests, 1)
+      assert.match(errorMessages.at(-1), /请检查 API Key 配置/)
 
-    let rateLimitRequests = 0
-    AIService.generateBookmarks = async () => {
-      rateLimitRequests++
-      throw new AIHttpStatusError(429, 'slow down')
+      let rateLimitRequests = 0
+      AIService.generateBookmarks = async () => {
+        rateLimitRequests++
+        throw new AIHttpStatusError(429, 'slow down')
+      }
+      await runGenerateBookmarksForFolder(target, 'append', port)
+      assert.equal(rateLimitRequests, 1)
+      assert.match(errorMessages.at(-1), /触发速率限制/)
+    } finally {
+      console.error = originalConsoleError
     }
-    await runGenerateBookmarksForFolder(target, 'append', port)
-    assert.equal(rateLimitRequests, 1)
-    assert.match(errorMessages.at(-1), /触发速率限制/)
+    assert.equal(expectedLoggedErrors.length, 2)
+    assert.equal(expectedLoggedErrors.filter(args => String(args[0]).includes('temporary failure')).length, 2)
 
     assert.equal(warningMessages.length, 0)
     assert.ok(statusMessages.every(status => status.disposed))

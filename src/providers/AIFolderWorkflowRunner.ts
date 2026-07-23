@@ -1,5 +1,6 @@
 import * as path from 'path'
 import * as vscode from 'vscode'
+import { isUserCancelledError, localize } from '../i18n/Localization'
 import type { Bookmark } from '../models/Bookmark'
 import { AIService, isAIAuthenticationError, isAIRateLimitError } from '../util/AIService'
 import { Helper } from '../util/Helper'
@@ -11,6 +12,7 @@ import { formatBookmarkLevelSummary, summarizeBookmarks, summarizeBookmarkTrees 
 import { logger } from '../util/Logger'
 import { buildAIBookmarks } from './AIBookmarkBuilder'
 import type { AIGenerationMode, AISingleFileWorkflowPort } from './AISingleFileWorkflowRunner'
+import { isAIStorageScopeChangedError } from './AIWorkflowGuard'
 
 export interface AIFolderWorkflowPort extends Omit<AISingleFileWorkflowPort, 'documentLines'> {
 	currentStorageScope(): string | undefined
@@ -45,27 +47,37 @@ export async function runGenerateBookmarksForFolder(
 	const filesToProcess = await listAISourceFilesInFolder(dirPath)
 
 	if (filesToProcess.length === 0) {
-		vscode.window.showInformationMessage('未在当前文件夹及其子目录中找到支持的脚本文件。')
+		vscode.window.showInformationMessage(localize(
+			'未在当前文件夹及其子目录中找到支持的脚本文件。',
+			'No supported script files were found in the current folder or its subfolders.',
+		))
 		return
 	}
 
 	if (filesToProcess.length > 10) {
+		const confirmAction = { title: localize('确定', 'Continue'), action: 'continue' as const }
 		const confirm = await vscode.window.showWarningMessage(
-			`当前文件夹（包含子目录）共扫描到 ${filesToProcess.length} 个脚本文件，批量处理可能需要较长时间并大量消耗 AI API 的额度。确定要继续吗？`,
+			localize(
+				`当前文件夹（包含子目录）共扫描到 ${filesToProcess.length} 个脚本文件，批量处理可能需要较长时间并大量消耗 AI API 的额度。确定要继续吗？`,
+				`The current folder and its subfolders contain ${filesToProcess.length} script files. Batch processing may take a long time and consume substantial AI API quota. Continue?`,
+			),
 			{ modal: true },
-			'确定',
+			confirmAction,
 		)
-		if (confirm !== '确定') return
+		if (confirm?.action !== 'continue') return
 	}
 
 	if (!port.taskRegistry.tryStartFolder(taskScope)) {
-		vscode.window.showWarningMessage('当前书签作用域已有 AI 文件夹任务正在运行，请稍候再试。')
+		vscode.window.showWarningMessage(localize(
+			'当前书签作用域已有 AI 文件夹任务正在运行，请稍候再试。',
+			'An AI folder task is already running in the current bookmark scope. Try again shortly.',
+		))
 		return
 	}
 	try {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: 'AI 批量智能提取书签运行中...',
+			title: localize('AI 批量智能提取书签运行中...', 'AI is generating bookmarks for the folder…'),
 			cancellable: true,
 		}, async (progress, token) => {
 			let fileCount = 0
@@ -87,13 +99,19 @@ export async function runGenerateBookmarksForFolder(
 				const pathRel = port.absoluteToRelative(filePath)
 				const taskKey = port.taskRegistry.fileTaskKey(taskScope, pathRel)
 				if (port.taskRegistry.isFileRunning(taskKey)) {
-					vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`)
+					vscode.window.showWarningMessage(localize(
+						`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`,
+						`An AI task is already running for ${path.basename(filePath)}. Try again shortly.`,
+					))
 					continue
 				}
 				if (!shouldGenerateForFolderMode(mode, port.bookmarksForPath(pathRel).length)) continue
 				const bookmarkInputSnapshot = port.workflowGuard.captureBookmarkInput(pathRel)
 				if (!port.taskRegistry.tryStartFile(taskKey)) {
-					vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`)
+					vscode.window.showWarningMessage(localize(
+						`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`,
+						`An AI task is already running for ${path.basename(filePath)}. Try again shortly.`,
+					))
 					continue
 				}
 
@@ -103,18 +121,21 @@ export async function runGenerateBookmarksForFolder(
 				} catch (error) {
 					port.taskRegistry.finishFile(taskKey)
 					const message = errorMessage(error)
-					if (message.includes('主动取消')) {
+					if (isUserCancelledError(error)) {
 						userStopped = true
 						break
 					}
 					failedFilesCount++
-					logger.error(`[AI Batch Generate] Failed to read ${filePath}: ${message}`)
+					logger.error(localize(`[AI 批量生成] 读取失败 ${filePath}：${message}`, `[AI Batch Generate] Failed to read ${filePath}: ${message}`))
 					continue
 				}
 				const codeContent = sourceSnapshot.content
 
 				fileCount++
-				progress.report({ message: `（${fileCount}/${filesToProcess.length}）正在提取：${path.basename(filePath)}` })
+				progress.report({ message: localize(
+					`（${fileCount}/${filesToProcess.length}）正在提取：${path.basename(filePath)}`,
+					`(${fileCount}/${filesToProcess.length}) Generating: ${path.basename(filePath)}`,
+				) })
 
 				try {
 					const aiBookmarks = await AIService.generateBookmarks(codeContent, filePath, (message: string) => {
@@ -163,32 +184,41 @@ export async function runGenerateBookmarksForFolder(
 					}
 				} catch (error: unknown) {
 					const message = errorMessage(error)
-					if (token.isCancellationRequested || message.includes('主动取消')) {
+					if (token.isCancellationRequested || isUserCancelledError(error)) {
 						userStopped = true
 						break
 					}
 					failedFilesCount++
 					if (isAIAuthenticationError(error) || message.includes('API Key')) {
 						userStopped = true
-						vscode.window.showErrorMessage(`接口验证失败，请检查 API Key 配置: ${message}`)
+						vscode.window.showErrorMessage(localize(
+							`接口验证失败，请检查 API Key 配置: ${message}`,
+							`AI service authentication failed. Check the API Key setting: ${message}`,
+						))
 						break
 					}
 					if (isAIRateLimitError(error)) {
 						userStopped = true
-						vscode.window.showErrorMessage(`AI 接口触发速率限制，已停止文件夹任务：${message}`)
+						vscode.window.showErrorMessage(localize(
+							`AI 接口触发速率限制，已停止文件夹任务：${message}`,
+							`The AI service rate limit was reached, so the folder task stopped: ${message}`,
+						))
 						break
 					}
-					if (message.includes('作用域已切换')) {
+					if (isAIStorageScopeChangedError(error)) {
 						scopeChanged = true
 						break
 					}
 					consecutiveRequestFailures++
 					if (consecutiveRequestFailures >= 3) {
 						userStopped = true
-						vscode.window.showErrorMessage(`AI 请求连续失败 ${consecutiveRequestFailures} 次，已停止文件夹任务：${message}`)
+						vscode.window.showErrorMessage(localize(
+							`AI 请求连续失败 ${consecutiveRequestFailures} 次，已停止文件夹任务：${message}`,
+							`The AI request failed ${consecutiveRequestFailures} times in a row, so the folder task stopped: ${message}`,
+						))
 						break
 					}
-					logger.error(`[AI Batch Generate] Failed for ${pathRel}: ${message}`)
+					logger.error(localize(`[AI 批量生成] 处理失败 ${pathRel}：${message}`, `[AI Batch Generate] Failed for ${pathRel}: ${message}`))
 				} finally {
 					port.taskRegistry.finishFile(taskKey)
 				}
@@ -196,16 +226,28 @@ export async function runGenerateBookmarksForFolder(
 
 			const generatedSummary = summarizeBookmarkTrees(generatedBookmarks)
 			if ((token.isCancellationRequested || userStopped) && !scopeChanged) {
-				vscode.window.showInformationMessage(`AI 文件夹任务已停止；此前 ${changedPaths.length} 个文件的结果已进入保存队列，生成结果：${formatBookmarkLevelSummary(generatedSummary)}。`)
+				vscode.window.showInformationMessage(localize(
+					`AI 文件夹任务已停止；此前 ${changedPaths.length} 个文件的结果已进入保存队列，生成结果：${formatBookmarkLevelSummary(generatedSummary)}。`,
+					`The AI folder task stopped. Results for ${changedPaths.length} files were already queued for saving. Generated: ${formatBookmarkLevelSummary(generatedSummary)}.`,
+				))
 			} else if (changedPaths.length > 0 && !scopeChanged && port.currentStorageScope() === taskScope) {
 				port.refreshDecoration()
-				const failMsg = failedFilesCount > 0 ? `（有 ${failedFilesCount} 个文件处理失败）` : ''
-				vscode.window.showInformationMessage(`文件夹 AI 处理完成，已处理 ${changedPaths.length} 个文件；生成结果：${formatBookmarkLevelSummary(generatedSummary)}。${failMsg}`)
+				const failMsg = failedFilesCount > 0 ? localize(`（有 ${failedFilesCount} 个文件处理失败）`, ` (${failedFilesCount} files failed)`) : ''
+				vscode.window.showInformationMessage(localize(
+					`文件夹 AI 处理完成，已处理 ${changedPaths.length} 个文件；生成结果：${formatBookmarkLevelSummary(generatedSummary)}。${failMsg}`,
+					`Folder AI processing completed for ${changedPaths.length} files. Generated: ${formatBookmarkLevelSummary(generatedSummary)}.${failMsg}`,
+				))
 			} else if (changedPaths.length === 0 && !token.isCancellationRequested && !scopeChanged) {
-				const failMsg = failedFilesCount > 0 ? `（其中 ${failedFilesCount} 个文件处理失败）` : ''
-				vscode.window.showInformationMessage(`AI 处理完毕，没有生成新的书签；${formatBookmarkLevelSummary(generatedSummary)}。${failMsg}`)
+				const failMsg = failedFilesCount > 0 ? localize(`（其中 ${failedFilesCount} 个文件处理失败）`, ` (${failedFilesCount} files failed)`) : ''
+				vscode.window.showInformationMessage(localize(
+					`AI 处理完毕，没有生成新的书签；${formatBookmarkLevelSummary(generatedSummary)}。${failMsg}`,
+					`AI processing completed without generating new bookmarks. ${formatBookmarkLevelSummary(generatedSummary)}.${failMsg}`,
+				))
 			}
-			if (scopeChanged) vscode.window.showInformationMessage(`书签作用域已切换，AI 文件夹任务已停止；此前处理结果：${formatBookmarkLevelSummary(generatedSummary)}。`)
+			if (scopeChanged) vscode.window.showInformationMessage(localize(
+				`书签作用域已切换，AI 文件夹任务已停止；此前处理结果：${formatBookmarkLevelSummary(generatedSummary)}。`,
+				`The bookmark scope changed, so the AI folder task stopped. Results processed before the change: ${formatBookmarkLevelSummary(generatedSummary)}.`,
+			))
 			if (statusDisposable) statusDisposable.dispose()
 		})
 	} finally {
@@ -223,27 +265,37 @@ export async function runOptimizeBookmarksForFolder(
 	const files = await listAISourceFilesInFolder(dirPath)
 
 	if (files.length === 0) {
-		vscode.window.showInformationMessage('未在当前文件夹及其子目录中找到支持的脚本文件。')
+		vscode.window.showInformationMessage(localize(
+			'未在当前文件夹及其子目录中找到支持的脚本文件。',
+			'No supported script files were found in the current folder or its subfolders.',
+		))
 		return
 	}
 
 	if (files.length > 10) {
+		const confirmAction = { title: localize('确定', 'Continue'), action: 'continue' as const }
 		const confirm = await vscode.window.showWarningMessage(
-			`当前文件夹（包含子目录）共扫描到 ${files.length} 个脚本文件，批量处理可能需要较长时间并大量消耗 AI API 的额度。确定要继续吗？`,
+			localize(
+				`当前文件夹（包含子目录）共扫描到 ${files.length} 个脚本文件，批量处理可能需要较长时间并大量消耗 AI API 的额度。确定要继续吗？`,
+				`The current folder and its subfolders contain ${files.length} script files. Batch processing may take a long time and consume substantial AI API quota. Continue?`,
+			),
 			{ modal: true },
-			'确定',
+			confirmAction,
 		)
-		if (confirm !== '确定') return
+		if (confirm?.action !== 'continue') return
 	}
 
 	if (!port.taskRegistry.tryStartFolder(taskScope)) {
-		vscode.window.showWarningMessage('当前书签作用域已有 AI 文件夹任务正在运行，请稍候再试。')
+		vscode.window.showWarningMessage(localize(
+			'当前书签作用域已有 AI 文件夹任务正在运行，请稍候再试。',
+			'An AI folder task is already running in the current bookmark scope. Try again shortly.',
+		))
 		return
 	}
 	try {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: 'AI 正在扫描文件夹中的书签...',
+			title: localize('AI 正在扫描文件夹中的书签...', 'AI is scanning bookmarks in the folder…'),
 			cancellable: true,
 		}, async (progress, token) => {
 			let fileCount = 0
@@ -265,7 +317,10 @@ export async function runOptimizeBookmarksForFolder(
 				const pathRel = port.absoluteToRelative(filePath)
 				const taskKey = port.taskRegistry.fileTaskKey(taskScope, pathRel)
 				if (port.taskRegistry.isFileRunning(taskKey)) {
-					vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`)
+					vscode.window.showWarningMessage(localize(
+						`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`,
+						`An AI task is already running for ${path.basename(filePath)}. Try again shortly.`,
+					))
 					continue
 				}
 
@@ -273,7 +328,10 @@ export async function runOptimizeBookmarksForFolder(
 				if (existingBookmarks.length === 0) continue
 				const bookmarkInputSnapshot = port.workflowGuard.captureBookmarkInput(pathRel)
 				if (!port.taskRegistry.tryStartFile(taskKey)) {
-					vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`)
+					vscode.window.showWarningMessage(localize(
+						`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`,
+						`An AI task is already running for ${path.basename(filePath)}. Try again shortly.`,
+					))
 					continue
 				}
 
@@ -283,18 +341,21 @@ export async function runOptimizeBookmarksForFolder(
 				} catch (error) {
 					port.taskRegistry.finishFile(taskKey)
 					const message = errorMessage(error)
-					if (message.includes('主动取消')) {
+					if (isUserCancelledError(error)) {
 						userStopped = true
 						break
 					}
 					failedFilesCount++
-					logger.error(`[AI Batch Optimize] Failed to read ${filePath}: ${message}`)
+					logger.error(localize(`[AI 批量优化] 读取失败 ${filePath}：${message}`, `[AI Batch Optimize] Failed to read ${filePath}: ${message}`))
 					continue
 				}
 				const codeContent = sourceSnapshot.content
 
 				fileCount++
-				progress.report({ message: `（${fileCount}/${files.length}）正在优化：${path.basename(filePath)}` })
+				progress.report({ message: localize(
+					`（${fileCount}/${files.length}）正在优化：${path.basename(filePath)}`,
+					`(${fileCount}/${files.length}) Improving: ${path.basename(filePath)}`,
+				) })
 
 				try {
 					const optimizedList = await AIService.optimizeBookmarks(
@@ -337,32 +398,41 @@ export async function runOptimizeBookmarksForFolder(
 					}
 				} catch (error: unknown) {
 					const message = errorMessage(error)
-					if (token.isCancellationRequested || message.includes('主动取消')) {
+					if (token.isCancellationRequested || isUserCancelledError(error)) {
 						userStopped = true
 						break
 					}
 					failedFilesCount++
 					if (isAIAuthenticationError(error) || message.includes('API Key')) {
 						userStopped = true
-						vscode.window.showErrorMessage(`接口验证失败，请检查 API Key 配置: ${message}`)
+						vscode.window.showErrorMessage(localize(
+							`接口验证失败，请检查 API Key 配置: ${message}`,
+							`AI service authentication failed. Check the API Key setting: ${message}`,
+						))
 						break
 					}
 					if (isAIRateLimitError(error)) {
 						userStopped = true
-						vscode.window.showErrorMessage(`AI 接口触发速率限制，已停止文件夹任务：${message}`)
+						vscode.window.showErrorMessage(localize(
+							`AI 接口触发速率限制，已停止文件夹任务：${message}`,
+							`The AI service rate limit was reached, so the folder task stopped: ${message}`,
+						))
 						break
 					}
-					if (message.includes('作用域已切换')) {
+					if (isAIStorageScopeChangedError(error)) {
 						scopeChanged = true
 						break
 					}
 					consecutiveRequestFailures++
 					if (consecutiveRequestFailures >= 3) {
 						userStopped = true
-						vscode.window.showErrorMessage(`AI 请求连续失败 ${consecutiveRequestFailures} 次，已停止文件夹任务：${message}`)
+						vscode.window.showErrorMessage(localize(
+							`AI 请求连续失败 ${consecutiveRequestFailures} 次，已停止文件夹任务：${message}`,
+							`The AI request failed ${consecutiveRequestFailures} times in a row, so the folder task stopped: ${message}`,
+						))
 						break
 					}
-					logger.error(`[AI Batch Optimize] Failed for ${pathRel}: ${message}`)
+					logger.error(localize(`[AI 批量优化] 处理失败 ${pathRel}：${message}`, `[AI Batch Optimize] Failed for ${pathRel}: ${message}`))
 				} finally {
 					port.taskRegistry.finishFile(taskKey)
 				}
@@ -370,16 +440,28 @@ export async function runOptimizeBookmarksForFolder(
 
 			const optimizedSummary = summarizeBookmarks(optimizedBookmarks)
 			if ((token.isCancellationRequested || userStopped) && !scopeChanged) {
-				vscode.window.showInformationMessage(`AI 文件夹任务已停止；此前 ${changedPaths.length} 个文件的结果已进入保存队列，更新结果：${formatBookmarkLevelSummary(optimizedSummary)}。`)
+				vscode.window.showInformationMessage(localize(
+					`AI 文件夹任务已停止；此前 ${changedPaths.length} 个文件的结果已进入保存队列，更新结果：${formatBookmarkLevelSummary(optimizedSummary)}。`,
+					`The AI folder task stopped. Results for ${changedPaths.length} files were already queued for saving. Updated: ${formatBookmarkLevelSummary(optimizedSummary)}.`,
+				))
 			} else if (changedPaths.length > 0 && !scopeChanged && port.currentStorageScope() === taskScope) {
 				port.refreshDecoration()
-				const failMsg = failedFilesCount > 0 ? `（有 ${failedFilesCount} 个文件处理失败）` : ''
-				vscode.window.showInformationMessage(`文件夹 AI 优化完成，已处理 ${changedPaths.length} 个文件；更新结果：${formatBookmarkLevelSummary(optimizedSummary)}。${failMsg}`)
+				const failMsg = failedFilesCount > 0 ? localize(`（有 ${failedFilesCount} 个文件处理失败）`, ` (${failedFilesCount} files failed)`) : ''
+				vscode.window.showInformationMessage(localize(
+					`文件夹 AI 优化完成，已处理 ${changedPaths.length} 个文件；更新结果：${formatBookmarkLevelSummary(optimizedSummary)}。${failMsg}`,
+					`Folder AI improvement completed for ${changedPaths.length} files. Updated: ${formatBookmarkLevelSummary(optimizedSummary)}.${failMsg}`,
+				))
 			} else if (changedPaths.length === 0 && !token.isCancellationRequested && !scopeChanged) {
-				const failMsg = failedFilesCount > 0 ? `（其中 ${failedFilesCount} 个文件处理失败）` : ''
-				vscode.window.showInformationMessage(`AI 处理完毕，没有更新任何书签；${formatBookmarkLevelSummary(optimizedSummary)}。${failMsg}`)
+				const failMsg = failedFilesCount > 0 ? localize(`（其中 ${failedFilesCount} 个文件处理失败）`, ` (${failedFilesCount} files failed)`) : ''
+				vscode.window.showInformationMessage(localize(
+					`AI 处理完毕，没有更新任何书签；${formatBookmarkLevelSummary(optimizedSummary)}。${failMsg}`,
+					`AI processing completed without updating any bookmarks. ${formatBookmarkLevelSummary(optimizedSummary)}.${failMsg}`,
+				))
 			}
-			if (scopeChanged) vscode.window.showInformationMessage(`书签作用域已切换，AI 文件夹任务已停止；此前处理结果：${formatBookmarkLevelSummary(optimizedSummary)}。`)
+			if (scopeChanged) vscode.window.showInformationMessage(localize(
+				`书签作用域已切换，AI 文件夹任务已停止；此前处理结果：${formatBookmarkLevelSummary(optimizedSummary)}。`,
+				`The bookmark scope changed, so the AI folder task stopped. Results processed before the change: ${formatBookmarkLevelSummary(optimizedSummary)}.`,
+			))
 			if (statusDisposable) statusDisposable.dispose()
 		})
 	} finally {

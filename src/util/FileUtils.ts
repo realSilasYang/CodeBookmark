@@ -16,6 +16,7 @@ import {
 } from './FingerprintMatcher'
 import { storageRootState } from './StorageRootState'
 import { canonicalBookmarkPath } from './BookmarkPath'
+import { localize } from '../i18n/Localization'
 
 const MAX_BOOKMARK_FILE_BYTES = 32 * 1024 * 1024
 
@@ -154,12 +155,15 @@ class FileUtils {
 	async readJsonFileAsync(filePath: string): Promise<unknown> {
 		try {
 			const stat = await fs.promises.stat(filePath)
-			if (stat.size > MAX_BOOKMARK_FILE_BYTES) throw new Error(`Bookmark file exceeds ${MAX_BOOKMARK_FILE_BYTES} bytes`)
+			if (stat.size > MAX_BOOKMARK_FILE_BYTES) throw new Error(localize(
+				`书签文件超过 ${MAX_BOOKMARK_FILE_BYTES} 字节`,
+				`Bookmark file exceeds ${MAX_BOOKMARK_FILE_BYTES} bytes`,
+			))
 			const data = await fs.promises.readFile(filePath, 'utf8')
 			fileChangeFingerprints.rememberContent(filePath, data)
 			return JSON.parse(data)
 		} catch (error) {
-			logger.error(`Cannot read JSON file: ${filePath}`)
+			logger.error(localize(`无法读取 JSON 文件：${filePath}`, `Cannot read JSON file: ${filePath}`))
 			logger.error(error)
 			return null
 		}
@@ -170,25 +174,25 @@ class FileUtils {
 		let contentHash: string | undefined
 		try {
 			const jsonData = JSON.stringify(data, null, 2)
-			if (jsonData === undefined) throw new Error('JSON value is not serializable')
+			if (jsonData === undefined) throw new Error(localize('JSON 值无法序列化', 'JSON value is not serializable'))
 			await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
 			const preparation = await fileChangeFingerprints.prepareWrite(filePath, jsonData)
 			if (!preparation) {
-				logger.error(`Bookmark file changed externally before write: ${filePath}`)
+				logger.error(localize(`书签文件在写入前被外部修改：${filePath}`, `Bookmark file changed externally before write: ${filePath}`))
 				return false
 			}
 			contentHash = preparation.contentHash
 			// Atomic write (see writeJsonFile): temp file in the same directory + atomic rename.
 			await fs.promises.writeFile(tmpPath, jsonData, 'utf8')
 			if (!await fileChangeFingerprints.isCurrentHash(filePath, preparation.expectedDiskHash)) {
-				throw new Error(`Bookmark file changed externally during write: ${filePath}`)
+				throw new Error(localize(`书签文件在写入期间被外部修改：${filePath}`, `Bookmark file changed externally during write: ${filePath}`))
 			}
 			await fs.promises.rename(tmpPath, filePath)
 			fileChangeFingerprints.markWriteComplete(filePath, contentHash)
 			return true
 		} catch (error) {
 			if (contentHash) fileChangeFingerprints.markWriteFailed(filePath, contentHash)
-			logger.error(`Cannot write JSON file: ${filePath}`)
+			logger.error(localize(`无法写入 JSON 文件：${filePath}`, `Cannot write JSON file: ${filePath}`))
 			logger.error(error)
 			// Best-effort cleanup of a leftover temp file on failure.
 			try { await fs.promises.unlink(tmpPath) } catch { /* ignore */ }
@@ -411,7 +415,7 @@ class FileUtils {
 					await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
 				}
 			} catch (error) {
-				logger.error('Cannot update bookmark content from file')
+				logger.error(localize('无法根据文件更新书签内容', 'Cannot update bookmark content from file'))
 				logger.error(error)
 			}
 		}

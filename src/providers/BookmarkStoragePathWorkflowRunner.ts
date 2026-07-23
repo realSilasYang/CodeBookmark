@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import type { Bookmark } from '../models/Bookmark'
 import { formatBookmarkLevelSummary, summarizeBookmarkTrees } from '../util/BookmarkStatistics'
+import { localize } from '../i18n/Localization'
 
 interface StorageRootTransferResult {
 	copiedFiles: number
@@ -70,9 +71,11 @@ export class BookmarkStoragePathWorkflowRunner {
 
 			await port.reloadActiveTab(true)
 			const summary = summarizeBookmarkTrees(port.bookmarks())
-			void vscode.window.showInformationMessage(
-				`书签存储目录转移完成：复制 ${result.copiedFiles} 个文件，合并 ${result.mergedFiles} 个文件${result.conflictFiles > 0 ? `，保留 ${result.conflictFiles} 个冲突副本` : ''}；当前结果：${formatBookmarkLevelSummary(summary)}。原目录中的书签配置已删除。`,
-			)
+			const formattedSummary = formatBookmarkLevelSummary(summary)
+			void vscode.window.showInformationMessage(localize(
+				`书签存储目录转移完成：复制 ${result.copiedFiles} 个文件，合并 ${result.mergedFiles} 个文件${result.conflictFiles > 0 ? `，保留 ${result.conflictFiles} 个冲突副本` : ''}；当前结果：${formattedSummary}。原目录中的书签配置已删除。`,
+				`Bookmark storage transfer completed: copied ${result.copiedFiles} files, merged ${result.mergedFiles} files${result.conflictFiles > 0 ? `, and retained ${result.conflictFiles} conflict copies` : ''}. Current result: ${formattedSummary}. Bookmark configuration was removed from the original directory.`,
+			))
 		} catch (error) {
 			port.activateRoot(transferCompleted ? targetRoot : sourceRoot)
 			port.cancelStorageTransition()
@@ -80,8 +83,14 @@ export class BookmarkStoragePathWorkflowRunner {
 			await port.flushPendingSaves()
 			await port.setupConfigWatcher()
 			const message = transferCompleted
-				? `书签存储目录已转移且原目录已清理，但完成切换时发生错误，已继续使用新目录：${errorMessage(error)}`
-				: `书签存储目录转移失败，仍继续使用来源目录：${errorMessage(error)}`
+				? localize(
+					`书签存储目录已转移且原目录已清理，但完成切换时发生错误，已继续使用新目录：${errorMessage(error)}`,
+					`Bookmark storage was transferred and the original directory was cleaned, but finalizing the switch failed. The new directory remains active: ${errorMessage(error)}`,
+				)
+				: localize(
+					`书签存储目录转移失败，仍继续使用来源目录：${errorMessage(error)}`,
+					`Bookmark storage transfer failed. The original directory remains active: ${errorMessage(error)}`,
+				)
 			void vscode.window.showErrorMessage(message)
 		}
 	}

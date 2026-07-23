@@ -57,7 +57,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=high
+      - run: npm audit --audit-level=low
 
   package:
     name: Validate VSIX package

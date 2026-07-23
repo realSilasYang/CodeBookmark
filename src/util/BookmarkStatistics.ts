@@ -1,3 +1,5 @@
+import { currentLanguage } from '../i18n/Localization'
+
 interface BookmarkStatisticsNode {
 	readonly isFile?: boolean
 	readonly parent?: BookmarkStatisticsNode
@@ -73,11 +75,18 @@ export function mergeBookmarkLevelSummaries(
 }
 
 function levelLabel(level: number): string {
+	if (currentLanguage() === 'en') return `Level ${level}`
 	const chineseNumbers = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 	return level <= chineseNumbers.length ? `${chineseNumbers[level - 1]}级` : `第 ${level} 级`
 }
 
 export function formatBookmarkLevelSummary(summary: BookmarkLevelSummary): string {
+	if (currentLanguage() === 'en') {
+		const bookmarkNoun = summary.total === 1 ? 'bookmark' : 'bookmarks'
+		if (summary.total === 0) return `0 ${bookmarkNoun} total`
+		const levels = summary.levelCounts.map((count, index) => `${levelLabel(index + 1)}: ${count}`)
+		return `${summary.total} ${bookmarkNoun} total: ${levels.join(', ')}`
+	}
 	if (summary.total === 0) return '共 0 个书签'
 	const levels = summary.levelCounts.map((count, index) => `${levelLabel(index + 1)} ${count} 个`)
 	return `共 ${summary.total} 个书签：${levels.join('、')}`

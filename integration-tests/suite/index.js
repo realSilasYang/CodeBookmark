@@ -2,10 +2,18 @@ const assert = require('node:assert/strict')
 const vscode = require('vscode')
 
 async function run() {
+  const expectedLocale = process.env.CODEBOOKMARK_TEST_LOCALE
+  assert.ok(expectedLocale === 'zh-cn' || expectedLocale === 'en', 'Integration-test locale must be explicit')
+  assert.equal(
+    vscode.env.language.toLocaleLowerCase(),
+    expectedLocale,
+    `Unexpected VS Code language; VSCODE_NLS_CONFIG=${process.env.VSCODE_NLS_CONFIG ?? '<unset>'}`,
+  )
   const extension = vscode.extensions.all.find(candidate => candidate.packageJSON?.name === 'codebookmark')
   assert.ok(extension, 'CodeBookmark extension is not installed in the test host')
-  await extension.activate()
+  const extensionApi = await extension.activate()
   assert.equal(extension.isActive, true)
+  assert.deepEqual(extensionApi, { language: expectedLocale })
 
   const commands = new Set(await vscode.commands.getCommands(true))
   for (const command of [
@@ -18,8 +26,8 @@ async function run() {
   }
 
   const configuration = vscode.workspace.getConfiguration('codebookmark')
-  assert.equal(configuration.has('AI.endpoint'), true)
-  assert.equal(configuration.has('AI.apiKey'), true)
+  assert.equal(configuration.has('AI.address'), true)
+  assert.equal(configuration.has('AI.APIKey'), true)
   assert.equal(configuration.has('AI.model'), true)
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]

@@ -170,11 +170,18 @@ async function main() {
     assert.equal(metadataOnlyEntries.length, 1)
     assert.equal(metadataOnlyEntries[0].kind, 'transferJournal')
 
-    const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+    const { loadLocalizedManifest } = require('./localized-manifest')
+    const manifest = loadLocalizedManifest('zh-cn')
+    const englishManifest = loadLocalizedManifest('en')
     const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]))
+    const englishCommands = new Map(englishManifest.contributes.commands.map(command => [command.command, command]))
     assert.equal(
       commands.get('codebookmark.manageBookmarkConfigurations')?.title,
       '$(files) 书签配置文件管理',
+    )
+    assert.equal(
+      englishCommands.get('codebookmark.manageBookmarkConfigurations')?.title,
+      '$(files) Manage Bookmark Configurations',
     )
     const moreMenu = manifest.contributes.menus['codebookmark.moreSubmenu']
     const identities = moreMenu.map(item => item.command ?? item.submenu)
@@ -198,10 +205,12 @@ async function main() {
     assert.doesNotMatch(panelSource, /管理书签配置文件/)
     assert.match(panelSource, /openStorageRoot/)
     assert.match(panelSource, /revealStorageRoot/)
-    assert.match(panelSource, /当前显示 ['"]? \+ displayedEntries\.length \+ ' 条记录，共 /)
-    assert.match(panelSource, /共 ['"]? \+ formatNumber\(entry\.bookmarkSummary\.total\) \+ ' 个书签/)
-    assert.match(panelSource, /自动书签 ['"]? \+ formatNumber\(entry\.automaticBookmarkCount\) \+ ' 个/)
-    assert.match(panelSource, /失效或异常 ['"]? \+ formatNumber\(entry\.invalidBookmarkCount\) \+ ' 个/)
+    assert.match(panelSource, /resultAll: localize\('当前显示 \{shown\} 条记录，共 \{total\} 条', 'Showing \{shown\} of \{total\} records'\)/)
+    assert.match(panelSource, /resultFiltered: localize\('当前显示 \{shown\} 条记录，符合条件 \{matched\} 条，共 \{total\} 条', 'Showing \{shown\} of \{matched\} matching records; \{total\} total'\)/)
+    assert.match(panelSource, /formatText\(text\.resultAll, \{ shown: formatNumber\(displayedEntries\.length\), total: formatNumber\(state\.entries\.length\) \}\)/)
+    assert.match(panelSource, /totalBookmarks: localize\('共 \{count\} 个书签', '\{count\} bookmarks'\)/)
+    assert.match(panelSource, /automaticBookmarks: localize\('自动书签 \{count\} 个', 'Automatic bookmarks: \{count\}'\)/)
+    assert.match(panelSource, /invalidBookmarks: localize\('失效或异常 \{count\} 个', 'Invalid or abnormal: \{count\}'\)/)
     assert.match(panelSource, /打开脚本/)
     assert.match(panelSource, /定位文件/)
     assert.match(panelSource, /删除配置/)
@@ -226,6 +235,10 @@ async function main() {
     assert.match(panelSource, /\.dropdown-option:hover, \.dropdown-option\.active/)
     assert.match(panelSource, /--vscode-list-activeSelectionBackground/)
     assert.match(panelSource, /function setupDropdown\(id\)/)
+    assert.match(panelSource, /toLocaleLowerCase\(locale\)/)
+    assert.match(panelSource, /localeCompare\([^\n]+, locale\)/)
+    assert.match(panelSource, /Intl\.DateTimeFormat\(locale/)
+    assert.match(panelSource, /Intl\.NumberFormat\(locale/)
     assert.match(panelSource, /event\.key === 'Escape'/)
     assert.match(panelSource, /max-width: 1680px/)
     assert.match(panelSource, /body \{ padding: 24px;/)

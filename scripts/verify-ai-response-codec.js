@@ -7,6 +7,7 @@ const {
   repairJsonStringEscapes,
   stripMarkdownCodeFence,
 } = require('../out/util/AIResponseCodec')
+const localization = require('../out/i18n/Localization')
 
 assert.equal(aiResponseContent('plain'), 'plain')
 assert.equal(aiResponseContent({ text: 'object' }), 'object')
@@ -20,7 +21,10 @@ assert.deepEqual(
   parseAIJsonReply(String.raw`{"value":"regex \d+"}`, '{'),
   { value: String.raw`regex \d+` },
 )
+localization.initializeLocalization('en')
 assert.throws(() => parseAIJsonReply('', '{'), /content is empty/)
+localization.initializeLocalization('zh-cn')
+assert.throws(() => parseAIJsonReply('', '{'), /AI 响应内容为空/)
 
 assert.equal(
   repairJsonStringEscapes(String.raw`{"value":"regex \d+ \w+"}`),

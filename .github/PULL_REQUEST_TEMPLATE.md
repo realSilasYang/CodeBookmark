@@ -1,12 +1,14 @@
 ## 修改内容
 
+[简体中文模板](./PULL_REQUEST_TEMPLATE.md) · [English template](./PULL_REQUEST_TEMPLATE.en.md)
+
 请说明本次修改解决的问题和行为变化。
 
 ## 验证
 
 - [ ] 已运行 `npm run verify`
 - [ ] 涉及 VS Code 生命周期时，已运行 `npm run test:integration`
-- [ ] 已运行 `npm audit --audit-level=high`
+- [ ] 已运行 `npm audit --audit-level=low`
 - [ ] 用户可见变化已更新 README 和 CHANGELOG
 - [ ] 未提交 API Key、书签数据、本机路径、构建产物或其他敏感信息
 

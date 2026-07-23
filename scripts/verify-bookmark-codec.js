@@ -6,6 +6,7 @@ const {
   MAX_BOOKMARK_NODES,
   parseBookmarkJSON,
 } = require('../out/models/BookmarkCodec')
+const localization = require('../out/i18n/Localization')
 
 const fixture = JSON.parse(fs.readFileSync(
   path.join(__dirname, 'fixtures', 'bookmark-tree-contract.json'),
@@ -20,6 +21,7 @@ assert.equal(parsed.endColumn, 8)
 assert.equal(parsed.subs[0].codeMarker.marker, 'TODO')
 assert.equal(parsed.subs[0].iconName, 'status_idea_yellow.svg')
 
+localization.initializeLocalization('en')
 assert.throws(() => parseBookmarkJSON(fixture, 65), /nesting exceeds/)
 assert.throws(
   () => parseBookmarkJSON(fixture, 0, { count: MAX_BOOKMARK_NODES - 1 }),
@@ -27,6 +29,9 @@ assert.throws(
 )
 assert.throws(() => parseBookmarkJSON({ ...fixture, collapsibleState: 3 }), /collapsible state/)
 assert.throws(() => parseBookmarkJSON({ ...fixture, params: '1,0,0,0' }), /position range/)
+
+localization.initializeLocalization('zh-cn')
+assert.throws(() => parseBookmarkJSON(fixture, 65), /书签嵌套超过 64 层/)
 
 const sanitizedIcon = parseBookmarkJSON({ ...fixture, iconName: '../unsafe.svg' })
 assert.equal(sanitizedIcon.iconName, '')

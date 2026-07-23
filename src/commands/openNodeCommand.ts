@@ -4,13 +4,17 @@ import { Commands } from '../util/constants/Commands'
 import { Bookmark } from '../models/Bookmark'
 import { fileUtils } from '../util/FileUtils'
 import { logger } from '../util/Logger'
+import { localize } from '../i18n/Localization'
 
 
 export function openNodeCommand(context: vscode.ExtensionContext) {
 	const openBookmark = vscode.commands.registerCommand(Commands.openBookmark,
 		async (bookmark: Bookmark) => {
 			if (!bookmark || typeof bookmark.path !== 'string' || bookmark.path.trim() === '') {
-				void vscode.window.showErrorMessage('书签路径无效，无法打开。')
+				void vscode.window.showErrorMessage(localize(
+					'书签路径无效，无法打开。',
+					'The bookmark path is invalid and cannot be opened.',
+				))
 				return
 			}
 			try {
@@ -46,8 +50,14 @@ export function openNodeCommand(context: vscode.ExtensionContext) {
 				editor.selection = new vscode.Selection(range.start, range.end)
 				editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport)
 			} catch (error) {
-				logger.error(`无法打开书签 ${bookmark.path}: ${error}`)
-				void vscode.window.showErrorMessage(`无法打开书签对应文件：${bookmark.path}`)
+				logger.error(localize(
+					`无法打开书签 ${bookmark.path}: ${error}`,
+					`Failed to open bookmark ${bookmark.path}: ${error}`,
+				))
+				void vscode.window.showErrorMessage(localize(
+					`无法打开书签对应文件：${bookmark.path}`,
+					`Unable to open the file for this bookmark: ${bookmark.path}`,
+				))
 			}
 		})
 

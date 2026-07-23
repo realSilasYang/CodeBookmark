@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import { localize } from '../i18n/Localization'
 import type { Bookmark } from '../models/Bookmark'
 import { planPendingSaves } from './PendingSavePlan'
 import { PendingSaveStore } from './PendingSaveStore'
@@ -102,7 +103,10 @@ export class BookmarkSaveCoordinator {
 		if (!allowRetry && failedKeys.size > 0) this.terminalSaveFailure = true
 		if (retryResult.exhausted) {
 			this.terminalSaveFailure = true
-			void vscode.window.showErrorMessage('书签保存连续失败，已停止自动重试；请检查存储路径权限，内存中的书签仍可继续操作。')
+			void vscode.window.showErrorMessage(localize(
+				'书签保存连续失败，已停止自动重试；请检查存储路径权限，内存中的书签仍可继续操作。',
+				'Bookmark saving failed repeatedly, so automatic retries stopped. Check storage-folder permissions; bookmarks in memory remain available.',
+			))
 		}
 	}
 
@@ -183,7 +187,10 @@ export class BookmarkSaveCoordinator {
 			this.cancelSaveTimer()
 		}
 		if (requireSuccess && this.terminalSaveFailure) {
-			throw new Error('无法在转移存储目录前完整保存当前书签')
+			throw new Error(localize(
+				'无法在转移存储目录前完整保存当前书签',
+				'Unable to save all current bookmarks before transferring the storage folder.',
+			))
 		}
 	}
 

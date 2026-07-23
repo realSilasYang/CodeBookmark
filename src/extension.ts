@@ -10,8 +10,20 @@ import { registerExportCommand } from './commands/exportCommand'
 import { Commands } from './util/constants/Commands'
 import { logger } from './util/Logger'
 import { undoManager } from './providers/UndoManager'
+import { SyncedGlobalStateKeys } from './util/constants/ExtensionStateKeys'
+import {
+	currentLanguage,
+	initializeLocalization,
+	localize,
+	type SupportedLanguage,
+} from './i18n/Localization'
+import { initializeBookmarkIconRoot } from './util/BookmarkIcon'
 
 let activeProvider: CodeBookmarksViewProvider | undefined
+
+interface CodeBookmarkExtensionApi {
+	readonly language: SupportedLanguage
+}
 
 function hasActiveTextFile(): boolean {
 	if (vscode.window.activeTextEditor?.document.uri.scheme === 'file') return true
@@ -27,10 +39,13 @@ function hasWorkspaceFolder(): boolean {
 	return (vscode.workspace.workspaceFolders?.length ?? 0) > 0
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): CodeBookmarkExtensionApi {
 	// Register the provider and all commands synchronously before starting any I/O.
 	// VS Code may request the contributed view immediately; awaiting even a setContext
 	// command here can leave the view with no registered data provider.
+	initializeLocalization(vscode.env.language)
+	initializeBookmarkIconRoot(context.extensionUri)
+	context.globalState.setKeysForSync(SyncedGlobalStateKeys)
 	undoManager.initialize(context)
 	const codeBookmarkProvider = new CodeBookmarksViewProvider(context)
 	activeProvider = codeBookmarkProvider
@@ -57,11 +72,15 @@ export function activate(context: vscode.ExtensionContext): void {
 			hasActiveTextFile() || hasWorkspaceFolder(),
 		),
 		vscode.commands.executeCommand('setContext', Commands.varIsExpanded, false),
-	]).catch(error => logger.error(`初始化书签视图上下文失败: ${error}`))
+	]).catch(error => logger.error(localize(
+		`初始化书签视图上下文失败: ${error}`,
+		`Failed to initialize the bookmark view context: ${error}`,
+	)))
 
 	// Activation must complete immediately. The provider owns loading state and error
 	// recovery, so slow disks or a large workspace cannot trigger VS Code's 10s timeout.
 	codeBookmarkProvider.init(viewCodeBookmark)
+	return Object.freeze({ language: currentLanguage() })
 }
 
 export async function deactivate() {

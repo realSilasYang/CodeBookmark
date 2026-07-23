@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { normalizeBookmarkIconName } from '../BookmarkIconName';
 import { logger } from '../Logger';
+import { ExtensionStateKeys } from '../constants/ExtensionStateKeys';
+import { currentFormattingLocale, currentLanguage, localize } from '../../i18n/Localization';
 
 interface IconDictionaryEntry {
     id: string;
@@ -31,7 +33,7 @@ export function shouldShowRestoreDefaultIcon(currentIcon: string | undefined, de
 }
 
 function recentIconIds(context: vscode.ExtensionContext): string[] {
-    const value = context.globalState.get<unknown>('codebookmark.recentIcons');
+    const value = context.globalState.get<unknown>(ExtensionStateKeys.recentIcons);
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
@@ -71,7 +73,7 @@ export class IconPickerWebview {
 
         const panel = vscode.window.createWebviewPanel(
             'iconPicker',
-            '🎨 选择书签图标',
+            localize('🎨 选择书签图标', '🎨 Choose a Bookmark Icon'),
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -104,7 +106,7 @@ export class IconPickerWebview {
         this._panel.webview.onDidReceiveMessage(
             (message: unknown) => {
                 void this._handleMessage(message).catch(error => {
-                    logger.error(`处理图标选择消息失败: ${error}`);
+                    logger.error(localize(`处理图标选择消息失败：${error}`, `Failed to handle an icon picker message: ${error}`));
                 });
             },
             null,
@@ -144,13 +146,13 @@ export class IconPickerWebview {
         let recent = recentIconIds(this._context);
         recent = recent.filter(id => id !== iconId && IconPickerWebview._cachedIconMap.has(id));
         recent.unshift(iconId);
-        await this._context.globalState.update('codebookmark.recentIcons', recent.slice(0, 100));
+        await this._context.globalState.update(ExtensionStateKeys.recentIcons, recent.slice(0, 100));
     }
 
     private async _removeRecentIcon(iconId: string): Promise<void> {
         let recent = recentIconIds(this._context);
         recent = recent.filter(id => id !== iconId);
-        await this._context.globalState.update('codebookmark.recentIcons', recent);
+        await this._context.globalState.update(ExtensionStateKeys.recentIcons, recent);
     }
 
     public dispose() {
@@ -172,14 +174,14 @@ export class IconPickerWebview {
     private _update(): void {
         const generation = ++this._renderGeneration;
         if (!IconPickerWebview._cachedIconDict) {
-            this._panel.webview.html = '<!DOCTYPE html><html><body>正在加载图标…</body></html>';
+            this._panel.webview.html = `<!DOCTYPE html><html lang="${currentLanguage()}"><body>${localize('正在加载图标…', 'Loading icons…')}</body></html>`;
         }
         void this._getHtmlForWebview().then(html => {
             if (!this._disposed && generation === this._renderGeneration) this._panel.webview.html = html;
         }).catch(error => {
-            logger.error(`加载图标选择器失败: ${error}`);
+            logger.error(localize(`加载图标选择器失败：${error}`, `Failed to load the icon picker: ${error}`));
             if (!this._disposed && generation === this._renderGeneration) {
-                this._panel.webview.html = '<!DOCTYPE html><html><body>无法加载图标资源。</body></html>';
+                this._panel.webview.html = `<!DOCTYPE html><html lang="${currentLanguage()}"><body>${localize('无法加载图标资源。', 'Unable to load icon resources.')}</body></html>`;
             }
         });
     }
@@ -219,6 +221,32 @@ export class IconPickerWebview {
         const fuseUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'resources', 'fuse.min.js'));
         const nonce = crypto.randomBytes(16).toString('base64');
         const iconDictionary = await IconPickerWebview.loadIconDictionary(this._context);
+        const locale = currentFormattingLocale();
+        const htmlLanguage = currentLanguage();
+        const text = {
+            addRecent: localize('添加到最近使用', 'Add to recently used'),
+            brandName: localize('代码书签', 'CodeBookmark'),
+            categoryArchitecture: localize('核心架构', 'Architecture'),
+            categoryBrand: localize('品牌徽标', 'Brand Logos'),
+            categoryFun: localize('趣味标签', 'Fun Tags'),
+            categoryStatus: localize('代码状态', 'Code Status'),
+            categoryUi: localize('界面资源', 'UI Resources'),
+            emptyRecent: localize('暂无最近使用记录', 'No recently used icons'),
+            noMatches: localize('未找到匹配的图标', 'No matching icons found'),
+            recent: localize('最近使用', 'Recently Used'),
+            remove: localize('移除', 'Remove'),
+            restoreDefault: localize('恢复默认', 'Restore Default'),
+            searchPlaceholder: localize(
+                `在 ${iconDictionary.length.toLocaleString(locale)} 个代码书签图标中搜索（支持中英双语检索）`,
+                `Search ${iconDictionary.length.toLocaleString(locale)} bookmark icons in English or Chinese`,
+            ),
+            selectIcon: localize('选择书签图标', 'Choose a Bookmark Icon'),
+            searchableKeywords: localize('可以搜索这些关键词：{keywords}', 'Searchable keywords: {keywords}'),
+        };
+        const textJson = JSON.stringify(text)
+            .replace(/</g, '\\u003c')
+            .replace(/>/g, '\\u003e')
+            .replace(/&/g, '\\u0026');
 
         const recentIds = recentIconIds(this._context);
         const baseUriStr = baseUri.toString();
@@ -228,11 +256,11 @@ export class IconPickerWebview {
         const groups: Record<string, IconDictionaryEntry[]> = { status: [], arch: [], ui: [], fun: [], brand: [] };
         for (const icon of iconDictionary) groups[icon.id.split('_', 1)[0]]?.push(icon);
         const titleMap: Record<string, string> = {
-            status: iconSvg('M22 12h-4l-3 9L9 3l-3 9H2') + ' 代码状态',
-            arch: iconSvg('M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 12H2M12 2v20') + ' 核心架构',
-            ui: iconSvg('M3 3h18v18H3zM3 9h18') + ' 界面资源',
-            fun: iconSvg('M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z') + ' 趣味标签',
-            brand: iconSvg('M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01') + ' 品牌徽标',
+            status: iconSvg('M22 12h-4l-3 9L9 3l-3 9H2') + ` ${text.categoryStatus}`,
+            arch: iconSvg('M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 12H2M12 2v20') + ` ${text.categoryArchitecture}`,
+            ui: iconSvg('M3 3h18v18H3zM3 9h18') + ` ${text.categoryUi}`,
+            fun: iconSvg('M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z') + ` ${text.categoryFun}`,
+            brand: iconSvg('M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01') + ` ${text.categoryBrand}`,
         };
         const categoryKeys = ['status', 'arch', 'ui', 'fun', 'brand'].filter(key => groups[key].length > 0);
         const categoryTabsHtml = categoryKeys.map((key, index) =>
@@ -256,7 +284,7 @@ export class IconPickerWebview {
                             <span>↩</span>
                         </div>
                     </div>
-                    <span class="icon-name">恢复默认</span>
+                    <span class="icon-name">${text.restoreDefault}</span>
                 </div>
             `;
         }
@@ -265,13 +293,13 @@ export class IconPickerWebview {
             .map(id => IconPickerWebview._cachedIconMap.get(id))
             .filter((icon): icon is IconDictionaryEntry => icon !== undefined);
         if (recentIcons.length === 0 && !showRestoreDefault) {
-            recentInnerGrid = `<div class="empty-recent">暂无最近使用记录</div>`;
+            recentInnerGrid = `<div class="empty-recent">${text.emptyRecent}</div>`;
         } else {
             const baseUriStr = baseUri.toString();
             recentInnerGrid += recentIcons.map(icon => `
                 <div class="icon-item-container" data-id="${icon.id}">
                     <div class="icon-card" id="card-recent-${icon.id}">
-                        <div class="remove-btn" data-action="remove-recent" data-icon-id="${icon.id}" title="移除">❌</div>
+                        <div class="remove-btn" data-action="remove-recent" data-icon-id="${icon.id}" title="${text.remove}" aria-label="${text.remove}">❌</div>
                         <div class="icon-content" data-icon-id="${icon.id}" data-keywords="${(icon.keywords || []).join(', ')}">
                             <img class="icon-img" src="${baseUriStr}/${icon.id}" alt="${icon.name}" loading="lazy">
                         </div>
@@ -281,7 +309,7 @@ export class IconPickerWebview {
             `).join('');
         }
 
-        const recentTabHtml = `<div class="tab active" data-target="panel-recent">${iconSvg('M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2')} 最近使用</div>`;
+        const recentTabHtml = `<div class="tab active" data-target="panel-recent">${iconSvg('M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2')} ${text.recent}</div>`;
         const recentPanelHtml = `
             <div class="category-section" id="panel-recent">
                 <div class="grid">
@@ -306,12 +334,12 @@ export class IconPickerWebview {
             .replace(/&/g, '\\u0026')
 
         return `<!DOCTYPE html>
-            <html lang="en">
+            <html lang="${htmlLanguage}">
             <head>
                 <meta charset="UTF-8">
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${this._panel.webview.cspSource} data:; style-src ${this._panel.webview.cspSource} 'nonce-${nonce}'; script-src ${this._panel.webview.cspSource} 'nonce-${nonce}';">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>选择书签图标</title>
+                <title>${text.selectIcon}</title>
                 <style nonce="${nonce}">
                     html, body {
                         overflow: hidden;
@@ -594,10 +622,10 @@ export class IconPickerWebview {
                         <svg class="brand-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                         </svg>
-                        <span class="brand-name">代码书签</span>
+                        <span class="brand-name">${text.brandName}</span>
                     </div>
                     <div class="search-container">
-                        <input type="text" id="search" disabled placeholder="在 ${iconDictionary.length} 个代码书签图标中搜索（支持中英双语检索）">
+                        <input type="text" id="search" disabled placeholder="${text.searchPlaceholder}" aria-label="${text.searchPlaceholder}">
                     </div>
                 </div>
                 
@@ -611,7 +639,7 @@ export class IconPickerWebview {
                         <div id="search-results-panel" class="category-section">
                             <div class="grid" id="search-results-grid"></div>
                         </div>
-                        <div id="empty-state" class="empty-recent">未找到匹配的图标</div>
+                        <div id="empty-state" class="empty-recent">${text.noMatches}</div>
                     </div>
                 </div>
                 
@@ -620,6 +648,7 @@ export class IconPickerWebview {
                 <script nonce="${nonce}">
                     const vscode = acquireVsCodeApi();
                     const iconData = ${iconDataJson};
+                    const text = ${textJson};
                     
                     let fuse;
                     let tabs = document.querySelectorAll('.tab');
@@ -659,7 +688,7 @@ export class IconPickerWebview {
                                 const cardHtml = \`
                                     <div class="icon-item-container" data-id="\${iconId}">
                                         <div class="icon-card" id="card-recent-\${iconId}">
-                                            <div class="remove-btn" data-action="remove-recent" data-icon-id="\${iconId}" title="移除">❌</div>
+                                            <div class="remove-btn" data-action="remove-recent" data-icon-id="\${iconId}" title="\${text.remove}" aria-label="\${text.remove}">❌</div>
                                             <div class="icon-content" data-icon-id="\${iconId}">
                                                 <img class="icon-img" src="${baseUriStr}/\${iconId}" loading="lazy">
                                             </div>
@@ -693,7 +722,7 @@ export class IconPickerWebview {
                         return \`
                             <div class="icon-item-container" data-id="\${icon.id}">
                                 <div class="icon-card" id="card-\${icon.id}">
-                                    <div class="add-recent-btn" data-action="add-recent" data-icon-id="\${icon.id}" title="添加到最近使用">📌</div>
+                                     <div class="add-recent-btn" data-action="add-recent" data-icon-id="\${icon.id}" title="\${text.addRecent}" aria-label="\${text.addRecent}">📌</div>
                                     <div class="icon-content" data-icon-id="\${icon.id}" data-keywords="\${(icon.keywords || []).join(', ')}">
                                         <img class="icon-img" src="\${baseUriStr}/\${icon.id}" alt="\${icon.name}" loading="lazy">
                                     </div>
@@ -773,7 +802,7 @@ export class IconPickerWebview {
                             return \`
                                 <div class="icon-item-container" data-id="\${icon.id}">
                                     <div class="icon-card">
-                                        <div class="add-recent-btn" data-action="add-recent" data-icon-id="\${icon.id}" title="添加到最近使用">📌</div>
+                                         <div class="add-recent-btn" data-action="add-recent" data-icon-id="\${icon.id}" title="\${text.addRecent}" aria-label="\${text.addRecent}">📌</div>
                                         <div class="icon-content" data-icon-id="\${icon.id}" data-keywords="\${(icon.keywords || []).join(', ')}">
                                             <img class="icon-img" src="${baseUriStr}/\${icon.id}" alt="\${icon.name}" loading="lazy">
                                         </div>
@@ -822,7 +851,13 @@ export class IconPickerWebview {
 
                         const rect = card.getBoundingClientRect();
                         
-                        tooltip.innerHTML = \`<span class="tooltip-title">代码书签</span><span>可以搜这些关键词: \${keywords}</span>\`;
+                        tooltip.replaceChildren();
+                        const tooltipTitle = document.createElement('span');
+                        tooltipTitle.className = 'tooltip-title';
+                        tooltipTitle.textContent = text.brandName;
+                        const tooltipKeywords = document.createElement('span');
+                        tooltipKeywords.textContent = text.searchableKeywords.replace('{keywords}', keywords);
+                        tooltip.append(tooltipTitle, tooltipKeywords);
                         tooltip.style.display = 'block';
                         
                         requestAnimationFrame(() => {

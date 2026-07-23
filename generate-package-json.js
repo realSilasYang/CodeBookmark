@@ -4,6 +4,7 @@ const path = require('path');
 const Commands_1 = require("./out/util/constants/Commands");
 const Colors_1 = require("./out/util/constants/Colors");
 const basePackageJsonFile = require("./out/util/constants/BasePackage");
+const { translateManifestText } = require('./scripts/manifest-localizations');
 
 const customPackageJsonPath = path.join(__dirname, 'package.json');
 
@@ -13,7 +14,7 @@ const colors = Colors_1.Colors
 const basePackageJson = basePackageJsonFile.basePackage;
 const currentPackageJson = JSON.parse(fs.readFileSync(customPackageJsonPath, 'utf8'));
 
-const customPackageJson = {
+const sourcePackageJson = {
   ...basePackageJson,
   devDependencies: currentPackageJson.devDependencies ?? {},
   dependencies: currentPackageJson.dependencies ?? {},
@@ -93,13 +94,64 @@ const customPackageJson = {
   }
 };
 
+const englishMessages = {};
+const chineseMessages = {};
+const localizedKeys = new Set();
+
+function messageKey(pathSegments) {
+  return `codebookmark.${pathSegments.join('.').replace(/[^A-Za-z0-9_.-]/g, '_')}`;
+}
+
+function localizeManifestValue(value, pathSegments = []) {
+  if (typeof value === 'string') {
+    if (!/[\u3400-\u9fff]/u.test(value)) return value;
+    if (pathSegments[0] === 'author' || pathSegments[0] === 'keywords') return value;
+    const english = translateManifestText(value);
+    if (english === undefined) {
+      throw new Error(`Missing English manifest localization at ${pathSegments.join('.')}: ${value}`);
+    }
+    const key = messageKey(pathSegments);
+    if (localizedKeys.has(key)) throw new Error(`Duplicate manifest localization key: ${key}`);
+    localizedKeys.add(key);
+    englishMessages[key] = english;
+    chineseMessages[key] = value;
+    return `%${key}%`;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => localizeManifestValue(item, [...pathSegments, String(index)]));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value)
+      .map(([key, item]) => [key, localizeManifestValue(item, [...pathSegments, key])]));
+  }
+  return value;
+}
+
+const customPackageJson = localizeManifestValue(sourcePackageJson);
+
 const temporaryPackageJsonPath = `${customPackageJsonPath}.${process.pid}.tmp`;
+const localizationFiles = [
+  ['package.nls.json', englishMessages],
+  ['package.nls.zh.json', chineseMessages],
+  ['package.nls.zh-cn.json', chineseMessages],
+  ['package.nls.zh-tw.json', chineseMessages],
+];
+const temporaryLocalizationPaths = localizationFiles.map(([fileName]) =>
+  [path.join(__dirname, fileName), path.join(__dirname, `${fileName}.${process.pid}.tmp`)]
+);
 try {
   fs.writeFileSync(temporaryPackageJsonPath, JSON.stringify(customPackageJson, null, 2));
+  for (let index = 0; index < localizationFiles.length; index++) {
+    fs.writeFileSync(temporaryLocalizationPaths[index][1], JSON.stringify(localizationFiles[index][1], null, 2));
+  }
   fs.renameSync(temporaryPackageJsonPath, customPackageJsonPath);
+  for (const [target, temporary] of temporaryLocalizationPaths) fs.renameSync(temporary, target);
 } catch (error) {
   try { fs.unlinkSync(temporaryPackageJsonPath); } catch {}
+  for (const [, temporary] of temporaryLocalizationPaths) {
+    try { fs.unlinkSync(temporary); } catch {}
+  }
   throw error;
 }
 
-console.log(`Generated custom package.json `);
+console.log(`Generated custom package.json and ${localizedKeys.size} localized manifest messages`);

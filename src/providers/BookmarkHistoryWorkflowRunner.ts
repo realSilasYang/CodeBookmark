@@ -1,7 +1,8 @@
 import type { UndoApplyResult } from './UndoManager'
 import type { Bookmark } from '../models/Bookmark'
 import { formatBookmarkLevelSummary, summarizeBookmarkTrees } from '../util/BookmarkStatistics'
-import { UNDO_ACTION_LABELS } from '../util/UndoActions'
+import { UNDO_ACTION_LABELS, UNDO_ACTION_LABELS_EN } from '../util/UndoActions'
+import { currentLanguage, localize } from '../i18n/Localization'
 
 type BookmarkHistoryOperation = 'undo' | 'redo'
 
@@ -45,7 +46,9 @@ export async function runBookmarkHistoryOperation(
 	const previousPaths = port.bookmarkSourcePaths()
 	const result = port.applyHistory(operation)
 	if (!result) {
-		port.showUnavailableMessage(operation === 'undo' ? '没有可以撤销的操作。' : '没有可以恢复的操作。')
+		port.showUnavailableMessage(operation === 'undo'
+			? localize('没有可以撤销的操作。', 'There is nothing to undo.')
+			: localize('没有可以恢复的操作。', 'There is nothing to redo.'))
 		return
 	}
 
@@ -54,7 +57,16 @@ export async function runBookmarkHistoryOperation(
 	if (affectedPaths.size > 0) port.saveBookmarks([...affectedPaths])
 	else port.saveAllBookmarks()
 	port.refreshDecoration()
-	const prefix = operation === 'undo' ? '已撤销' : '已重做'
+	const prefix = operation === 'undo'
+		? localize('已撤销', 'Undone')
+		: localize('已重做', 'Redone')
 	const summary = summarizeBookmarkTrees(port.bookmarks())
-	port.showAppliedMessage(`${prefix}：${UNDO_ACTION_LABELS[result.action]}。当前结果：${formatBookmarkLevelSummary(summary)}。`)
+	const actionLabel = currentLanguage() === 'zh-cn'
+		? UNDO_ACTION_LABELS[result.action]
+		: UNDO_ACTION_LABELS_EN[result.action]
+	const formattedSummary = formatBookmarkLevelSummary(summary)
+	port.showAppliedMessage(localize(
+		`${prefix}：${actionLabel}。当前结果：${formattedSummary}。`,
+		`${prefix}: ${actionLabel}. Current result: ${formattedSummary}.`,
+	))
 }

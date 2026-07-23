@@ -1,5 +1,6 @@
 import fs = require('fs')
 import * as path from 'path'
+import { localize } from '../i18n/Localization'
 import { isAISourceFile } from './AIRequestPolicy'
 import { SOURCE_SCAN_EXCLUDED_DIRECTORIES } from './SourceFilePolicy'
 
@@ -24,12 +25,18 @@ export async function visitAISourceFilesInFolder(
 	let scriptFiles = 0
 
 	async function traverse(currentPath: string, depth: number): Promise<boolean> {
-		if (depth > limits.maxDepth) throw new Error(`目录层级超过 ${limits.maxDepth} 层，请缩小批量处理目录。`)
+		if (depth > limits.maxDepth) throw new Error(localize(
+			`目录层级超过 ${limits.maxDepth} 层，请缩小批量处理目录。`,
+			`The directory is deeper than ${limits.maxDepth} levels. Choose a smaller folder for batch processing.`,
+		))
 		const entries = await fs.promises.readdir(currentPath, { withFileTypes: true })
 		entries.sort((left, right) => left.name.localeCompare(right.name))
 		scannedEntries += entries.length
 		if (scannedEntries > limits.maxEntries) {
-			throw new Error(`扫描项超过 ${limits.maxEntries} 个，请缩小批量处理目录。`)
+			throw new Error(localize(
+				`扫描项超过 ${limits.maxEntries} 个，请缩小批量处理目录。`,
+				`The scan exceeded ${limits.maxEntries} entries. Choose a smaller folder for batch processing.`,
+			))
 		}
 		for (const entry of entries) {
 			const fullPath = path.join(currentPath, entry.name)
@@ -39,7 +46,10 @@ export async function visitAISourceFilesInFolder(
 			} else if (entry.isFile() && isAISourceFile(entry.name)) {
 				scriptFiles++
 				if (scriptFiles > limits.maxFiles) {
-					throw new Error(`脚本文件超过 ${limits.maxFiles} 个，请缩小批量处理目录。`)
+					throw new Error(localize(
+						`脚本文件超过 ${limits.maxFiles} 个，请缩小批量处理目录。`,
+						`The folder contains more than ${limits.maxFiles} script files. Choose a smaller folder for batch processing.`,
+					))
 				}
 				if (await visitor(fullPath)) return true
 			}

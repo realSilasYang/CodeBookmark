@@ -3,23 +3,29 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
-const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+const { loadLocalizedManifest } = require('./localized-manifest')
+const manifest = loadLocalizedManifest('zh-cn')
 const { Commands } = require(path.join(root, 'out', 'util', 'constants', 'Commands'))
 
 assert.equal('activationEvents' in manifest, false)
 assert.equal(fs.existsSync(path.join(root, '.vscodeignore')), false, 'manifest.files is the only package filter')
 assert.deepEqual(manifest.files, [
-  'out/**/*.js',
+  'out/extension.js',
   'resources',
+  'package.nls*.json',
   'README.md',
+  'README.en.md',
   'CHANGELOG.md',
+  'CHANGELOG.en.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'THIRD_PARTY_LICENSES',
 ])
 for (const releaseDocument of [
   'README.md',
+  'README.en.md',
   'CHANGELOG.md',
+  'CHANGELOG.en.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   path.join('THIRD_PARTY_LICENSES', 'Apache-2.0.txt'),

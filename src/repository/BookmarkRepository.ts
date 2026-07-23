@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
+import { localize, UserCancelledError } from '../i18n/Localization'
 import { fileUtils } from '../util/FileUtils'
 import { ContextBookmark } from '../util/ContextValue'
 import { logger } from '../util/Logger'
@@ -196,7 +197,7 @@ class CodeBookmarksRepository {
 
 	private scriptFolder(storageRoot: string): string {
 		const folder = fileUtils.getScriptStoreFolder(storageRoot)
-		if (!folder) throw new Error('无法确定全局脚本书签目录')
+		if (!folder) throw new Error(localize('无法确定全局脚本书签目录', 'Unable to determine the global script bookmark folder.'))
 		return folder
 	}
 
@@ -205,7 +206,7 @@ class CodeBookmarksRepository {
 		const metadata = scriptMetadata(data)
 		if (!metadata || !bookmarkItems(data)
 			|| path.basename(filePath).toLowerCase() !== `${metadata.id}.json`.toLowerCase()) {
-			throw new Error(`Unsupported bookmark configuration: ${filePath}`)
+			throw new Error(localize(`不支持的书签配置：${filePath}`, `Unsupported bookmark configuration: ${filePath}`))
 		}
 		return { data: data as BookmarkFileEnvelope, filePath }
 	}
@@ -240,7 +241,10 @@ class CodeBookmarksRepository {
 				if (metadata) this.indexEntry({ id: metadata.id, filePath, metadata })
 			} catch (error) {
 				if (isBookmarkReadCancelled(error)) throw error
-				logger.error(`已跳过损坏的全局脚本书签配置（${filePath}）: ${error}`)
+				logger.error(localize(
+					`已跳过损坏的全局脚本书签配置（${filePath}）: ${error}`,
+					`Skipped a damaged global script bookmark configuration (${filePath}): ${error}`,
+				))
 			}
 		}
 		this.scriptIndex.markReady()
@@ -278,14 +282,17 @@ class CodeBookmarksRepository {
 				if (metadata) this.indexEntry({ id, filePath, metadata })
 			} catch (error) {
 				if (isBookmarkReadCancelled(error)) throw error
-				logger.error(`外部脚本书签配置无效（${filePath}）: ${error}`)
+				logger.error(localize(
+					`外部脚本书签配置无效（${filePath}）: ${error}`,
+					`An external script bookmark configuration is invalid (${filePath}): ${error}`,
+				))
 			}
 		}
 	}
 
 	private updateIndex(filePath: string, data: BookmarkFileEnvelope): void {
 		const metadata = scriptMetadata(data)
-		if (!metadata) throw new Error(`无法索引脚本书签配置: ${filePath}`)
+		if (!metadata) throw new Error(localize(`无法索引脚本书签配置: ${filePath}`, `Unable to index the script bookmark configuration: ${filePath}`))
 		this.indexEntry({ id: metadata.id, filePath, metadata })
 	}
 
@@ -318,7 +325,10 @@ class CodeBookmarksRepository {
 			return true
 		}
 		if (!pathsMatchScript(items)) {
-			if (strict) throw new Error('配置内书签路径与脚本绝对路径不一致')
+			if (strict) throw new Error(localize(
+				'配置内书签路径与脚本绝对路径不一致',
+				'The bookmark paths in the configuration do not match the script absolute path.',
+			))
 			return undefined
 		}
 
@@ -336,7 +346,7 @@ class CodeBookmarksRepository {
 				bookmarks.push(Bookmark.fromJSON(item, 0, parseState))
 			} catch (error) {
 				if (strict) throw error
-				logger.error(`已跳过损坏的书签记录: ${error}`)
+				logger.error(localize(`已跳过损坏的书签记录: ${error}`, `Skipped a damaged bookmark record: ${error}`))
 				if (String(error).includes('nodes')) break
 			}
 		}
@@ -351,7 +361,10 @@ class CodeBookmarksRepository {
 	private absolutePathForFileNode(fileNode: Bookmark, scopeUri?: vscode.Uri): string {
 		if (path.isAbsolute(fileNode.path)) return normalizedAbsolutePath(fileNode.path)
 		const workspaceRoot = fileUtils.workspaceRoot(scopeUri)
-		if (!workspaceRoot) throw new Error(`无法将书签相对路径解析为绝对路径: ${fileNode.path}`)
+		if (!workspaceRoot) throw new Error(localize(
+			`无法将书签相对路径解析为绝对路径: ${fileNode.path}`,
+			`Unable to resolve the bookmark relative path to an absolute path: ${fileNode.path}`,
+		))
 		return normalizedAbsolutePath(path.resolve(workspaceRoot, fileNode.path))
 	}
 
@@ -380,7 +393,10 @@ class CodeBookmarksRepository {
 	}
 
 	private async writeEnvelope(filePath: string, data: BookmarkFileEnvelope): Promise<void> {
-		if (!await fileUtils.writeJsonFileAsync(filePath, data)) throw new Error(`无法写入书签配置: ${filePath}`)
+		if (!await fileUtils.writeJsonFileAsync(filePath, data)) throw new Error(localize(
+			`无法写入书签配置: ${filePath}`,
+			`Unable to write the bookmark configuration: ${filePath}`,
+		))
 		this.updateIndex(filePath, data)
 	}
 
@@ -681,7 +697,10 @@ class CodeBookmarksRepository {
 				matchesByTarget.set(key, matches)
 			} catch (error) {
 				if (isBookmarkReadCancelled(error)) throw error
-				logger.error(`工作区移动恢复候选检查失败（${entry.filePath}）: ${error}`)
+				logger.error(localize(
+					`工作区移动恢复候选检查失败（${entry.filePath}）: ${error}`,
+					`Failed to inspect a workspace move-recovery candidate (${entry.filePath}): ${error}`,
+				))
 			}
 		}
 
@@ -696,7 +715,7 @@ class CodeBookmarksRepository {
 			try {
 				await this.rebindConfiguration(match.entry, match.data, match.target)
 			} catch (error) {
-				logger.error(`工作区移动恢复失败（${match.target}）: ${error}`)
+				logger.error(localize(`工作区移动恢复失败（${match.target}）: ${error}`, `Workspace move recovery failed (${match.target}): ${error}`))
 			}
 		}
 		return { ambiguousTargets, candidates }
@@ -772,7 +791,10 @@ class CodeBookmarksRepository {
 		const oldAbsolutePath = entry.metadata.path
 		const normalizedTarget = normalizedAbsolutePath(newAbsolutePath)
 		const fileNode = this.createFileNode(data, oldAbsolutePath, true)
-		if (!fileNode) throw new Error(`脚本书签配置没有有效书签: ${entry.filePath}`)
+		if (!fileNode) throw new Error(localize(
+			`脚本书签配置没有有效书签: ${entry.filePath}`,
+			`The script bookmark configuration contains no valid bookmarks: ${entry.filePath}`,
+		))
 		this.updateFileNodePath(fileNode, normalizedTarget)
 		const output = await this.envelopeForFileNode(fileNode, vscode.Uri.file(normalizedTarget), normalizedTarget)
 
@@ -801,7 +823,10 @@ class CodeBookmarksRepository {
 			pathExists,
 			perform: record => this.performFileRename(record, storageRoot),
 			reportFailure: (record, error) => {
-				logger.error(`恢复未完成的脚本转移失败（${record.oldAbsolutePath}）: ${error}`)
+				logger.error(localize(
+					`恢复未完成的脚本转移失败（${record.oldAbsolutePath}）: ${error}`,
+					`Failed to recover an unfinished script transfer (${record.oldAbsolutePath}): ${error}`,
+				))
 			},
 		}))
 	}
@@ -834,13 +859,19 @@ class CodeBookmarksRepository {
 				}
 			} catch (error) {
 				if (isBookmarkReadCancelled(error)) throw error
-				logger.error(`检查跨模式脚本绑定失败（${entry.filePath}）: ${error}`)
+				logger.error(localize(
+					`检查跨模式脚本绑定失败（${entry.filePath}）: ${error}`,
+					`Failed to inspect a script binding across storage modes (${entry.filePath}): ${error}`,
+				))
 			}
 		}
 		if (matches.length === 0) return
 		const selected = matches[0]
 		if (matches.length > 1) {
-			void vscode.window.showWarningMessage(`发现 ${matches.length} 个可能对应“${path.basename(activeAbsolutePath)}”的书签配置；为避免错误绑定，已暂缓自动恢复。`)
+			void vscode.window.showWarningMessage(localize(
+				`发现 ${matches.length} 个可能对应“${path.basename(activeAbsolutePath)}”的书签配置；为避免错误绑定，已暂缓自动恢复。`,
+				`Found ${matches.length} bookmark configurations that may belong to "${path.basename(activeAbsolutePath)}". Automatic recovery was deferred to avoid an incorrect binding.`,
+			))
 			return
 		}
 		throwIfReadCancelled(signal)
@@ -852,9 +883,10 @@ class CodeBookmarksRepository {
 		)
 		if (workspaceRelocation) {
 			throwIfReadCancelled(signal)
-			vscode.window.showInformationMessage(
+			vscode.window.showInformationMessage(localize(
 				`已自动恢复改名工作区内 ${workspaceRelocation.scriptCount} 个脚本的书签绑定；恢复结果：${formatBookmarkLevelSummary(workspaceRelocation.bookmarkSummary)}。当前脚本：${path.basename(activeAbsolutePath)}。`,
-			)
+				`Automatically restored bookmark bindings for ${workspaceRelocation.scriptCount} scripts in the renamed workspace. Restored: ${formatBookmarkLevelSummary(workspaceRelocation.bookmarkSummary)}. Current script: ${path.basename(activeAbsolutePath)}.`,
+			))
 			return
 		}
 		const standaloneRelocated = await this.tryRelocateStandaloneDirectory(
@@ -864,9 +896,10 @@ class CodeBookmarksRepository {
 		)
 		if (standaloneRelocated) {
 			throwIfReadCancelled(signal)
-			vscode.window.showInformationMessage(
+			vscode.window.showInformationMessage(localize(
 				`已自动恢复移动目录内 ${standaloneRelocated.scriptCount} 个脚本的书签绑定；恢复结果：${formatBookmarkLevelSummary(standaloneRelocated.bookmarkSummary)}。`,
-			)
+				`Automatically restored bookmark bindings for ${standaloneRelocated.scriptCount} scripts in the moved folder. Restored: ${formatBookmarkLevelSummary(standaloneRelocated.bookmarkSummary)}.`,
+			))
 			return
 		}
 		await this.enqueueRelocation(() => {
@@ -876,7 +909,10 @@ class CodeBookmarksRepository {
 		throwIfReadCancelled(signal)
 		const fileNode = this.createFileNode(selected.data, activeAbsolutePath)
 		const summary = summarizeBookmarkTrees(fileNode?.subs ?? [])
-		vscode.window.showInformationMessage(`已自动恢复脚本书签绑定：${path.basename(activeAbsolutePath)}；恢复结果：${formatBookmarkLevelSummary(summary)}。`)
+		vscode.window.showInformationMessage(localize(
+			`已自动恢复脚本书签绑定：${path.basename(activeAbsolutePath)}；恢复结果：${formatBookmarkLevelSummary(summary)}。`,
+			`Automatically restored the script bookmark binding for ${path.basename(activeAbsolutePath)}. Restored: ${formatBookmarkLevelSummary(summary)}.`,
+		))
 		await this.ensureIndex(storageRoot, signal)
 	}
 
@@ -915,7 +951,10 @@ class CodeBookmarksRepository {
 				}
 			} catch (error) {
 				if (isBookmarkReadCancelled(error)) throw error
-				logger.error(`检查独立目录移动恢复失败（${entry.metadata.path}）: ${error}`)
+				logger.error(localize(
+					`检查独立目录移动恢复失败（${entry.metadata.path}）: ${error}`,
+					`Failed to inspect standalone-folder move recovery (${entry.metadata.path}): ${error}`,
+				))
 			}
 		}
 		if (!mapped.some(item => item.entry.id === matchedEntry.id)) return undefined
@@ -1078,12 +1117,18 @@ class CodeBookmarksRepository {
 						bookmarks.push(fileNode)
 						if (relocatedPath && relocationApplied) {
 							const summary = summarizeBookmarkTrees(fileNode.subs)
-							vscode.window.showInformationMessage(`已自动重连脚本书签：${path.basename(relocatedPath)}；恢复结果：${formatBookmarkLevelSummary(summary)}。`)
+							vscode.window.showInformationMessage(localize(
+								`已自动重连脚本书签：${path.basename(relocatedPath)}；恢复结果：${formatBookmarkLevelSummary(summary)}。`,
+								`Automatically reconnected script bookmarks for ${path.basename(relocatedPath)}. Restored: ${formatBookmarkLevelSummary(summary)}.`,
+							))
 						}
 					}
 				} catch (error) {
 					if (isBookmarkReadCancelled(error)) throw error
-					logger.error(`已跳过无法读取的脚本书签配置（${entry.filePath}）: ${error}`)
+					logger.error(localize(
+						`已跳过无法读取的脚本书签配置（${entry.filePath}）: ${error}`,
+						`Skipped an unreadable script bookmark configuration (${entry.filePath}): ${error}`,
+					))
 				}
 			}
 			return bookmarks
@@ -1094,7 +1139,7 @@ class CodeBookmarksRepository {
 				this.indexReady = false
 				return []
 			}
-			logger.error('无法读取书签配置文件')
+			logger.error(localize('无法读取书签配置文件', 'Unable to read the bookmark configuration file.'))
 			logger.error(error)
 			return []
 		}
@@ -1114,7 +1159,7 @@ class CodeBookmarksRepository {
 	): Promise<BookmarkConfigurationDeletionResult> {
 		return this.enqueueRelocation(async () => {
 			const storageRoot = this.storageRoot()
-			if (!storageRoot) throw new Error('尚未配置书签存储目录')
+			if (!storageRoot) throw new Error(localize('尚未配置书签存储目录', 'The bookmark storage folder is not configured.'))
 			const result = await removeBookmarkConfigurationFiles(storageRoot, requests, {
 				deleteFile: filePath => this.deleteFile(filePath),
 				deleteEmptyDirectory: directoryPath => fs.promises.rmdir(directoryPath),
@@ -1126,7 +1171,10 @@ class CodeBookmarksRepository {
 					try {
 						await this.removeOrderPath(entry.scriptPath)
 					} catch (error) {
-						logger.error(`删除书签配置后清理工作区顺序失败（${entry.scriptPath}）: ${error}`)
+						logger.error(localize(
+							`删除书签配置后清理工作区顺序失败（${entry.scriptPath}）: ${error}`,
+							`Failed to clean the workspace order after deleting a bookmark configuration (${entry.scriptPath}): ${error}`,
+						))
 					}
 				}
 			}
@@ -1186,7 +1234,7 @@ class CodeBookmarksRepository {
 			}
 			return true
 		} catch (error) {
-			logger.error("Can't save bookmarks to file")
+			logger.error(localize('无法将书签保存到文件', "Can't save bookmarks to file"))
 			logger.error(error)
 			return false
 		}
@@ -1274,7 +1322,10 @@ class CodeBookmarksRepository {
 				try {
 					changes.push(...await this.performFileAppearance(sourcePath))
 				} catch (error) {
-					logger.error(`批量恢复书签绑定失败（${sourcePath}）: ${error}`)
+					logger.error(localize(
+						`批量恢复书签绑定失败（${sourcePath}）: ${error}`,
+						`Batch bookmark-binding recovery failed (${sourcePath}): ${error}`,
+					))
 				}
 			}
 			return changes
@@ -1345,7 +1396,10 @@ class CodeBookmarksRepository {
 				if (!relocated || absolutePathKey(relocated) !== absolutePathKey(targetPath)) continue
 				matches.push({ entry, data })
 			} catch (error) {
-				logger.error(`新文件出现时恢复书签绑定失败（${targetPath}）: ${error}`)
+				logger.error(localize(
+					`新文件出现时恢复书签绑定失败（${targetPath}）: ${error}`,
+					`Failed to recover a bookmark binding when a new file appeared (${targetPath}): ${error}`,
+				))
 			}
 		}
 		if (matches.length !== 1) return []
@@ -1392,13 +1446,19 @@ class CodeBookmarksRepository {
 
 		const visit = async (currentPath: string, depth: number): Promise<void> => {
 			if (depth > MAX_IMPORT_CONFIGURATION_DEPTH) {
-				throw new Error(`书签配置目录层级超过 ${MAX_IMPORT_CONFIGURATION_DEPTH} 层，请缩小导入目录。`)
+				throw new Error(localize(
+					`书签配置目录层级超过 ${MAX_IMPORT_CONFIGURATION_DEPTH} 层，请缩小导入目录。`,
+					`The bookmark configuration folder is deeper than ${MAX_IMPORT_CONFIGURATION_DEPTH} levels. Choose a smaller import folder.`,
+				))
 			}
 			const entries = await fs.promises.readdir(currentPath, { withFileTypes: true })
 			entries.sort((left, right) => left.name.localeCompare(right.name))
 			scannedEntries += entries.length
 			if (scannedEntries > MAX_IMPORT_CONFIGURATION_ENTRIES) {
-				throw new Error(`书签配置目录项超过 ${MAX_IMPORT_CONFIGURATION_ENTRIES} 个，请缩小导入目录。`)
+				throw new Error(localize(
+					`书签配置目录项超过 ${MAX_IMPORT_CONFIGURATION_ENTRIES} 个，请缩小导入目录。`,
+					`The bookmark configuration folder contains more than ${MAX_IMPORT_CONFIGURATION_ENTRIES} entries. Choose a smaller import folder.`,
+				))
 			}
 			for (const entry of entries) {
 				const entryPath = path.join(currentPath, entry.name)
@@ -1446,7 +1506,7 @@ class CodeBookmarksRepository {
 		workspaceRootPath: string,
 	): Promise<BookmarkConfigurationFolderImportResult> {
 		const storageRoot = this.storageRoot()
-		if (!storageRoot) throw new Error('尚未配置书签存储目录')
+		if (!storageRoot) throw new Error(localize('尚未配置书签存储目录', 'The bookmark storage folder is not configured.'))
 		await this.ensureIndex(storageRoot)
 		const candidates = await this.collectBookmarkConfigurationImportCandidates(configFolderPath, workspaceRootPath)
 		const result: BookmarkConfigurationFolderImportResult = {
@@ -1473,18 +1533,26 @@ class CodeBookmarksRepository {
 				valid.push(candidate)
 			} catch (error) {
 				result.skipped++
-				logger.error(`检查书签配置导入候选失败（${candidate.configPath}）: ${error}`)
+				logger.error(localize(
+					`检查书签配置导入候选失败（${candidate.configPath}）: ${error}`,
+					`Failed to inspect a bookmark configuration import candidate (${candidate.configPath}): ${error}`,
+				))
 			}
 		}
 		if (fingerprintMismatches > 0) {
-			const continueLabel = '仍然导入并绑定'
+			const actions = [
+				{ title: localize('仍然导入并绑定', 'Import and Bind Anyway'), action: 'continue' as const },
+				{ title: localize('取消', 'Cancel'), action: 'cancel' as const },
+			]
 			const choice = await vscode.window.showWarningMessage(
-				`有 ${fingerprintMismatches} 个配置的源码指纹与当前工作区文件不同。继续会按当前文件内容重新绑定。`,
+				localize(
+					`有 ${fingerprintMismatches} 个配置的源码指纹与当前工作区文件不同。继续会按当前文件内容重新绑定。`,
+					`${fingerprintMismatches} configurations have source fingerprints that differ from the current workspace files. Continuing will rebind them using the current file contents.`,
+				),
 				{ modal: true },
-				continueLabel,
-				'取消',
+				...actions,
 			)
-			if (choice !== continueLabel) {
+			if (choice?.action !== 'continue') {
 				result.cancelled = true
 				return result
 			}
@@ -1503,7 +1571,10 @@ class CodeBookmarksRepository {
 				result.imported++
 			} catch (error) {
 				result.failed++
-				logger.error(`导入书签配置失败（${candidate.configPath} -> ${candidate.targetAbsolutePath}）: ${error}`)
+				logger.error(localize(
+					`导入书签配置失败（${candidate.configPath} -> ${candidate.targetAbsolutePath}）: ${error}`,
+					`Failed to import a bookmark configuration (${candidate.configPath} -> ${candidate.targetAbsolutePath}): ${error}`,
+				))
 			}
 		}
 		return result
@@ -1515,27 +1586,34 @@ class CodeBookmarksRepository {
 		fingerprintMismatchConfirmed = false,
 	): Promise<Bookmark> {
 		const storageRoot = this.storageRoot()
-		if (!storageRoot) throw new Error('尚未配置书签存储目录')
+		if (!storageRoot) throw new Error(localize('尚未配置书签存储目录', 'The bookmark storage folder is not configured.'))
 		await this.ensureIndex(storageRoot)
 		const targetPath = normalizedAbsolutePath(targetAbsolutePath)
 		const importedValue = await fileUtils.readJsonFileAsync(configPath)
 		const importedMetadata = scriptMetadata(importedValue)
 		const importedItems = bookmarkItems(importedValue)
 		if (!importedMetadata || !importedItems || importedItems.length === 0) {
-			throw new Error('所选文件不是有效的书签配置')
+			throw new Error(localize('所选文件不是有效的书签配置', 'The selected file is not a valid bookmark configuration.'))
 		}
 		this.createFileNode(importedValue, importedMetadata.path, true)
 		const targetFingerprint = await fingerprintSourceFile(targetPath)
-		if (!targetFingerprint) throw new Error('无法读取当前脚本内容')
+		if (!targetFingerprint) throw new Error(localize('无法读取当前脚本内容', 'Unable to read the current script content.'))
 		if (!fingerprintMismatchConfirmed && importedMetadata.fingerprint && importedMetadata.fingerprint.sha256 !== targetFingerprint.sha256) {
-			const continueLabel = '仍然导入并绑定'
+			const actions = [
+				{ title: localize('仍然导入并绑定', 'Import and Bind Anyway'), action: 'continue' as const },
+				{ title: localize('取消', 'Cancel'), action: 'cancel' as const },
+			]
 			const choice = await vscode.window.showWarningMessage(
-				'所选配置的源码指纹与当前脚本不同。继续会把其中的书签重新绑定到当前脚本。',
+				localize(
+					'所选配置的源码指纹与当前脚本不同。继续会把其中的书签重新绑定到当前脚本。',
+					'The selected configuration has a different source fingerprint from the current script. Continuing will rebind its bookmarks to the current script.',
+				),
 				{ modal: true },
-				continueLabel,
-				'取消',
+				...actions,
 			)
-			if (choice !== continueLabel) throw new Error('用户取消了书签配置导入')
+			if (choice?.action !== 'continue') {
+				throw new UserCancelledError('用户取消了书签配置导入', 'The user cancelled the bookmark configuration import.')
+			}
 		}
 
 		let existingTarget: ScriptIndexEntry | undefined = this.entriesAtAbsolutePath(targetPath)[0]
@@ -1567,7 +1645,7 @@ class CodeBookmarksRepository {
 		}
 		const display = this.displayPath(targetPath, vscode.Uri.file(targetPath))
 		let fileNode = this.createFileNode(output, display, true)
-		if (!fileNode) throw new Error('导入结果没有有效书签')
+		if (!fileNode) throw new Error(localize('导入结果没有有效书签', 'The import result contains no valid bookmarks.'))
 		if (typeof vscode.workspace.openTextDocument === 'function') {
 			const targetDocument = vscode.workspace.textDocuments.find(document => document.uri.scheme === 'file'
 				&& absolutePathKey(document.uri.fsPath) === absolutePathKey(targetPath))
@@ -1590,11 +1668,11 @@ class CodeBookmarksRepository {
 			await this.workspaceOrders.append(
 				orderInfo.folder,
 				orderInfo.bookmarkPath,
-				'无法更新工作区书签顺序',
+				localize('无法更新工作区书签顺序', 'Unable to update the workspace bookmark order.'),
 			)
 		}
 		fileNode = this.createFileNode(output, display, true)
-		if (!fileNode) throw new Error('导入结果没有有效书签')
+		if (!fileNode) throw new Error(localize('导入结果没有有效书签', 'The import result contains no valid bookmarks.'))
 		return fileNode
 	}
 }

@@ -1,3 +1,5 @@
+import { isLocalAIHostname } from './AIAddressClassifier'
+
 const DEFAULT_TIMEOUT_S = 60
 const MIN_TIMEOUT_S = 1
 const MAX_TIMEOUT_S = 10 * 60
@@ -39,8 +41,7 @@ export function isRemoteHttpEndpoint(endpoint: string): boolean {
 	try {
 		const url = new URL(endpoint)
 		if (url.protocol !== 'http:') return false
-		const hostname = url.hostname.toLowerCase()
-		return !['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)
+		return !isLocalAIHostname(url.hostname)
 	} catch {
 		return false
 	}

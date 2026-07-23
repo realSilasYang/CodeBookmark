@@ -46,6 +46,7 @@ const { BookmarkSet } = require('../out/models/BookmarkSet')
 const { ContextBookmark } = require('../out/util/ContextValue')
 const { UndoManager } = require('../out/providers/UndoManager')
 const { isScriptId } = require('../out/util/ScriptIdentity')
+const localization = require('../out/i18n/Localization')
 
 const child = new Bookmark({
   id: 'bookmark-1',
@@ -77,7 +78,10 @@ assert.equal(bookmarks.size, 0)
 manager.clear()
 assert.equal(manager.canUndo(), false)
 assert.equal(manager.canRedo(), false)
+localization.initializeLocalization('en')
 assert.throws(() => Bookmark.fromJSON({ id: 'incomplete' }), /creation time/)
+localization.initializeLocalization('zh-cn')
+assert.throws(() => Bookmark.fromJSON({ id: 'incomplete' }), /书签创建时间无效/)
 
 const malformedManager = new UndoManager()
 const malformedState = malformedManager.captureState(bookmarks)
@@ -288,10 +292,14 @@ oversizedManager.saveState(new BookmarkSet([oversizedBookmark]))
 assert.equal(oversizedManager.canUndo(), false)
 
 const persistedState = new Map()
+let persistenceUpdateCount = 0
 const extensionContext = {
   workspaceState: {
     get: key => persistedState.get(key),
-    update: async (key, value) => { persistedState.set(key, value) },
+    update: async (key, value) => {
+      persistenceUpdateCount++
+      persistedState.set(key, value)
+    },
   },
 }
 async function verifySessionPersistence() {
@@ -300,18 +308,25 @@ async function verifySessionPersistence() {
   persistedManager.setActiveScope(scopeA)
   persistedManager.saveState(new BookmarkSet([fileNode]), 'deleteBookmarks', scopeA)
   await persistedManager.flushPersistence()
+  assert.equal(persistenceUpdateCount, 1)
+  await persistedManager.flushPersistence()
+  assert.equal(persistenceUpdateCount, 1, 'Unchanged undo state must not be persisted again')
 
   const reactivatedManager = new UndoManager()
   reactivatedManager.initialize(extensionContext)
   assert.equal(reactivatedManager.canUndo(scopeA), true)
   assert.equal(reactivatedManager.undoAction(scopeA), 'deleteBookmarks')
   await reactivatedManager.flushPersistence()
+  assert.equal(persistenceUpdateCount, 2)
+  await reactivatedManager.flushPersistence()
+  assert.equal(persistenceUpdateCount, 2, 'Reactivated unchanged state must not be persisted again')
 
   vscodeMock.env.sessionId = 'undo-session-b'
   const restartedManager = new UndoManager()
   restartedManager.initialize(extensionContext)
   assert.equal(restartedManager.canUndo(scopeA), false)
   await restartedManager.flushPersistence()
+  assert.equal(persistenceUpdateCount, 3)
 }
 
 verifySessionPersistence().catch(error => {

@@ -1,6 +1,7 @@
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
+import { localize } from '../i18n/Localization'
 import { isScriptId } from '../util/ScriptIdentity'
 import { isJsonRecord } from '../util/JsonRecord'
 import {
@@ -186,7 +187,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		return { copiedFiles: 0, mergedFiles: 0, conflictFiles: 0 }
 	}
 	if (isSameOrDescendantAbsolutePath(source, target) || isSameOrDescendantAbsolutePath(target, source)) {
-		throw new Error('新旧书签存储目录不能互相包含')
+		throw new Error(localize('新旧书签存储目录不能互相包含', 'The old and new bookmark storage folders cannot contain one another.'))
 	}
 	const [canonicalSource, canonicalTarget] = await Promise.all([
 		canonicalAbsolute(source),
@@ -194,7 +195,10 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 	])
 	if (isSameOrDescendantAbsolutePath(canonicalSource, canonicalTarget)
 		|| isSameOrDescendantAbsolutePath(canonicalTarget, canonicalSource)) {
-		throw new Error('新旧书签存储目录不能通过符号链接或目录联接互相包含')
+		throw new Error(localize(
+			'新旧书签存储目录不能通过符号链接或目录联接互相包含',
+			'The old and new bookmark storage folders cannot contain one another through symbolic links or directory junctions.',
+		))
 	}
 
 	await fs.promises.mkdir(target, { recursive: true })

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import { localize } from '../i18n/Localization'
 import { Commands } from '../util/constants/Commands'
 import { fileUtils } from '../util/FileUtils'
 import { logger } from '../util/Logger'
@@ -239,7 +240,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			if (!folder) return
 			const orderFile = path.join(folder, '_workspace_order.json')
 			void fileUtils.writeJsonFileAsync(orderFile, order).then(success => {
-				if (!success) logger.showWarningMessage('无法保存工作区文件排序，请检查书签存储路径权限。')
+				if (!success) logger.showWarningMessage(localize(
+					'无法保存工作区文件排序，请检查书签存储路径权限。',
+					'Unable to save the workspace file order. Check bookmark storage-folder permissions.',
+				))
 			})
 		},
 		sortItems: items => sortBookmarkTreeItems(items),
@@ -259,14 +263,23 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	> = {
 		isDisposed: () => this.disposed,
 		currentTreeView: () => this.treeView,
-		setLoadingMessage: treeView => { treeView.message = '正在加载书签…' },
+		setLoadingMessage: treeView => { treeView.message = localize('正在加载书签…', 'Loading bookmarks…') },
 		reportSlowInitialLoad: warningMs =>
-			logger.error(`书签初始化已超过 ${warningMs / 1000} 秒；扩展已正常启动，数据仍在后台加载。`),
-		setSlowLoadingMessage: treeView => { treeView.message = '书签加载时间较长，仍在后台继续…' },
+			logger.error(localize(
+				`书签初始化已超过 ${warningMs / 1000} 秒；扩展已正常启动，数据仍在后台加载。`,
+				`Bookmark initialization has taken more than ${warningMs / 1000} seconds. The extension started normally and data is still loading in the background.`,
+			)),
+		setSlowLoadingMessage: treeView => { treeView.message = localize('书签加载时间较长，仍在后台继续…', 'Bookmarks are taking longer to load and will continue in the background…') },
 		clearInitialLoadMessage: treeView => { treeView.message = undefined },
-		reportInitialLoadFailure: error => logger.error(`初始化书签视图失败: ${errorMessage(error)}`),
+		reportInitialLoadFailure: error => logger.error(localize(
+			`初始化书签视图失败: ${errorMessage(error)}`,
+			`Failed to initialize the bookmark view: ${errorMessage(error)}`,
+		)),
 		setInitialLoadFailureMessage: treeView => {
-			treeView.message = '书签初始化失败，请查看“CodeBookmark”输出。'
+			treeView.message = localize(
+				'书签初始化失败，请查看“CodeBookmark”输出。',
+				'Bookmark initialization failed. See the "CodeBookmark" output for details.',
+			)
 		},
 		isWorkspaceScope: () => this.currentStorageScope?.startsWith('workspace:') === true,
 		currentViewLoadGeneration: () => this.viewLoadGeneration,
@@ -416,12 +429,12 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	private reportBookmarkContextFailure(kind: BookmarkContextFailureKind, error: unknown): void {
 		const messages: Record<BookmarkContextFailureKind, string> = {
-			'active-editor': '更新活动编辑器命令状态失败',
-			'active-tab': '更新活动标签页上下文失败',
-			'presence': '更新书签显示上下文失败',
-			'previous-ai-folder': '上一次 AI 菜单上下文更新失败',
-			'ai-folder-state': '更新 AI 文件夹菜单状态失败',
-			'ai-folder-update': '更新 AI 菜单上下文失败',
+			'active-editor': localize('更新活动编辑器命令状态失败', 'Failed to update active-editor command state'),
+			'active-tab': localize('更新活动标签页上下文失败', 'Failed to update active-tab context'),
+			'presence': localize('更新书签显示上下文失败', 'Failed to update bookmark display context'),
+			'previous-ai-folder': localize('上一次 AI 菜单上下文更新失败', 'Failed to update the previous AI menu context'),
+			'ai-folder-state': localize('更新 AI 文件夹菜单状态失败', 'Failed to update AI folder menu state'),
+			'ai-folder-update': localize('更新 AI 菜单上下文失败', 'Failed to update AI menu context'),
 		}
 		logger.error(`${messages[kind]}: ${errorMessage(error)}`)
 	}
@@ -529,11 +542,20 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		bookmarks: () => this.codeBookmarks,
 		profileFor: (languageId, filePath) => this.languageCommentProfiles.profileFor(languageId, filePath),
 		warnFileTruncated: (filePath, limit) =>
-			logger.showWarningMessage(`脚本 ${path.basename(filePath)} 中的 TODO/FIXME/BUG 超过 ${limit} 个，仅同步前 ${limit} 个以避免书签配置异常膨胀。`),
+			logger.showWarningMessage(localize(
+				`脚本 ${path.basename(filePath)} 中的 TODO/FIXME/BUG 超过 ${limit} 个，仅同步前 ${limit} 个以避免书签配置异常膨胀。`,
+				`${path.basename(filePath)} contains more than ${limit} TODO/FIXME/BUG markers. Only the first ${limit} were synchronized to prevent excessive bookmark configuration growth.`,
+			)),
 		warnFileCapacityLimited: filePath =>
-			logger.showWarningMessage(`脚本 ${path.basename(filePath)} 的手动书签与自动标记已达到 10000 个节点上限；为保证配置可读取，未继续生成其余 TODO/FIXME/BUG 书签。`),
+			logger.showWarningMessage(localize(
+				`脚本 ${path.basename(filePath)} 的手动书签与自动标记已达到 10000 个节点上限；为保证配置可读取，未继续生成其余 TODO/FIXME/BUG 书签。`,
+				`Manual bookmarks and automatic markers in ${path.basename(filePath)} have reached the 10,000-node limit. Remaining TODO/FIXME/BUG bookmarks were not generated so the configuration stays readable.`,
+			)),
 		warnWorkspaceDiscoveryTruncated: (_scope, maxFiles) =>
-			logger.showWarningMessage(`当前工作区脚本超过 ${maxFiles} 个；后台仅扫描前 ${maxFiles} 个，其他脚本会在打开或编辑时自动同步 TODO/FIXME/BUG。`),
+			logger.showWarningMessage(localize(
+				`当前工作区脚本超过 ${maxFiles} 个；后台仅扫描前 ${maxFiles} 个，其他脚本会在打开或编辑时自动同步 TODO/FIXME/BUG。`,
+				`The current workspace contains more than ${maxFiles} scripts. The background scan covers the first ${maxFiles}; TODO/FIXME/BUG markers in other scripts will synchronize when those files are opened or edited.`,
+			)),
 		invalidatePathIndex: () => this.invalidatePathIndex(),
 		saveBookmarks: absolutePaths => this.saveBookmarksToFile(absolutePaths),
 		refreshDecorations: () => this.refreshDecoration(),
@@ -637,7 +659,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			persistRemovedMarkers: uri => this.persistCodeMarkerChanges([uri.fsPath]),
 			synchronizeUris: uris => this.syncCodeMarkersForUris(uris),
 			reportFileSyncFailure: (uri, error) =>
-				logger.error(`同步脚本 TODO/FIXME/BUG 失败（${uri.fsPath}）: ${errorMessage(error)}`),
+				logger.error(localize(
+					`同步脚本 TODO/FIXME/BUG 失败（${uri.fsPath}）: ${errorMessage(error)}`,
+					`Failed to synchronize TODO/FIXME/BUG markers in the script (${uri.fsPath}): ${errorMessage(error)}`,
+				)),
 			canWatchFiles: () => typeof vscode.workspace.createFileSystemWatcher === 'function',
 			discoveryGlobs: () => this.languageCommentProfiles.discoveryGlobs(),
 			watchFilePattern: (glob, onCreate, onChange, onDelete) => {
@@ -650,12 +675,18 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				]
 			},
 			reportWatcherFailure: (glob, error) =>
-				logger.error(`无法监听语言文件模式 ${glob}: ${errorMessage(error)}`),
+				logger.error(localize(
+					`无法监听语言文件模式 ${glob}: ${errorMessage(error)}`,
+					`Unable to watch language file pattern ${glob}: ${errorMessage(error)}`,
+				)),
 			loadingViewGeneration: () => this.loadingViewGeneration,
 			currentStorageScope: () => this.currentStorageScope,
 			runWorkspaceScan: (scope, generation) => this.scanWorkspaceCodeMarkers(scope, generation),
 			reportWorkspaceScanFailure: error =>
-				logger.error(`后台扫描 TODO/FIXME/BUG 失败: ${errorMessage(error)}`),
+				logger.error(localize(
+					`后台扫描 TODO/FIXME/BUG 失败: ${errorMessage(error)}`,
+					`Background TODO/FIXME/BUG scan failed: ${errorMessage(error)}`,
+				)),
 		}
 	}
 
@@ -753,7 +784,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				files,
 				changedFiles,
 			}),
-			reportDiscoveryFailure: (glob, error) => logger.error(`无法按语言文件模式扫描 ${glob}: ${errorMessage(error)}`),
+			reportDiscoveryFailure: (glob, error) => logger.error(localize(
+				`无法按语言文件模式扫描 ${glob}: ${errorMessage(error)}`,
+				`Unable to scan language file pattern ${glob}: ${errorMessage(error)}`,
+			)),
 		})
 	}
 
@@ -761,7 +795,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		this.context = context
 		const extensionChangeListener = vscode.extensions.onDidChange(() => {
 			void this.reloadCodeMarkerLanguageProfiles()
-				.catch(error => logger.error(`刷新语言注释配置失败: ${errorMessage(error)}`))
+				.catch(error => logger.error(localize(`刷新语言注释配置失败: ${errorMessage(error)}`, `Failed to refresh language comment configurations: ${errorMessage(error)}`)))
 		})
 
 		// Create decoration type for inline ghost text (bookmark label at end of line)
@@ -786,7 +820,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		const selectionListener = treeView.onDidChangeSelection((event) => {
 			const hasSelection = event.selection && event.selection.length > 0 && event.selection.some(e => isBookmarkItemContext(e.contextValue));
 			void this.setContextValue('codebookmark.hasSelection', hasSelection)
-				.catch(error => logger.error(`更新书签选择上下文失败: ${errorMessage(error)}`));
+				.catch(error => logger.error(localize(`更新书签选择上下文失败: ${errorMessage(error)}`, `Failed to update bookmark selection context: ${errorMessage(error)}`)));
 		});
 
 		// Setup cursor change listener for inline ghost text
@@ -806,12 +840,18 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				this.bookmarkContextPort(),
 			)
 			void this.synchronizeIdleView()
-				.catch(error => logger.error(`同步无活动脚本时的书签视图失败: ${errorMessage(error)}`))
+				.catch(error => logger.error(localize(
+					`同步无活动脚本时的书签视图失败: ${errorMessage(error)}`,
+					`Failed to synchronize the bookmark view when no script is active: ${errorMessage(error)}`,
+				)))
 		});
 		const tabListener = vscode.window.tabGroups.onDidChangeTabs(() => {
 			this.bookmarkContextCoordinator.handleTabsChanged(this.bookmarkContextPort())
 			void this.synchronizeIdleView()
-				.catch(error => logger.error(`同步脚本标签页变化后的书签视图失败: ${errorMessage(error)}`))
+				.catch(error => logger.error(localize(
+					`同步脚本标签页变化后的书签视图失败: ${errorMessage(error)}`,
+					`Failed to synchronize the bookmark view after script tabs changed: ${errorMessage(error)}`,
+				)))
 		})
 		this.context.subscriptions.push(selectionListener, cursorListener, editorListener, tabListener)
 
@@ -846,7 +886,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			return this._getChildrenInternal(element);
 		} catch (error: unknown) {
 			const details = error instanceof Error ? error.stack ?? error.message : String(error)
-			logger.error(`Error in getChildren: ${details}`);
+			logger.error(localize(`获取书签树子节点失败: ${details}`, `Error in getChildren: ${details}`));
 			return [];
 		}
 	}
@@ -970,21 +1010,27 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		error: unknown,
 		directory?: string,
 	): void {
-		switch (kind) {
+			switch (kind) {
 			case 'delayed-processing':
-				logger.error(`延迟处理书签配置变更失败: ${errorMessage(error)}`)
+				logger.error(localize(`延迟处理书签配置变更失败: ${errorMessage(error)}`, `Delayed bookmark configuration change processing failed: ${errorMessage(error)}`))
 				return
 			case 'processing':
-				logger.error(`处理书签配置变更失败: ${errorMessage(error)}`)
+				logger.error(localize(`处理书签配置变更失败: ${errorMessage(error)}`, `Bookmark configuration change processing failed: ${errorMessage(error)}`))
 				return
 			case 'classification':
-				logger.error(`比对书签配置变更失败（${directory}）: ${errorMessage(error)}`)
+				logger.error(localize(
+					`比对书签配置变更失败（${directory}）: ${errorMessage(error)}`,
+					`Failed to classify bookmark configuration changes (${directory}): ${errorMessage(error)}`,
+				))
 				return
 			case 'setup':
-				logger.error('Failed to setup config watcher: ' + error)
+				logger.error(localize('设置书签配置监听器失败: ', 'Failed to set up the bookmark configuration watcher: ') + error)
 				return
 			case 'watcher':
-				logger.error(`书签配置监听器失败（${directory}）: ${errorMessage(error)}`)
+				logger.error(localize(
+					`书签配置监听器失败（${directory}）: ${errorMessage(error)}`,
+					`Bookmark configuration watcher failed (${directory}): ${errorMessage(error)}`,
+				))
 		}
 	}
 
@@ -1002,7 +1048,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			setupCodeMarkerFileWatchers: () => this.setupCodeMarkerFileWatchers(),
 			synchronizeOpenCodeMarkerDocuments: () => this.synchronizeOpenCodeMarkerDocuments(),
 			scheduleWorkspaceCodeMarkerScan: () => this.scheduleWorkspaceCodeMarkerScan(),
-			reportFailure: error => logger.error(`后台书签增强初始化失败: ${errorMessage(error)}`),
+			reportFailure: error => logger.error(localize(
+				`后台书签增强初始化失败: ${errorMessage(error)}`,
+				`Background bookmark enhancement initialization failed: ${errorMessage(error)}`,
+			)),
 			measure: (started, candidateScope) => performanceMonitor.measure('bookmark-view-background-enhancement', started, {
 				scope: candidateScope ?? 'none',
 				bookmarks: this.codeBookmarks.size,
@@ -1040,7 +1089,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			if (!preserveLoadedContext) await this.setContextValue(Commands.varBookmarkLoaded, false)
 			await this.setContextValue(Commands.varBookmarkLoadFailed, false)
 		} catch (error) {
-			logger.error(`设置书签加载状态失败: ${errorMessage(error)}`)
+			logger.error(localize(`设置书签加载状态失败: ${errorMessage(error)}`, `Failed to set bookmark loading state: ${errorMessage(error)}`))
 		}
 		const signal = this.viewLoadSignal(generation)
 		const pipeline = await runViewLoadPipeline(generation, {
@@ -1051,7 +1100,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			empty: () => this.emptyPreparedBookmarkView(scopePathOverride, expectedScope),
 			commit: next => this.commitPreparedBookmarkView(next),
 			publish: (next, candidateGeneration) => this.publishCommittedViewTransition(next, candidateGeneration),
-			reportFailure: error => logger.error(`加载书签数据失败: ${errorMessage(error)}`),
+			reportFailure: error => logger.error(localize(`加载书签数据失败: ${errorMessage(error)}`, `Failed to load bookmark data: ${errorMessage(error)}`)),
 		})
 		if (pipeline.cancelled) return
 		await finalizeViewLoad({
@@ -1066,7 +1115,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			isCurrent: candidateGeneration => candidateGeneration === this.viewLoadGeneration && !this.disposed,
 			setLoadFailedContext: failed => this.setContextValue(Commands.varBookmarkLoadFailed, failed),
 			setLoadedContext: () => this.setContextValue(Commands.varBookmarkLoaded, true),
-			reportContextFailure: error => logger.error(`结束书签加载状态失败: ${errorMessage(error)}`),
+			reportContextFailure: error => logger.error(localize(`结束书签加载状态失败: ${errorMessage(error)}`, `Failed to finalize bookmark loading state: ${errorMessage(error)}`)),
 			refreshDecorations: () => this.refreshDecoration(false, false),
 			saveAllBookmarks: () => this.saveAllBookmarksToFile(),
 			persistWorkspaceOrder: (prepared, candidateGeneration) => this.persistWorkspaceOrderSnapshot({
@@ -1076,7 +1125,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			}, prepared.storageScope, candidateGeneration),
 			startConfigWatcher: candidateGeneration => {
 				void this.setupConfigWatcher(candidateGeneration)
-					.catch(error => logger.error(`设置书签配置监听器失败: ${errorMessage(error)}`))
+					.catch(error => logger.error(localize(`设置书签配置监听器失败: ${errorMessage(error)}`, `Failed to set up the bookmark configuration watcher: ${errorMessage(error)}`)))
 			},
 			// Disk-backed bookmark data is the core startup path. Language profiles and
 			// marker reconciliation can run after the tree becomes interactive.
@@ -1109,14 +1158,23 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			transferRoot: async (source, target) => { await transferStorageRoot(source, target) },
 			activateRoot: root => storageRootState.activate(root),
 			rememberRoot: async root => { await this.context.globalState.update(LAST_STORAGE_ROOT_KEY, root) },
-			warnRememberedFallback: () => logger.showWarningMessage('当前书签存储路径无效，已继续使用上次验证成功的目录。'),
-			reportTransferFailure: error => logger.error(`启动时转移书签存储目录失败: ${errorMessage(error)}`),
+			warnRememberedFallback: () => logger.showWarningMessage(localize(
+				'当前书签存储路径无效，已继续使用上次验证成功的目录。',
+				'The current bookmark storage path is invalid. Continuing with the last successfully verified folder.',
+			)),
+			reportTransferFailure: error => logger.error(localize(`启动时转移书签存储目录失败: ${errorMessage(error)}`, `Failed to transfer the bookmark storage folder during startup: ${errorMessage(error)}`)),
 			showTransferFailure: error => {
-				void vscode.window.showErrorMessage(`目标书签存储目录尚未启用，已继续使用来源目录：${errorMessage(error)}`)
+				void vscode.window.showErrorMessage(localize(
+					`目标书签存储目录尚未启用，已继续使用来源目录：${errorMessage(error)}`,
+					`The target bookmark storage folder was not activated. Continuing with the source folder: ${errorMessage(error)}`,
+				))
 			},
-			reportPostTransferFailure: error => logger.error(`书签存储目录已转移，但记录新目录失败: ${errorMessage(error)}`),
+			reportPostTransferFailure: error => logger.error(localize(`书签存储目录已转移，但记录新目录失败: ${errorMessage(error)}`, `The bookmark storage folder was transferred, but recording the new folder failed: ${errorMessage(error)}`)),
 			showPostTransferFailure: error => {
-				void vscode.window.showErrorMessage(`书签存储目录已转移且原目录已清理，但记录新目录失败；当前继续使用新目录：${errorMessage(error)}`)
+				void vscode.window.showErrorMessage(localize(
+					`书签存储目录已转移且原目录已清理，但记录新目录失败；当前继续使用新目录：${errorMessage(error)}`,
+					`The bookmark storage folder was transferred and the old folder was cleaned, but recording the new folder failed. Continuing with the new folder: ${errorMessage(error)}`,
+				))
 			},
 		})
 	}
@@ -1128,7 +1186,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		this.refreshExpandCollapseContext()
 		undoManager.setActiveScope(this.currentStorageScope)
 		void this.setContextValue('bookmarks.var.bookmark.hasInvalid', hasInvalidBookmarks(this.codeBookmarks))
-			.catch(error => logger.error(`更新书签命令上下文失败: ${errorMessage(error)}`))
+			.catch(error => logger.error(localize(`更新书签命令上下文失败: ${errorMessage(error)}`, `Failed to update bookmark command context: ${errorMessage(error)}`)))
 		
 		if (fireTree) this._onDidChangeTreeData.fire()
 
@@ -1163,8 +1221,11 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	private warnProtectedCodeMarkers(count: number): void {
 		vscode.window.showWarningMessage(
 			count === 1
-				? 'TODO/FIXME/BUG 书签由源码标记自动管理，不可删除。'
-				: `选中的 ${count} 个 TODO/FIXME/BUG 书签由源码标记自动管理，不可删除。`,
+				? localize('TODO/FIXME/BUG 书签由源码标记自动管理，不可删除。', 'TODO/FIXME/BUG bookmarks are managed automatically from source markers and cannot be deleted.')
+				: localize(
+					`选中的 ${count} 个 TODO/FIXME/BUG 书签由源码标记自动管理，不可删除。`,
+					`The ${count} selected TODO/FIXME/BUG bookmarks are managed automatically from source markers and cannot be deleted.`,
+				),
 		)
 	}
 
@@ -1296,7 +1357,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				this.workspaceOrderCache = order
 				const orderFile = path.join(folder, '_workspace_order.json')
 				if (!await fileUtils.writeJsonFileAsync(orderFile, order)) {
-					logger.showWarningMessage('无法保存工作区文件排序，请检查书签存储路径权限。')
+					logger.showWarningMessage(localize(
+						'无法保存工作区文件排序，请检查书签存储路径权限。',
+						'Unable to save the workspace file order. Check bookmark storage-folder permissions.',
+					))
 				}
 			},
 			absoluteBookmarkPath: bookmarkPath => this.absoluteBookmarkPath(bookmarkPath),
@@ -1365,7 +1429,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		}
 
 		const directory = this.workspaceFolderRootForCurrentScope()
-		if (!directory) throw new Error('请先打开文件夹或工作区。')
+		if (!directory) throw new Error(localize('请先打开文件夹或工作区。', 'Open a folder or workspace first.'))
 		const storageScope = this.storageScopeForUri(vscode.Uri.file(directory))
 		await this.refresh(undefined, storageScope)
 		return { directory, storageScope }
@@ -1444,7 +1508,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		persistCodeMarkerChanges: absolutePaths => this.persistCodeMarkerChanges(absolutePaths),
 		saveBookmarks: absolutePaths => this.saveBookmarksToFile(absolutePaths),
 		refreshDecorations: () => this.refreshDecoration(),
-		reportFailure: error => logger.error(`书签位置跟踪失败: ${errorMessage(error)}`),
+		reportFailure: error => logger.error(localize(`书签位置跟踪失败: ${errorMessage(error)}`, `Bookmark position tracking failed: ${errorMessage(error)}`)),
 	}
 
 	private bookmarkDocumentChangePort(): BookmarkDocumentChangePort<
@@ -1540,7 +1604,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			flushPendingSaves: requireSuccess => this.flushPendingSaves(requireSuccess),
 			transferRoot: (sourceRoot, targetRoot) => transferStorageRoot(sourceRoot, targetRoot),
 			setupConfigWatcher: () => this.setupConfigWatcher(),
-			reportPreviousFailure: error => logger.error(`上一次书签存储目录转移失败: ${errorMessage(error)}`),
+			reportPreviousFailure: error => logger.error(localize(`上一次书签存储目录转移失败: ${errorMessage(error)}`, `The previous bookmark storage-folder transfer failed: ${errorMessage(error)}`)),
 			bookmarks: () => this.codeBookmarks,
 		}
 	}
@@ -1613,7 +1677,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 					return fileUtils.getGlobalBookmarkFolder(true, scopeUri) ?? undefined
 				},
 				readFile: filePath => fs.promises.readFile(filePath, 'utf8'),
-				reportReadFailure: error => logger.error(`读取工作区书签排序失败: ${errorMessage(error)}`),
+				reportReadFailure: error => logger.error(localize(`读取工作区书签排序失败: ${errorMessage(error)}`, `Failed to read the workspace bookmark order: ${errorMessage(error)}`)),
 			},
 		)
 	}
@@ -1627,9 +1691,12 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		void Promise.resolve().then(async () => {
 			if (this.disposed || generation !== this.viewLoadGeneration || storageScope !== this.currentStorageScope) return
 			if (!await fileUtils.writeJsonFileAsync(snapshot.filePath!, snapshot.order!)) {
-				logger.showWarningMessage('无法保存工作区文件排序，请检查书签存储路径权限。')
+				logger.showWarningMessage(localize(
+					'无法保存工作区文件排序，请检查书签存储路径权限。',
+					'Unable to save the workspace file order. Check bookmark storage-folder permissions.',
+				))
 			}
-		}).catch(error => logger.error(`保存工作区书签排序失败: ${errorMessage(error)}`))
+		}).catch(error => logger.error(localize(`保存工作区书签排序失败: ${errorMessage(error)}`, `Failed to save the workspace bookmark order: ${errorMessage(error)}`)))
 	}
 
 	private async prepareBookmarkView(
@@ -1715,7 +1782,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			load: async () => {
 				await this.flushPendingSaves(true)
 				const storageRoot = storageRootState.root
-				if (!storageRoot) throw new Error('尚未配置书签存储目录')
+				if (!storageRoot) throw new Error(localize('尚未配置书签存储目录', 'The bookmark storage folder is not configured.'))
 				return {
 					storageRoot,
 					entries: await listBookmarkConfigurationFiles(storageRoot),
@@ -1734,7 +1801,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		requests: readonly BookmarkConfigurationDeleteRequest[],
 	): Promise<void> {
 		const storageRoot = storageRootState.root
-		if (!storageRoot) throw new Error('尚未配置书签存储目录')
+		if (!storageRoot) throw new Error(localize('尚未配置书签存储目录', 'The bookmark storage folder is not configured.'))
 
 		this.saveCoordinator.beginStorageTransition()
 		try {
@@ -1750,11 +1817,14 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			const deletedWorkspaceOrders = result.deletedEntries.filter(entry => entry.kind === 'workspaceOrder').length
 			const deletedTransferJournals = result.deletedEntries.filter(entry => entry.kind === 'transferJournal').length
 			const deletedKinds = [
-				deletedScripts > 0 ? `书签配置 ${deletedScripts} 条（${formatBookmarkLevelSummary(result.bookmarkSummary)}）` : '',
-				deletedWorkspaceOrders > 0 ? `工作区排序记录 ${deletedWorkspaceOrders} 条` : '',
-				deletedTransferJournals > 0 ? `存储迁移记录 ${deletedTransferJournals} 条` : '',
-			].filter(Boolean).join('；') || '无'
-			const message = `书签存储记录清理完成：请求 ${result.requestedFiles} 条，清理 ${result.deletedFiles} 条，跳过 ${skipped} 条；${deletedKinds}。`
+				deletedScripts > 0 ? localize(`书签配置 ${deletedScripts} 条（${formatBookmarkLevelSummary(result.bookmarkSummary)}）`, `${deletedScripts} bookmark configurations (${formatBookmarkLevelSummary(result.bookmarkSummary)})`) : '',
+				deletedWorkspaceOrders > 0 ? localize(`工作区排序记录 ${deletedWorkspaceOrders} 条`, `${deletedWorkspaceOrders} workspace order records`) : '',
+				deletedTransferJournals > 0 ? localize(`存储迁移记录 ${deletedTransferJournals} 条`, `${deletedTransferJournals} storage transfer journals`) : '',
+			].filter(Boolean).join(localize('；', '; ')) || localize('无', 'none')
+			const message = localize(
+				`书签存储记录清理完成：请求 ${result.requestedFiles} 条，清理 ${result.deletedFiles} 条，跳过 ${skipped} 条；${deletedKinds}。`,
+				`Bookmark storage cleanup completed: ${result.requestedFiles} requested, ${result.deletedFiles} removed, ${skipped} skipped; ${deletedKinds}.`,
+			)
 			if (skipped > 0) void vscode.window.showWarningMessage(message)
 			else void vscode.window.showInformationMessage(message)
 		} catch (error) {
@@ -1767,11 +1837,11 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	private async openConfigurationSource(entry: BookmarkConfigurationEntry): Promise<void> {
 		if (entry.kind !== 'script') {
-			void vscode.window.showInformationMessage('这条记录不对应脚本，不能打开脚本。')
+			void vscode.window.showInformationMessage(localize('这条记录不对应脚本，不能打开脚本。', 'This record does not represent a script, so no script can be opened.'))
 			return
 		}
 		if (!entry.scriptPath || !entry.sourceExists) {
-			void vscode.window.showWarningMessage('对应脚本不存在，无法打开。')
+			void vscode.window.showWarningMessage(localize('对应脚本不存在，无法打开。', 'The corresponding script does not exist and cannot be opened.'))
 			return
 		}
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(entry.scriptPath))
@@ -1830,7 +1900,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			queueBookmarkPresenceContexts: () => this.queueBookmarkPresenceContexts(),
 			restoreConfigWatcher: generation => {
 				void this.setupConfigWatcher(generation)
-					.catch(error => logger.error(`恢复书签配置监听器失败: ${errorMessage(error)}`))
+					.catch(error => logger.error(localize(`恢复书签配置监听器失败: ${errorMessage(error)}`, `Failed to restore the bookmark configuration watcher: ${errorMessage(error)}`)))
 			},
 			restoreBackgroundEnhancements: generation => {
 				void this.initializeBackgroundEnhancements(
@@ -1846,7 +1916,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			isCurrent: (generation, storageScope) =>
 				generation === this.viewLoadGeneration && this.currentStorageScope === storageScope,
 			treeVisible: () => this.treeView?.visible === true,
-			reportRefreshFailure: error => logger.error(`刷新书签视图失败: ${errorMessage(error)}`),
+			reportRefreshFailure: error => logger.error(localize(`刷新书签视图失败: ${errorMessage(error)}`, `Failed to refresh the bookmark view: ${errorMessage(error)}`)),
 		}
 	}
 
@@ -1985,7 +2055,10 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			},
 			writeWorkspaceOrder: (filePath, order) => fileUtils.writeJsonFileAsync(filePath, order),
 			reportWorkspaceOrderSaveFailure: () =>
-				logger.showWarningMessage('无法保存撤销后的工作区文件顺序，请检查书签存储路径权限。'),
+				logger.showWarningMessage(localize(
+					'无法保存撤销后的工作区文件顺序，请检查书签存储路径权限。',
+					'Unable to save the restored workspace file order. Check bookmark storage-folder permissions.',
+				)),
 			bookmarkSourcePaths: () => this.codeBookmarks.values
 				.filter(bookmark => bookmark.isFile && bookmark.path)
 				.map(bookmark => this.absoluteBookmarkPath(bookmark.path)),

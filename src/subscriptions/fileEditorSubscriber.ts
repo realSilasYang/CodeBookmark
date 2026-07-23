@@ -3,6 +3,7 @@ import * as path from 'path'
 import { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
 import { bookmarkRepository } from '../repository/BookmarkRepository'
 import { logger } from '../util/Logger'
+import { localize } from '../i18n/Localization'
 import { ExtensionConfig } from '../config/ExtensionConfig'
 import { isExcludedSourceRelativePath } from '../util/SourceFilePolicy'
 export function fileEditorSubscriber(context: vscode.ExtensionContext,
@@ -34,7 +35,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 		sourceAppearanceTimer = setTimeout(() => {
 			sourceAppearanceTimer = undefined
 			void reconcileSourceAppearances().catch(error =>
-				logger.error(`Source file appearance batch rebind failed: ${error}`))
+				logger.error(localize(`源码出现后的批量重新绑定失败：${error}`, `Source file appearance batch rebind failed: ${error}`)))
 		}, 150)
 	}
 	const disposeSourceFileWatchers = (): void => {
@@ -61,7 +62,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 					watcher,
 				)
 			} catch (error) {
-				logger.error(`Unable to watch workspace source files: ${error}`)
+				logger.error(localize(`无法监听工作区源码文件：${error}`, `Unable to watch workspace source files: ${error}`))
 			}
 		}
 	}
@@ -76,7 +77,10 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 			const scheme = editor.document.uri.scheme;
 			// Non-file editors must not switch or overwrite the current workspace bookmark scope.
 			if (scheme !== 'file') return
-			void bookmarkProvider.reloadActiveTab().catch(error => logger.error(`切换文件后加载书签失败: ${error}`))
+			void bookmarkProvider.reloadActiveTab().catch(error => logger.error(localize(
+				`切换文件后加载书签失败: ${error}`,
+				`Failed to load bookmarks after switching files: ${error}`,
+			)))
 		}
 	})
 
@@ -85,7 +89,10 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 			scheduleSourceAppearance(document.uri.fsPath)
 		}
 		void bookmarkProvider.syncCodeMarkersInDocument(document)
-			.catch(error => logger.error(`打开脚本后同步 TODO/FIXME/BUG 失败（${document.uri.fsPath}）: ${error}`))
+			.catch(error => logger.error(localize(
+				`打开脚本后同步 TODO/FIXME/BUG 失败（${document.uri.fsPath}）: ${error}`,
+				`Failed to synchronize TODO/FIXME/BUG bookmarks after opening ${document.uri.fsPath}: ${error}`,
+			)))
 	})
 
 	const createFiles = vscode.workspace.onDidCreateFiles(event => {
@@ -104,16 +111,25 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 				try {
 					await bookmarkRepository.handleFileRename(file.oldUri.fsPath, file.newUri.fsPath)
 				} catch (error) {
-					logger.error(`转移重命名文件的书签配置失败（${file.oldUri.fsPath}）: ${error}`)
+					logger.error(localize(
+						`转移重命名文件的书签配置失败（${file.oldUri.fsPath}）: ${error}`,
+						`Failed to transfer bookmark configuration for renamed file ${file.oldUri.fsPath}: ${error}`,
+					))
 				}
 				try {
 					await bookmarkProvider.onRenameDirectory(file.oldUri.fsPath, file.newUri.fsPath)
 				} catch (error) {
-					logger.error(`更新重命名文件的内存书签失败（${file.oldUri.fsPath}）: ${error}`)
+					logger.error(localize(
+						`更新重命名文件的内存书签失败（${file.oldUri.fsPath}）: ${error}`,
+						`Failed to update in-memory bookmarks for renamed file ${file.oldUri.fsPath}: ${error}`,
+					))
 				}
 			}
 			bookmarkProvider.onSourceFilesChanged()
-		})().catch(error => logger.error(`处理文件重命名事件失败: ${error}`))
+		})().catch(error => logger.error(localize(
+			`处理文件重命名事件失败: ${error}`,
+			`Failed to process file rename event: ${error}`,
+		)))
 	})
 
 	const deleteFiles = vscode.workspace.onDidDeleteFiles(event => {
@@ -122,16 +138,25 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 				try {
 					await bookmarkRepository.handleFileDelete(file.fsPath)
 				} catch (error) {
-					logger.error(`删除文件的书签配置失败（${file.fsPath}）: ${error}`)
+					logger.error(localize(
+						`删除文件的书签配置失败（${file.fsPath}）: ${error}`,
+						`Failed to remove bookmark configuration for deleted file ${file.fsPath}: ${error}`,
+					))
 				}
 				try {
 					bookmarkProvider.onDeleteDirectory(file.fsPath)
 				} catch (error) {
-					logger.error(`更新已删除文件的内存书签失败（${file.fsPath}）: ${error}`)
+					logger.error(localize(
+						`更新已删除文件的内存书签失败（${file.fsPath}）: ${error}`,
+						`Failed to update in-memory bookmarks for deleted file ${file.fsPath}: ${error}`,
+					))
 				}
 			}
 			bookmarkProvider.onSourceFilesChanged()
-		})().catch(error => logger.error(`处理文件删除事件失败: ${error}`))
+		})().catch(error => logger.error(localize(
+			`处理文件删除事件失败: ${error}`,
+			`Failed to process file deletion event: ${error}`,
+		)))
 	})
 
 	const configurationChanges = vscode.workspace.onDidChangeConfiguration(event => {
@@ -140,7 +165,10 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 			bookmarkProvider.refreshExpandCollapseContext()
 		}
 		if (event.affectsConfiguration('codebookmark.globalStoragePath')) {
-			void bookmarkProvider.onStoragePathChanged().catch(error => logger.error(`切换书签存储路径失败: ${error}`))
+			void bookmarkProvider.onStoragePathChanged().catch(error => logger.error(localize(
+				`切换书签存储路径失败: ${error}`,
+				`Failed to switch the bookmark storage path: ${error}`,
+			)))
 		} else if (event.affectsConfiguration('codebookmark.inlineLabel')) {
 			bookmarkProvider.onDisplayConfigurationChanged()
 		}
@@ -148,7 +176,10 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 
 	const workspaceFolderChanges = vscode.workspace.onDidChangeWorkspaceFolders(() => {
 		setupSourceFileWatchers()
-		void bookmarkProvider.onWorkspaceFoldersChanged().catch(error => logger.error(`工作区文件夹变更后加载书签失败: ${error}`))
+		void bookmarkProvider.onWorkspaceFoldersChanged().catch(error => logger.error(localize(
+			`工作区文件夹变更后加载书签失败: ${error}`,
+			`Failed to load bookmarks after workspace folders changed: ${error}`,
+		)))
 	})
 
 	context.subscriptions.push(

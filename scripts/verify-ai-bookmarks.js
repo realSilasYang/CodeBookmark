@@ -12,7 +12,8 @@ const {
   DEFAULT_AI_GENERATION_PROMPT,
   DEFAULT_AI_OPTIMIZATION_PROMPT,
 } = require('../out/util/constants/AIPrompts')
-const manifest = require('../package.json')
+const { loadLocalizedManifest } = require('./localized-manifest')
+const manifest = loadLocalizedManifest('zh-cn')
 const {
   AI_REQUEST_MAX_BYTES,
   AI_RESPONSE_MAX_BYTES,
@@ -58,7 +59,7 @@ const literalNumberPrefix = normalizeAIBookmarkPayload({
   bookmarks: [{ label: '管道文本', lineNumber: 2, anchor: '2 | literal source', children: [] }],
 })[0]
 assert.equal(resolveAIBookmarkLine(['header', '2 | literal source'], literalNumberPrefix), 1)
-assert.throws(() => normalizeAIBookmarkPayload([]), /bookmarks array/)
+assert.throws(() => normalizeAIBookmarkPayload([]), /bookmarks 数组/)
 
 const promotedChild = normalizeAIBookmarkPayload({
   bookmarks: [{
@@ -146,11 +147,15 @@ assert.doesNotMatch(DEFAULT_AI_GENERATION_PROMPT, /"id"/)
 assert.match(DEFAULT_AI_OPTIMIZATION_PROMPT, /new_label/)
 
 const settings = manifest.contributes.configuration[0].properties
-assert.equal(settings['codebookmark.AI.apiKey'].type, 'string')
-assert.equal(settings['codebookmark.AI.apiKey'].description, 'AI 接口密钥（API Key）')
+assert.equal(settings['codebookmark.AI.APIKey'].type, 'string')
+assert.equal(settings['codebookmark.AI.APIKey'].description, 'AI 接口密钥')
 assert.equal(
   settings['codebookmark.AI.model'].markdownDescription,
-  'AI 模型名称。配置 API Key 后可 [验证 AI 连接](command:codebookmark.ai.testConnection)',
+  'AI 模型名称。配置接口地址及所需密钥后可 [验证 AI 连接](command:codebookmark.ai.testConnection)',
+)
+assert.equal(
+  settings['codebookmark.AI.address'].description,
+  '支持资源地址、API Base URL 和完整请求 URL，插件会自动识别并补全。远程服务请使用 HTTPS。',
 )
 assert.equal(settings['codebookmark.AI.prompt'].default, DEFAULT_AI_GENERATION_PROMPT)
 assert.equal(settings['codebookmark.AI.optimizePrompt'].default, DEFAULT_AI_OPTIMIZATION_PROMPT)
@@ -165,8 +170,8 @@ assert.deepEqual(Object.keys(settings), [
   'codebookmark.defaultExpandLevel',
   'codebookmark.autoSpace',
   'codebookmark.inlineLabel',
-  'codebookmark.AI.endpoint',
-  'codebookmark.AI.apiKey',
+  'codebookmark.AI.address',
+  'codebookmark.AI.APIKey',
   'codebookmark.AI.model',
   'codebookmark.AI.assignIcons',
   'codebookmark.AI.timeoutS',
@@ -621,6 +626,9 @@ const singleFileRunnerSource = fs.readFileSync('src/providers/AISingleFileWorkfl
 const folderRunnerSource = fs.readFileSync('src/providers/AIFolderWorkflowRunner.ts', 'utf8')
 const selectedRunnerSource = fs.readFileSync('src/providers/AISelectedBookmarksWorkflowRunner.ts', 'utf8')
 const serviceSource = fs.readFileSync('src/util/AIService.ts', 'utf8')
+const endpointResolverSource = fs.readFileSync('src/util/AIEndpointResolver.ts', 'utf8')
+const protocolCodecSource = fs.readFileSync('src/util/AIProtocolCodec.ts', 'utf8')
+const httpTransportSource = fs.readFileSync('src/util/AIHttpTransport.ts', 'utf8')
 const bookmarkCommandsSource = fs.readFileSync('src/commands/bookmarkCommands.ts', 'utf8')
 const aiWorkflowSource = providerSource + singleFileRunnerSource + folderRunnerSource + selectedRunnerSource
 const aiRunnerSource = singleFileRunnerSource + folderRunnerSource + selectedRunnerSource
@@ -695,16 +703,27 @@ assert.match(folderPresenceSource, /expiresAt > this\.now\(\)/)
 assert.match(workflowGuardSource, /书签已被修改，已停止应用过期结果/)
 assert.match(workflowGuardSource, /书签作用域已切换，已停止应用 AI 结果/)
 assert.match(serviceSource, /confirmSourceSize/)
-assert.match(serviceSource, /res\.pause\(\)/)
-assert.match(serviceSource, /res\.resume\(\)/)
-assert.match(serviceSource, /AI_REQUEST_MAX_BYTES/)
-assert.match(serviceSource, /AI_RESPONSE_MAX_BYTES/)
+assert.match(serviceSource, /resolveAIRequestTargets/)
+assert.match(serviceSource, /return \{ content, address: target\.url\.toString\(\) \}/)
+assert.match(serviceSource, /encodeAIProtocolRequest/)
+assert.match(serviceSource, /decodeAIProtocolResponse/)
+assert.match(serviceSource, /postAIJson/)
+assert.match(serviceSource, /function isUnavailableRouteError/)
+assert.match(serviceSource, /deployment\|model\|resource/)
+assert.match(httpTransportSource, /serviceErrorCode/)
+assert.match(endpointResolverSource, /target\.url\.origin !== origin/)
+assert.match(protocolCodecSource, /store: false/)
+assert.match(httpTransportSource, /response\.pause\(\)/)
+assert.match(httpTransportSource, /response\.resume\(\)/)
+assert.match(httpTransportSource, /AI_REQUEST_MAX_BYTES/)
+assert.match(httpTransportSource, /AI_RESPONSE_MAX_BYTES/)
 assert.match(serviceSource, /MAX_AI_OPTIMIZATION_BATCH = 300/)
 assert.match(bookmarkCommandsSource, /if \(!ExtensionConfig\.ensureAIConfigured\(\)\) return undefined/)
+assert.match(bookmarkCommandsSource, /ExtensionConfig\.updateAIAddress\(successfulAddress\)/)
 assert.match(bookmarkCommandsSource, /aiGenerateSkipFolder\.command,[\s\S]*?withAIConfiguration/)
 assert.match(bookmarkCommandsSource, /aiGenerateAppendFolderDirect\.command,[\s\S]*?withAIConfiguration/)
 assert.match(bookmarkCommandsSource, /aiGenerateOverwriteFolderDirect\.command,[\s\S]*?withAIConfiguration/)
 assert.match(bookmarkCommandsSource, /aiOptimizeFolder\.command,[\s\S]*?withAIConfiguration/)
 assert.doesNotMatch(bookmarkCommandsSource, /aiUnavailable|ai\.unavailable/)
 assert.match(serviceSource, /start \+= MAX_AI_OPTIMIZATION_BATCH/)
-assert.match(serviceSource, /AI 请求总时长超过/)
+assert.match(httpTransportSource, /AI 请求总时长超过/)

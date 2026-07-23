@@ -9,7 +9,8 @@ const { vscode } = createVscodeFake({
   window: {
     showInformationMessage: async (message, ...choices) => {
       informationMessages.push(message)
-      return choices.length > 0 ? promptResults.shift() : undefined
+      const mode = promptResults.shift()
+      return choices.find(choice => choice.mode === mode)
     },
     showWarningMessage: message => { warningMessages.push(message) },
   },
@@ -105,7 +106,7 @@ async function main() {
   attach(nestedParent, nestedChild)
   const nestedTree = new BookmarkSet([nestedParent, nestedSibling])
   const nestedEvents = []
-  promptResults.push('是')
+  promptResults.push('delete')
   await runDeleteBookmarks(
     nestedParent,
     [nestedParent, nestedSibling],
@@ -120,7 +121,7 @@ async function main() {
   attach(file, folder)
   const retainTree = new BookmarkSet([file])
   const retainEvents = []
-  promptResults.push('保留子书签，仅删除当前项')
+  promptResults.push('keepChildren')
   await runDeleteBookmarks(folder, [folder, child], createPort(retainTree, retainEvents, [folder, child]))
   assert.deepEqual(retainEvents, [
     'undo:deleteBookmarks',
@@ -142,7 +143,7 @@ async function main() {
   const container = makeBookmark('container')
   attach(container, cancelled)
   const root = new BookmarkSet([container])
-  promptResults.push('否')
+  promptResults.push('cancel')
   await runDeleteBookmarks(container, undefined, createPort(root, cancelledEvents, [container]))
   assert.deepEqual(cancelledEvents, [])
   assert.equal(root.findBookmark(container), container)

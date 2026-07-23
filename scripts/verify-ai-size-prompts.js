@@ -26,11 +26,11 @@ const {
 } = require('../out/util/AIRequestPolicy')
 restoreModules()
 
-let endpoint = ''
+let configuredAddress = ''
 let timeoutS = 10
 Object.defineProperties(ExtensionConfig, {
-  aiEndpoint: { configurable: true, get: () => endpoint },
-  aiApiKey: { configurable: true, get: () => 'test-key' },
+  aiAddress: { configurable: true, get: () => configuredAddress },
+  aiAPIKey: { configurable: true, get: () => 'test-key' },
   aiModel: { configurable: true, get: () => 'test-model' },
   aiTimeoutS: { configurable: true, get: () => timeoutS },
 })
@@ -56,7 +56,7 @@ async function main() {
   assert.equal(warningMessages.length, 1)
   assert.match(warningMessages[0], /512 KiB/)
 
-  warningHandler = async () => '取消'
+  warningHandler = async () => undefined
   await assert.rejects(
     AIService.confirmSourceSize(AI_SOURCE_WARNING_BYTES + 1, 'large.ts'),
     /主动取消/
@@ -73,20 +73,20 @@ async function main() {
   })
   await listen(server)
   const address = server.address()
-  endpoint = `http://127.0.0.1:${address.port}/v1/chat/completions`
+  configuredAddress = `http://127.0.0.1:${address.port}/v1/chat/completions`
 
   try {
     warningMessages.length = 0
-    warningHandler = async (message) => {
+    warningHandler = async (message, _options, continueAction) => {
       warningMessages.push(message)
-      return '继续接收'
+      return continueAction
     }
     const response = await AIService.sendRequest([{ role: 'user', content: 'hello' }])
-    assert.equal(response.choices[0].message.content.length, oversizedContent.length)
+    assert.equal(response.length, oversizedContent.length)
     assert.equal(warningMessages.length, 1)
     assert.match(warningMessages[0], /2\.00 MiB/)
 
-    warningHandler = async () => '取消'
+    warningHandler = async () => undefined
     await assert.rejects(
       AIService.sendRequest([{ role: 'user', content: 'hello' }]),
       /主动取消/
@@ -105,7 +105,7 @@ async function main() {
     })
     await listen(declaredOversizeServer)
     const declaredAddress = declaredOversizeServer.address()
-    endpoint = `http://127.0.0.1:${declaredAddress.port}/v1/chat/completions`
+    configuredAddress = `http://127.0.0.1:${declaredAddress.port}/v1/chat/completions`
     try {
       await assert.rejects(
         AIService.sendRequest([{ role: 'user', content: 'hello' }]),
@@ -122,8 +122,8 @@ async function main() {
     })
     await listen(chunkedOversizeServer)
     const chunkedAddress = chunkedOversizeServer.address()
-    endpoint = `http://127.0.0.1:${chunkedAddress.port}/v1/chat/completions`
-    warningHandler = async () => '继续接收'
+    configuredAddress = `http://127.0.0.1:${chunkedAddress.port}/v1/chat/completions`
+    warningHandler = async (_message, _options, continueAction) => continueAction
     try {
       await assert.rejects(
         AIService.sendRequest([{ role: 'user', content: 'hello' }]),
@@ -143,7 +143,7 @@ async function main() {
     })
     await listen(slowStreamingServer)
     const slowAddress = slowStreamingServer.address()
-    endpoint = `http://127.0.0.1:${slowAddress.port}/v1/chat/completions`
+    configuredAddress = `http://127.0.0.1:${slowAddress.port}/v1/chat/completions`
     timeoutS = 0.05
     try {
       await assert.rejects(

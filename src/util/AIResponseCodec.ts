@@ -1,8 +1,5 @@
 import { isJsonRecord } from './JsonRecord'
-
-export interface AIResponse {
-	choices?: Array<{ message?: { content?: unknown }, text?: unknown }>
-}
+import { localize } from '../i18n/Localization'
 
 const MAX_ERROR_PREVIEW_LENGTH = 4000
 
@@ -85,7 +82,7 @@ export function repairJsonStringEscapes(value: string): string {
 
 export function parseAIJsonReply(content: unknown, expectedOpening: '{' | '['): unknown {
 	const text = stripMarkdownCodeFence(aiResponseContent(content)).replace(/^\uFEFF/, '')
-	if (!text) throw new Error('AI response content is empty')
+	if (!text) throw new Error(localize('AI 响应内容为空。', 'AI response content is empty.'))
 	const candidates = [text]
 	const start = text.indexOf(expectedOpening)
 	const closing = expectedOpening === '{' ? '}' : ']'
@@ -108,5 +105,7 @@ export function parseAIJsonReply(content: unknown, expectedOpening: '{' | '['): 
 			}
 		}
 	}
-	throw lastError instanceof Error ? lastError : new Error('AI response is not valid JSON')
+	throw lastError instanceof Error
+		? lastError
+		: new Error(localize('AI 响应不是有效的 JSON。', 'AI response is not valid JSON.'))
 }

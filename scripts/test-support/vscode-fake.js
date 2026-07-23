@@ -1,3 +1,5 @@
+const path = require('node:path')
+
 function merge(base, overrides) {
   return { ...base, ...overrides }
 }
@@ -77,6 +79,7 @@ function createVscodeFake(overrides = {}) {
     EventEmitter,
     Uri: {
       file: fsPath => ({ scheme: 'file', fsPath }),
+      joinPath: (base, ...segments) => ({ scheme: base.scheme ?? 'file', fsPath: path.join(base.fsPath, ...segments) }),
     },
     workspace,
     window,

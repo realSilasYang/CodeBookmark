@@ -63,9 +63,13 @@ try {
   assert.equal(restored.isPinned, true)
   assert.equal(restored.subs.values[0].isCodeMarker, true)
 
+  const localization = require('../out/i18n/Localization')
+  localization.initializeLocalization('en')
   assert.throws(() => Bookmark.fromJSON([]), /Invalid bookmark data/)
   assert.throws(() => Bookmark.fromJSON({ ...expected, params: '4,0,3,0' }), /position range/)
   assert.throws(() => Bookmark.fromJSON({ ...expected, codeMarker: { type: 'unknown' } }), /metadata/)
+  localization.initializeLocalization('zh-cn')
+  assert.throws(() => Bookmark.fromJSON([]), /书签数据无效/)
 } finally {
   restoreModules()
 }

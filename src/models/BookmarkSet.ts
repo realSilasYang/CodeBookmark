@@ -1,4 +1,5 @@
 import { logger } from '../util/Logger';
+import { localize } from '../i18n/Localization'
 import type { Bookmark } from './Bookmark';
 import path = require('path')
 import * as vscode from 'vscode'
@@ -132,7 +133,7 @@ export class BookmarkSet {
 	moveGroupToNode(group: BookmarkSet, target: Bookmark | undefined): boolean {
 		const isChild = target?.isChildOf(group)
 		if (isChild) {
-			logger.showWarningMessage('不能把父书签移动到它的子书签中。')
+			logger.showWarningMessage(localize('不能把父书签移动到它的子书签中。', 'A parent bookmark cannot be moved into one of its children.'))
 			return false
 		}
 		const items = [...group]
@@ -159,7 +160,7 @@ export class BookmarkSet {
 	changeIndexNode(group: BookmarkSet, target: Bookmark | undefined): boolean {
 		const isChild = target?.isChildOf(group)
 		if (isChild) {
-			logger.showWarningMessage('不能把父书签移动到它的子书签之前。')
+			logger.showWarningMessage(localize('不能把父书签移动到它的子书签之前。', 'A parent bookmark cannot be moved before one of its children.'))
 			return false
 		}
 		if (!target) return false

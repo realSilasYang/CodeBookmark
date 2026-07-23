@@ -4,11 +4,12 @@ const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8')
-const manifest = JSON.parse(read('package.json'))
+const { loadLocalizedManifest } = require('./localized-manifest')
+const manifest = loadLocalizedManifest('zh-cn')
 const lockfile = JSON.parse(read('package-lock.json'))
 
 assert.equal(manifest.name, 'codebookmark')
-assert.equal(manifest.displayName, 'CodeBookmark')
+assert.equal(manifest.displayName, '代码书签 - CodeBookmark')
 assert.equal(manifest.author, '阳熙来')
 assert.equal(manifest.private, true, 'private must prevent accidental npm publication')
 assert.equal(manifest.license, 'MIT')
@@ -40,10 +41,13 @@ assert.deepEqual(manifest.dependencies, lockfile.packages[''].dependencies ?? {}
 assert.deepEqual(manifest.devDependencies, lockfile.packages[''].devDependencies ?? {})
 
 assert.deepEqual(manifest.files, [
-  'out/**/*.js',
+  'out/extension.js',
   'resources',
+  'package.nls*.json',
   'README.md',
+  'README.en.md',
   'CHANGELOG.md',
+  'CHANGELOG.en.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'THIRD_PARTY_LICENSES',
@@ -52,19 +56,30 @@ assert.equal(manifest.scripts['package:list'], 'npx --yes @vscode/vsce@3.9.2 ls 
 assert.equal(manifest.scripts['package:vsix'], 'npx --yes @vscode/vsce@3.9.2 package --no-dependencies')
 assert.match(manifest.scripts['check:release'], /npm run verify/)
 assert.match(manifest.scripts['check:release'], /npm run test:integration/)
-assert.match(manifest.scripts['check:release'], /npm audit --audit-level=high/)
+assert.equal(manifest.scripts.bundle, 'node scripts/bundle-extension.js')
+assert.match(manifest.scripts.compile, /npm run bundle/)
+assert.match(manifest.scripts['check:release'], /npm audit --audit-level=low/)
 assert.match(manifest.scripts['check:release'], /npm run package:list/)
 
 const requiredSourceDocuments = [
   'README.md',
+  'README.en.md',
   'CHANGELOG.md',
+  'CHANGELOG.en.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   path.join('docs', 'RELEASING.md'),
+  path.join('docs', 'RELEASING.en.md'),
+  path.join('docs', 'CHANGELOG_TEMPLATE.md'),
+  path.join('docs', 'CHANGELOG_TEMPLATE.en.md'),
   path.join('.github', 'CONTRIBUTING.md'),
+  path.join('.github', 'CONTRIBUTING.en.md'),
   path.join('.github', 'SECURITY.md'),
+  path.join('.github', 'SECURITY.en.md'),
   path.join('.github', 'SUPPORT.md'),
+  path.join('.github', 'SUPPORT.en.md'),
   path.join('.github', 'PULL_REQUEST_TEMPLATE.md'),
+  path.join('.github', 'PULL_REQUEST_TEMPLATE.en.md'),
   path.join('.github', 'dependabot.yml'),
   path.join('.github', 'ISSUE_TEMPLATE', 'bug-report--zh-cn.md'),
   path.join('.github', 'ISSUE_TEMPLATE', 'bug-report.md'),
@@ -126,16 +141,25 @@ assert.match(issueTemplateConfig, /^blank_issues_enabled: false$/m)
 assert.match(issueTemplateConfig, /\/security\/advisories\/new/)
 
 const changelog = read('CHANGELOG.md')
+const englishChangelog = read('CHANGELOG.en.md')
 const license = read('LICENSE')
 const readme = read('README.md')
+const englishReadme = read('README.en.md')
 const notices = read('THIRD_PARTY_NOTICES.md')
 const icon = fs.readFileSync(path.join(root, manifest.icon))
+assert.match(readme, /<h1>代码书签 - CodeBookmark<\/h1>/)
+assert.match(englishReadme, /<h1>Code Bookmarks - CodeBookmark<\/h1>/)
 const repositoryMarkdownDocuments = [
   ['README.md', readme],
+  ['README.en.md', englishReadme],
   [path.join('docs', 'RELEASING.md'), read(path.join('docs', 'RELEASING.md'))],
+  [path.join('docs', 'RELEASING.en.md'), read(path.join('docs', 'RELEASING.en.md'))],
   [path.join('.github', 'CONTRIBUTING.md'), read(path.join('.github', 'CONTRIBUTING.md'))],
+  [path.join('.github', 'CONTRIBUTING.en.md'), read(path.join('.github', 'CONTRIBUTING.en.md'))],
   [path.join('.github', 'SECURITY.md'), read(path.join('.github', 'SECURITY.md'))],
+  [path.join('.github', 'SECURITY.en.md'), read(path.join('.github', 'SECURITY.en.md'))],
   [path.join('.github', 'SUPPORT.md'), read(path.join('.github', 'SUPPORT.md'))],
+  [path.join('.github', 'SUPPORT.en.md'), read(path.join('.github', 'SUPPORT.en.md'))],
 ]
 for (const [documentName, content] of repositoryMarkdownDocuments) {
   const markdownLinks = [...content.matchAll(/(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)]
@@ -150,11 +174,22 @@ for (const [documentName, content] of repositoryMarkdownDocuments) {
 assert.deepEqual([...icon.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10])
 assert.ok(icon.readUInt32BE(16) >= 128, 'Marketplace icon width must be at least 128 px')
 assert.ok(icon.readUInt32BE(20) >= 128, 'Marketplace icon height must be at least 128 px')
-assert.match(changelog, new RegExp(`^## ${manifest.version.replace(/\./g, '\\.')}\\b`, 'm'))
+assert.match(
+  changelog,
+  new RegExp(`^## 🎉 版本 ${manifest.version.replace(/\./g, '\\.')} - \\d{4}-\\d{2}-\\d{2}$`, 'm'),
+)
+assert.match(changelog, /^# 📋 更新日志$/m)
+assert.match(
+  englishChangelog,
+  new RegExp(`^## 🎉 Version ${manifest.version.replace(/\./g, '\\.') } - \\d{4}-\\d{2}-\\d{2}$`, 'm'),
+)
+assert.match(englishChangelog, /^# 📋 Changelog$/m)
+assert.doesNotMatch(changelog, /^### (?:Added|Changed|Fixed|Removed|Security)$/m)
 assert.match(license, /Copyright \(c\) 2026 阳熙来/)
 assert.match(readme, /\[发布指南\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/RELEASING\.md\)/)
+assert.match(englishReadme, /\[English release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/RELEASING\.en\.md\)/)
 assert.match(notices, /`fxemoji`[^\n]+CC-BY-4\.0/)
-for (const [documentName, content] of [['README.md', readme], ['CHANGELOG.md', changelog]]) {
+for (const [documentName, content] of [['README.md', readme], ['README.en.md', englishReadme], ['CHANGELOG.md', changelog], ['CHANGELOG.en.md', englishChangelog]]) {
   const markdownImages = [...content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)]
   const htmlImages = [...content.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
   for (const target of [...markdownImages, ...htmlImages].map(match => match[1])) {
@@ -175,7 +210,7 @@ assert.match(ci, /push:\s*\r?\n\s+branches:\s*\r?\n\s+- main/)
 assert.match(ci, /pull_request:/)
 assert.match(ci, /npm run verify/)
 assert.match(ci, /npm run test:integration/)
-assert.match(ci, /npm audit --audit-level=high/)
+assert.match(ci, /npm audit --audit-level=low/)
 assert.match(ci, /npm run package:vsix/)
 const dependabot = read(path.join('.github', 'dependabot.yml'))
 assert.match(dependabot, /package-ecosystem: npm[\s\S]*dependency-name: typescript[\s\S]*">=7\.0\.0 <8\.0\.0"/)
@@ -219,16 +254,25 @@ assert.doesNotMatch(releaseWorkflow, /secrets\./)
 assert.doesNotMatch(releaseWorkflow, /--pat\b/)
 assert.match(releaseWorkflow, /_apis\/public\/gallery\/publishers/)
 assert.match(releaseWorkflow, /Get-FileHash -Algorithm SHA256/)
+assert.match(releaseWorkflow, /scripts\/build-release-notes\.js/)
+assert.match(releaseWorkflow, /--notes-file/)
+assert.match(releaseWorkflow, /gh release edit/)
 assert.match(releaseWorkflow, /gh release create/)
 assert.match(releaseWorkflow, /gh release upload/)
+assert.doesNotMatch(releaseWorkflow, /--generate-notes/)
 assert.match(releaseWorkflow, /group: release/)
 const publishStep = releaseWorkflow.indexOf('Publish to VS Code Marketplace')
 const authenticateStep = releaseWorkflow.indexOf('Authenticate to Microsoft Entra ID')
+const releaseNotesStep = releaseWorkflow.indexOf('Build Chinese release notes')
 const verifyStep = releaseWorkflow.indexOf('Verify Marketplace package matches VSIX')
 const createReleaseStep = releaseWorkflow.indexOf('Create or update GitHub release')
 assert.ok(
   authenticateStep !== -1 && publishStep !== -1 && authenticateStep < publishStep,
   'Microsoft Entra ID authentication must complete before Marketplace publication'
+)
+assert.ok(
+  releaseNotesStep !== -1 && publishStep !== -1 && releaseNotesStep < publishStep,
+  'Chinese release notes must be validated before Marketplace publication'
 )
 assert.ok(
   publishStep !== -1 && createReleaseStep !== -1 && publishStep < createReleaseStep,

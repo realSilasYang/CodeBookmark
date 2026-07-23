@@ -1,5 +1,7 @@
 # 参与贡献
 
+[简体中文](./CONTRIBUTING.md) · [English](./CONTRIBUTING.en.md)
+
 感谢你为 CodeBookmark 提交问题、文档或代码改进。
 
 提交普通缺陷、功能建议或改进建议时，请使用仓库提供的 Issue 模板；使用问题请先阅读 [SUPPORT.md](SUPPORT.md)。尚未修复的安全漏洞必须按照 [SECURITY.md](SECURITY.md) 私密报告。
@@ -22,7 +24,7 @@ npm run compile
 ```bash
 npm run verify
 npm run test:integration
-npm audit --audit-level=high
+npm audit --audit-level=low
 ```
 
 ## 修改约定

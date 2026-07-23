@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as vscode from 'vscode'
+import { currentFormattingLocale, localize } from '../i18n/Localization'
 import { Bookmark, bookmarkLabelText } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
 import type { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
@@ -38,6 +39,8 @@ interface FileExportTarget {
 	absolutePath: string
 }
 
+type BookmarkExportStatus = 'valid' | 'automatic' | 'invalid'
+
 function collectRecords(
 	bookmarkSet: BookmarkSet,
 	out: ExportRecord[],
@@ -50,7 +53,7 @@ function collectRecords(
 			continue
 		}
 		const nextFilePath = bookmark.path || filePath
-		out.push({ bookmark, filePath: nextFilePath || '未指定文件', depth })
+		out.push({ bookmark, filePath: nextFilePath || localize('未指定文件', 'Unspecified file'), depth })
 		if (bookmark.subs.size > 0) collectRecords(bookmark.subs, out, nextFilePath, depth + 1)
 	}
 }
@@ -141,19 +144,28 @@ function csvCell(value: string | number): string {
 }
 
 function displayLabel(bookmark: Bookmark): string {
-	return bookmarkLabelText(bookmark.label).trim() || '未命名书签'
+	return bookmarkLabelText(bookmark.label).trim() || localize('未命名书签', 'Untitled bookmark')
 }
 
-function bookmarkStatus(bookmark: Bookmark): string {
-	if (bookmark.isBookmarkInvalid) return '失效'
-	return bookmark.isCodeMarker ? '自动标记' : '有效'
+function bookmarkStatus(bookmark: Bookmark): BookmarkExportStatus {
+	if (bookmark.isBookmarkInvalid) return 'invalid'
+	return bookmark.isCodeMarker ? 'automatic' : 'valid'
+}
+
+function bookmarkStatusLabel(status: BookmarkExportStatus): string {
+	if (status === 'invalid') return localize('失效', 'Invalid')
+	if (status === 'automatic') return localize('自动标记', 'Automatic marker')
+	return localize('有效', 'Valid')
 }
 
 function formatMarkdown(groups: readonly ExportGroup[], total: number): string {
 	const lines = [
-		'# CodeBookmark 书签导出',
+		localize('# CodeBookmark 书签导出', '# CodeBookmark Bookmark Export'),
 		'',
-		`> 共 ${total} 个书签 · ${groups.length} 个文件 · 导出时间：${new Date().toLocaleString()}`,
+		localize(
+			`> 共 ${total} 个书签 · ${groups.length} 个文件 · 导出时间：${new Date().toLocaleString(currentFormattingLocale())}`,
+			`> ${total} bookmarks · ${groups.length} files · Exported: ${new Date().toLocaleString(currentFormattingLocale())}`,
+		),
 		'',
 	]
 	for (const group of groups) {
@@ -162,9 +174,12 @@ function formatMarkdown(groups: readonly ExportGroup[], total: number): string {
 			const bookmark = record.bookmark
 			const indent = '  '.repeat(record.depth)
 			const status = bookmarkStatus(bookmark)
-			const statusText = status === '有效' ? '' : ` · ${status}`
+			const statusText = status === 'valid' ? '' : ` · ${bookmarkStatusLabel(status)}`
 			const content = inlineCode(bookmark.content ?? '')
-			lines.push(`${indent}- **${markdownText(displayLabel(bookmark))}** — 第 ${bookmark.start.line + 1} 行${statusText}`)
+			lines.push(localize(
+				`${indent}- **${markdownText(displayLabel(bookmark))}** — 第 ${bookmark.start.line + 1} 行${statusText}`,
+				`${indent}- **${markdownText(displayLabel(bookmark))}** — Line ${bookmark.start.line + 1}${statusText}`,
+			))
 			if (content) lines.push(`${indent}  - ${content}`)
 		}
 		lines.push('')
@@ -182,7 +197,7 @@ function formatHtml(groups: readonly ExportGroup[], total: number): string {
 				`            <td class="line">${bookmark.start.line + 1}</td>`,
 				`            <td><span class="bookmark-label" style="--depth:${record.depth}">${htmlText(displayLabel(bookmark))}</span></td>`,
 				`            <td><code>${htmlText(bookmark.content ?? '—')}</code></td>`,
-				`            <td><span class="status status-${status === '失效' ? 'invalid' : status === '自动标记' ? 'automatic' : 'valid'}">${status}</span></td>`,
+				`            <td><span class="status status-${status}">${bookmarkStatusLabel(status)}</span></td>`,
 				'          </tr>',
 			].join('\n')
 		}).join('\n')
@@ -190,7 +205,7 @@ function formatHtml(groups: readonly ExportGroup[], total: number): string {
       <h2>${htmlText(group.filePath)}</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>行号</th><th>书签</th><th>代码内容</th><th>状态</th></tr></thead>
+          <thead><tr><th>${localize('行号', 'Line')}</th><th>${localize('书签', 'Bookmark')}</th><th>${localize('代码内容', 'Code')}</th><th>${localize('状态', 'Status')}</th></tr></thead>
           <tbody>
 ${rows}
           </tbody>
@@ -199,11 +214,11 @@ ${rows}
     </section>`
 	}).join('\n')
 	return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${localize('zh-CN', 'en')}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CodeBookmark 书签导出</title>
+  <title>${localize('CodeBookmark 书签导出', 'CodeBookmark Bookmark Export')}</title>
   <style>
     :root{color-scheme:light dark;--bg:#fff;--panel:#f6f8fa;--text:#1f2328;--muted:#59636e;--border:#d0d7de;--accent:#0969da}
     @media(prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#161b22;--text:#e6edf3;--muted:#8b949e;--border:#30363d;--accent:#58a6ff}}
@@ -217,8 +232,11 @@ ${rows}
 </head>
 <body>
   <header>
-    <h1>CodeBookmark 书签导出</h1>
-    <p>共 ${total} 个书签 · ${groups.length} 个文件 · 导出时间：${htmlText(new Date().toLocaleString())}</p>
+    <h1>${localize('CodeBookmark 书签导出', 'CodeBookmark Bookmark Export')}</h1>
+    <p>${localize(
+		`共 ${total} 个书签 · ${groups.length} 个文件 · 导出时间：${htmlText(new Date().toLocaleString(currentFormattingLocale()))}`,
+		`${total} bookmarks · ${groups.length} files · Exported: ${htmlText(new Date().toLocaleString(currentFormattingLocale()))}`,
+	)}</p>
   </header>
 ${sections}
 </body>
@@ -227,7 +245,7 @@ ${sections}
 }
 
 function formatCsv(groups: readonly ExportGroup[]): string {
-	const lines = ['文件,行号,列号,层级,状态,标签,代码内容']
+	const lines = [localize('文件,行号,列号,层级,状态,标签,代码内容', 'File,Line,Column,Level,Status,Label,Code')]
 	for (const group of groups) {
 		for (const record of group.records) {
 			const bookmark = record.bookmark
@@ -236,7 +254,7 @@ function formatCsv(groups: readonly ExportGroup[]): string {
 				bookmark.start.line + 1,
 				bookmark.start.column + 1,
 				record.depth + 1,
-				bookmarkStatus(bookmark),
+				bookmarkStatusLabel(bookmarkStatus(bookmark)),
 				displayLabel(bookmark),
 				bookmark.content ?? '',
 			].map(csvCell).join(','))
@@ -247,22 +265,22 @@ function formatCsv(groups: readonly ExportGroup[]): string {
 
 function formatText(groups: readonly ExportGroup[], total: number): string {
 	const lines = [
-		'CodeBookmark 书签导出',
+		localize('CodeBookmark 书签导出', 'CodeBookmark Bookmark Export'),
 		'='.repeat(28),
-		`共 ${total} 个书签 · ${groups.length} 个文件`,
-		`导出时间：${new Date().toLocaleString()}`,
+		localize(`共 ${total} 个书签 · ${groups.length} 个文件`, `${total} bookmarks · ${groups.length} files`),
+		localize(`导出时间：${new Date().toLocaleString(currentFormattingLocale())}`, `Exported: ${new Date().toLocaleString(currentFormattingLocale())}`),
 		'',
 	]
 	for (const group of groups) {
-		lines.push(`【${group.filePath}】`, '-'.repeat(28))
+		lines.push(localize(`【${group.filePath}】`, `[${group.filePath}]`), '-'.repeat(28))
 		for (const record of group.records) {
 			const bookmark = record.bookmark
 			const indent = '  '.repeat(record.depth)
 			const status = bookmarkStatus(bookmark)
-			const statusText = status === '有效' ? '' : ` [${status}]`
+			const statusText = status === 'valid' ? '' : ` [${bookmarkStatusLabel(status)}]`
 			lines.push(`${indent}${bookmark.start.line + 1}:${bookmark.start.column + 1}  ${displayLabel(bookmark)}${statusText}`)
 			const content = (bookmark.content ?? '').replace(/\r?\n/g, ' ').trim()
-			if (content) lines.push(`${indent}  代码：${content}`)
+			if (content) lines.push(localize(`${indent}  代码：${content}`, `${indent}  Code: ${content}`))
 		}
 		lines.push('')
 	}
@@ -286,8 +304,8 @@ function formatLabel(format: BatchExportFormat): string {
 	return format === 'markdown' ? 'Markdown'
 		: format === 'html' ? 'HTML'
 			: format === 'csv' ? 'CSV'
-				: format === 'text' ? '纯文本'
-					: '书签配置源文件'
+				: format === 'text' ? localize('纯文本', 'Plain Text')
+					: localize('书签配置源文件', 'Bookmark Configuration Source')
 }
 
 function ensureExtension(filePath: string, extension: string): string {
@@ -322,14 +340,14 @@ function defaultExportDirectory(): string | undefined {
 async function chooseSavePath(format: ReadableExportFormat): Promise<vscode.Uri | undefined> {
 	const defaultDirectory = defaultExportDirectory()
 	const defaultUri = defaultDirectory
-		? vscode.Uri.file(path.join(defaultDirectory, `CodeBookmark-书签导出${extensionFor(format)}`))
+		? vscode.Uri.file(path.join(defaultDirectory, `${localize('CodeBookmark-书签导出', 'CodeBookmark-Bookmark-Export')}${extensionFor(format)}`))
 		: undefined
 	return vscode.window.showSaveDialog({
-		title: `导出为 ${formatLabel(format)}`,
+		title: localize(`导出为 ${formatLabel(format)}`, `Export as ${formatLabel(format)}`),
 		filters: format === 'markdown' ? { Markdown: ['md'] }
 			: format === 'html' ? { HTML: ['html'] }
 				: format === 'csv' ? { CSV: ['csv'] }
-					: { '纯文本': ['txt'] },
+					: { [localize('纯文本', 'Plain Text')]: ['txt'] },
 		defaultUri,
 	})
 }
@@ -340,7 +358,7 @@ async function chooseExportDirectory(title: string): Promise<vscode.Uri | undefi
 		canSelectFiles: false,
 		canSelectFolders: true,
 		canSelectMany: false,
-		openLabel: '选择导出目录',
+		openLabel: localize('选择导出目录', 'Select Export Folder'),
 		title,
 		defaultUri: defaultDirectory ? vscode.Uri.file(defaultDirectory) : undefined,
 	})
@@ -376,7 +394,7 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 		const records: ExportRecord[] = []
 		collectRecords(provider.codeBookmarks, records)
 		if (records.length === 0) {
-			void vscode.window.showInformationMessage('没有可导出的书签。')
+			void vscode.window.showInformationMessage(localize('没有可导出的书签。', 'There are no bookmarks to export.'))
 			return undefined
 		}
 		return groupRecords(records)
@@ -392,9 +410,15 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 			const summary = summarizeBookmarkLevels(groups.flatMap(group => group.records.map(record => record.depth + 1)))
 			const filePath = ensureExtension(target.fsPath, extensionFor(format))
 			await writeUtf8(filePath, formatContent(format, groups, total))
-			void vscode.window.showInformationMessage(`书签导出完成，导出结果：${formatBookmarkLevelSummary(summary)}；文件：${path.basename(filePath)}。`)
+			void vscode.window.showInformationMessage(localize(
+				`书签导出完成，导出结果：${formatBookmarkLevelSummary(summary)}；文件：${path.basename(filePath)}。`,
+				`Bookmark export completed. Exported: ${formatBookmarkLevelSummary(summary)}. File: ${path.basename(filePath)}.`,
+			))
 		} catch (error) {
-			void vscode.window.showErrorMessage(`导出失败：${error instanceof Error ? error.message : String(error)}`)
+			void vscode.window.showErrorMessage(localize(
+				`导出失败：${error instanceof Error ? error.message : String(error)}`,
+				`Export failed: ${error instanceof Error ? error.message : String(error)}`,
+			))
 		}
 	}
 
@@ -402,12 +426,12 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 		const scopeUri = activeFileUri()
 		const targets = fileExportTargets(provider.codeBookmarks, scopeUri)
 		if (targets.length === 0) {
-			void vscode.window.showInformationMessage('没有可导出的书签配置源文件。')
+			void vscode.window.showInformationMessage(localize('没有可导出的书签配置源文件。', 'There are no bookmark configuration source files to export.'))
 			return
 		}
-		const selectedFolder = await chooseExportDirectory('选择书签配置源文件导出目录')
+		const selectedFolder = await chooseExportDirectory(localize('选择书签配置源文件导出目录', 'Select a Folder for Bookmark Configuration Sources'))
 		if (!selectedFolder) return
-		const outputFolder = path.join(selectedFolder.fsPath, `CodeBookmark-书签配置源文件-${timestamp()}`)
+		const outputFolder = path.join(selectedFolder.fsPath, `${localize('CodeBookmark-书签配置源文件', 'CodeBookmark-Configuration-Sources')}-${timestamp()}`)
 		const baseDirectory = directSourceBaseDirectory(targets)
 		let exported = 0
 		let failed = 0
@@ -428,19 +452,28 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 					failed++
 				}
 			}
-			if (exported === 0) throw new Error('当前书签对应的配置源文件均不存在或无法读取。')
-			const failedText = failed > 0 ? `，${failed} 个文件导出失败` : ''
+			if (exported === 0) throw new Error(localize('当前书签对应的配置源文件均不存在或无法读取。', 'None of the configuration source files for the current bookmarks exist or can be read.'))
+			const failedText = failed > 0 ? localize(`，${failed} 个文件导出失败`, `; ${failed} files failed`) : ''
 			const summary = mergeBookmarkLevelSummaries(...exportedSummaries)
-			void vscode.window.showInformationMessage(`书签配置源文件导出完成：成功 ${exported} 个文件${failedText}；导出结果：${formatBookmarkLevelSummary(summary)}；目录：${path.basename(outputFolder)}。`)
+			void vscode.window.showInformationMessage(localize(
+				`书签配置源文件导出完成：成功 ${exported} 个文件${failedText}；导出结果：${formatBookmarkLevelSummary(summary)}；目录：${path.basename(outputFolder)}。`,
+				`Bookmark configuration source export completed: ${exported} files succeeded${failedText}. Exported: ${formatBookmarkLevelSummary(summary)}. Folder: ${path.basename(outputFolder)}.`,
+			))
 		} catch (error) {
-			void vscode.window.showErrorMessage(`导出书签配置源文件失败：${error instanceof Error ? error.message : String(error)}`)
+			void vscode.window.showErrorMessage(localize(
+				`导出书签配置源文件失败：${error instanceof Error ? error.message : String(error)}`,
+				`Failed to export bookmark configuration sources: ${error instanceof Error ? error.message : String(error)}`,
+			))
 		}
 	}
 
 	const batchExport = (format: BatchExportFormat) => async (): Promise<void> => {
 		const activeUri = activeFileUri()
 		if (!activeUri) {
-			void vscode.window.showInformationMessage('请先打开当前文件夹中的任意本地文件，再执行批量导出。')
+			void vscode.window.showInformationMessage(localize(
+				'请先打开当前文件夹中的任意本地文件，再执行批量导出。',
+				'Open any local file in the current folder before running a batch export.',
+			))
 			return
 		}
 		const currentFolder = path.dirname(activeUri.fsPath)
@@ -448,12 +481,18 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 			.filter(target => isSameOrDescendantAbsolutePath(target.absolutePath, currentFolder))
 			.sort((left, right) => left.absolutePath.localeCompare(right.absolutePath))
 		if (targets.length === 0) {
-			void vscode.window.showInformationMessage('当前文件夹及其子目录中没有包含书签的文件。')
+			void vscode.window.showInformationMessage(localize(
+				'当前文件夹及其子目录中没有包含书签的文件。',
+				'No files with bookmarks were found in the current folder or its subfolders.',
+			))
 			return
 		}
-		const selectedFolder = await chooseExportDirectory(`选择批量导出为 ${formatLabel(format)} 的目标目录`)
+		const selectedFolder = await chooseExportDirectory(localize(
+			`选择批量导出为 ${formatLabel(format)} 的目标目录`,
+			`Select a Destination for the ${formatLabel(format)} Batch Export`,
+		))
 		if (!selectedFolder) return
-		const outputFolder = path.join(selectedFolder.fsPath, `CodeBookmark-批量导出-${formatLabel(format)}-${timestamp()}`)
+		const outputFolder = path.join(selectedFolder.fsPath, `${localize('CodeBookmark-批量导出', 'CodeBookmark-Batch-Export')}-${formatLabel(format)}-${timestamp()}`)
 		let exported = 0
 		let failed = 0
 		const exportedSummaries: BookmarkLevelSummary[] = []
@@ -461,7 +500,7 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 			if (format === 'source') await provider.flushPendingSaves(true)
 			await vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
-				title: `正在批量导出为 ${formatLabel(format)}`,
+				title: localize(`正在批量导出为 ${formatLabel(format)}`, `Batch exporting as ${formatLabel(format)}`),
 				cancellable: false,
 			}, async progress => {
 				for (let index = 0; index < targets.length; index++) {
@@ -471,11 +510,11 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 						const summary = summarizeBookmarkTrees(target.fileNode.subs)
 						if (format === 'source') {
 							const sourcePath = sourcePathForFileNode(target.fileNode)
-							if (!sourcePath) throw new Error('找不到书签配置源文件')
+							if (!sourcePath) throw new Error(localize('找不到书签配置源文件', 'Bookmark configuration source file not found.'))
 							await writeReadableSourceConfig(sourcePath, sourceTargetPath(outputFolder, currentFolder, target.absolutePath))
 						} else {
 							const group = exportGroupForFile(target.fileNode)
-							if (!group) throw new Error('文件没有可导出的书签')
+							if (!group) throw new Error(localize('文件没有可导出的书签', 'The file has no bookmarks to export.'))
 							await writeUtf8(
 								readableTargetPath(outputFolder, currentFolder, target.absolutePath, format),
 								formatContent(format, [group], group.records.length),
@@ -488,14 +527,20 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 					}
 				}
 			})
-			if (exported === 0) throw new Error('所有文件均导出失败。')
-			const failedText = failed > 0 ? `；${failed} 个文件导出失败` : ''
+			if (exported === 0) throw new Error(localize('所有文件均导出失败。', 'Every file failed to export.'))
+			const failedText = failed > 0 ? localize(`；${failed} 个文件导出失败`, `; ${failed} files failed`) : ''
 			const summary = mergeBookmarkLevelSummaries(...exportedSummaries)
 			void vscode.window.showInformationMessage(
-				`当前文件夹批量导出完成：成功 ${exported} 个有书签的文件${failedText}；导出结果：${formatBookmarkLevelSummary(summary)}；目录：${path.basename(outputFolder)}。`,
+				localize(
+					`当前文件夹批量导出完成：成功 ${exported} 个有书签的文件${failedText}；导出结果：${formatBookmarkLevelSummary(summary)}；目录：${path.basename(outputFolder)}。`,
+					`Batch export for the current folder completed: ${exported} files with bookmarks succeeded${failedText}. Exported: ${formatBookmarkLevelSummary(summary)}. Folder: ${path.basename(outputFolder)}.`,
+				),
 			)
 		} catch (error) {
-			void vscode.window.showErrorMessage(`批量导出失败：${error instanceof Error ? error.message : String(error)}`)
+			void vscode.window.showErrorMessage(localize(
+				`批量导出失败：${error instanceof Error ? error.message : String(error)}`,
+				`Batch export failed: ${error instanceof Error ? error.message : String(error)}`,
+			))
 		}
 	}
 

@@ -1,19 +1,31 @@
 import * as vscode from 'vscode';
+import { currentLanguage, localize } from '../i18n/Localization';
 
 class Logger implements vscode.Disposable {
 	private channel = vscode.window.createOutputChannel('CodeBookmark');
+	private disposed = false
+
+	private appendLine(message: string): void {
+		if (this.disposed) return
+		try {
+			this.channel.appendLine(message)
+		} catch {
+			// VS Code can close output channels before extension deactivation finishes.
+		}
+	}
 
 	private normalizeMessage(message: unknown): string {
-		return String(message).replace(/\(/g, '（').replace(/\)/g, '）')
+		const text = String(message)
+		return currentLanguage() === 'zh-cn' ? text.replace(/\(/g, '（').replace(/\)/g, '）') : text
 	}
 
 	info(message: unknown) {
-		this.channel.appendLine(`[INFO] ${this.normalizeMessage(message)}`);
+		this.appendLine(`${localize('[信息]', '[INFO]')} ${this.normalizeMessage(message)}`);
 	}
 
 	error(message: unknown) {
 		console.error(message);
-		this.channel.appendLine(`[ERROR] ${this.normalizeMessage(message)}`);
+		this.appendLine(`${localize('[错误]', '[ERROR]')} ${this.normalizeMessage(message)}`);
 	}
 
 	showWarningMessage(message: string) {
@@ -24,6 +36,7 @@ class Logger implements vscode.Disposable {
 	}
 
 	dispose() {
+		this.disposed = true
 		this.channel.dispose();
 	}
 }

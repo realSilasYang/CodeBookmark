@@ -1,8 +1,8 @@
 {
   "name": "codebookmark",
-  "displayName": "CodeBookmark",
-  "description": "让代码书签通过粘性引擎持续绑定脚本并跟随代码，支持本地保存、AI 辅助、书签标签与丰富图标。",
-  "version": "1.1.1",
+  "displayName": "%codebookmark.displayName%",
+  "description": "%codebookmark.description%",
+  "version": "2.0.0",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -54,10 +54,13 @@
   ],
   "main": "./out/extension.js",
   "files": [
-    "out/**/*.js",
+    "out/extension.js",
     "resources",
+    "package.nls*.json",
     "README.md",
+    "README.en.md",
     "CHANGELOG.md",
+    "CHANGELOG.en.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "THIRD_PARTY_LICENSES"
@@ -65,21 +68,23 @@
   "scripts": {
     "generate-package-json": "node generate-package-json.js",
     "vscode:prepublish": "npm run compile",
-    "compile": "node scripts/clean-output.js && tsc -p ./ && node generate-package-json.js",
+    "bundle": "node scripts/bundle-extension.js",
+    "compile": "node scripts/clean-output.js && tsc -p ./ && npm run bundle && node generate-package-json.js",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint \"src/**/*.ts\" \"generate-package-json.js\" \"scripts/**/*.js\"",
+    "lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"generate-package-json.js\" \"scripts/**/*.js\"",
     "verify": "npm run compile && npm run lint && node scripts/verify-all.js",
     "test:integration": "npm run compile && node scripts/run-integration-tests.js",
     "verify:icons": "node scripts/verify-icon-assets.js",
     "package:list": "npx --yes @vscode/vsce@3.9.2 ls --no-dependencies",
     "package:vsix": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
-    "check:release": "npm run verify && npm run test:integration && npm audit --audit-level=high && npm run package:list"
+    "check:release": "npm run verify && npm run test:integration && npm audit --audit-level=low && npm run package:list"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^3.0.0",
+    "esbuild": "^0.28.1",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
     "typescript": "~6.0.0",
@@ -91,7 +96,7 @@
       "activitybar": [
         {
           "id": "codebookmark",
-          "title": "代码书签",
+          "title": "%codebookmark.contributes.viewsContainers.activitybar.0.title%",
           "icon": "resources/bookmark.svg"
         }
       ]
@@ -100,257 +105,257 @@
       "codebookmark": [
         {
           "id": "codebookmarkTreeView",
-          "name": "代码书签",
+          "name": "%codebookmark.contributes.views.codebookmark.0.name%",
           "icon": "resources/bookmark.svg",
-          "contextualTitle": "代码书签"
+          "contextualTitle": "%codebookmark.contributes.views.codebookmark.0.contextualTitle%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "codebookmarkTreeView",
-        "contents": "暂无书签，按下 Ctrl+B 即刻添加！\n\n[导入书签配置文件](command:codebookmark.importBookmarkConfig)\n\n[查看使用说明](command:codebookmark.openHelp)",
+        "contents": "%codebookmark.contributes.viewsWelcome.0.contents%",
         "when": "bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.loadFailed && codebookmark.aiAnalysisAvailable && !codebookmark.activeFileHasBookmark"
       },
       {
         "view": "codebookmarkTreeView",
-        "contents": "[查看使用说明](command:codebookmark.openHelp)",
+        "contents": "%codebookmark.contributes.viewsWelcome.1.contents%",
         "when": "bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.loadFailed && !codebookmark.aiAnalysisAvailable"
       }
     ],
     "commands": [
       {
         "command": "codebookmark.toggleBookmark",
-        "title": "添加/删除书签",
+        "title": "%codebookmark.contributes.commands.0.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.forceAddBookmark",
-        "title": "强制添加书签",
+        "title": "%codebookmark.contributes.commands.1.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.forceDeleteBookmark",
-        "title": "强制删除书签",
+        "title": "%codebookmark.contributes.commands.2.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.deleteBookmark",
-        "title": "删除",
+        "title": "%codebookmark.contributes.commands.3.title%",
         "icon": "$(trash)"
       },
       {
         "command": "codebookmark.editBookmark.editLabel",
-        "title": "重命名书签",
+        "title": "%codebookmark.contributes.commands.4.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.editBookmark.updatePosOnly",
-        "title": "更新书签位置到当前光标处（保留标签）",
+        "title": "%codebookmark.contributes.commands.5.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.editBookmark.updatePosAndRename",
-        "title": "更新书签位置到当前光标处（重命名标签）",
+        "title": "%codebookmark.contributes.commands.6.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.editBookmark.changeIcon",
-        "title": "自定义书签图标",
+        "title": "%codebookmark.contributes.commands.7.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.editBookmark.restoreDefaultIcon",
-        "title": "恢复默认图标",
+        "title": "%codebookmark.contributes.commands.8.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.renameBookmark",
-        "title": "重命名书签",
+        "title": "%codebookmark.contributes.commands.9.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.pinView",
-        "title": "设为当前文件的新书签容器",
+        "title": "%codebookmark.contributes.commands.10.title%",
         "icon": "$(folder-opened)"
       },
       {
         "command": "codebookmark.unpinView",
-        "title": "取消新书签容器",
+        "title": "%codebookmark.contributes.commands.11.title%",
         "icon": "$(folder)"
       },
       {
         "command": "codebookmark.undo",
-        "title": "撤销：暂无可撤销操作",
+        "title": "%codebookmark.contributes.commands.12.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo",
-        "title": "重做：暂无可重做操作",
+        "title": "%codebookmark.contributes.commands.13.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.bookmark.searchInFile",
-        "title": "当前文件内搜索",
+        "title": "%codebookmark.contributes.commands.14.title%",
         "icon": "$(search)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.toggleExpandCollapse",
-        "title": "展开书签节点",
+        "title": "%codebookmark.contributes.commands.15.title%",
         "icon": "$(expand-all)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.collapseToLevel",
-        "title": "折叠书签节点",
+        "title": "%codebookmark.contributes.commands.16.title%",
         "icon": "$(collapse-all)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.bookmark.sort",
-        "title": "$(list-selection) 排序模式",
+        "title": "%codebookmark.contributes.commands.17.title%",
         "icon": "$(list-selection)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.openSettings",
-        "title": "$(settings) 代码书签设置",
+        "title": "%codebookmark.contributes.commands.18.title%",
         "icon": "$(settings)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.openHelp",
-        "title": "$(info) 使用说明",
+        "title": "%codebookmark.contributes.commands.19.title%",
         "icon": "$(info)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.importBookmarkConfig",
-        "title": "导入书签配置文件",
+        "title": "%codebookmark.contributes.commands.20.title%",
         "icon": "$(file-symlink-file)",
         "enablement": "!codebookmark.activeFileHasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.manageBookmarkConfigurations",
-        "title": "$(files) 书签配置文件管理",
+        "title": "%codebookmark.contributes.commands.21.title%",
         "icon": "$(files)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateAppend",
-        "title": "$(add) 追加",
+        "title": "%codebookmark.contributes.commands.22.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwrite",
-        "title": "$(replace) 重新生成并替换",
+        "title": "%codebookmark.contributes.commands.23.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkip",
-        "title": "$(diff-added) 生成",
+        "title": "%codebookmark.contributes.commands.24.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimize",
-        "title": "$(hubot) 当前脚本",
+        "title": "%codebookmark.contributes.commands.25.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeDirect",
-        "title": "$(hubot) 优化当前脚本的书签标签",
+        "title": "%codebookmark.contributes.commands.26.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeFolderDirect",
-        "title": "$(hubot) 优化当前文件夹内有书签的脚本中的书签标签",
+        "title": "%codebookmark.contributes.commands.27.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeSelectedDirect",
-        "title": "$(hubot) 优化选中书签的标签",
+        "title": "%codebookmark.contributes.commands.28.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeSelected",
-        "title": "$(hubot) 选中的书签",
+        "title": "%codebookmark.contributes.commands.29.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateAppendFolder",
-        "title": "$(add) 为有书签的脚本追加",
+        "title": "%codebookmark.contributes.commands.30.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwriteFolder",
-        "title": "$(replace) 为有书签的脚本重新生成并替换",
+        "title": "%codebookmark.contributes.commands.31.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateAppendFolderDirect",
-        "title": "$(add) 为当前文件夹内有书签的脚本追加",
+        "title": "%codebookmark.contributes.commands.32.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwriteFolderDirect",
-        "title": "$(replace) 为当前文件夹内有书签的脚本重新生成并替换",
+        "title": "%codebookmark.contributes.commands.33.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkipFolder",
-        "title": "$(diff-added) 为所有无书签脚本生成",
+        "title": "%codebookmark.contributes.commands.34.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkipFolderDirect",
-        "title": "$(diff-added) 为当前文件夹内无书签脚本生成",
+        "title": "%codebookmark.contributes.commands.35.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeFolder",
-        "title": "$(hubot) 当前文件夹内有书签的脚本",
+        "title": "%codebookmark.contributes.commands.36.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeContextItem",
-        "title": "$(hubot) AI 优化书签标签",
+        "title": "%codebookmark.contributes.commands.37.title%",
         "enablement": "codebookmark.aiAnalysisAvailable",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.testConnection",
-        "title": "测试 AI 连接",
+        "title": "%codebookmark.contributes.commands.38.title%",
         "icon": "$(debug-disconnect)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.openSettings",
-        "title": "$(settings) AI 配置",
+        "title": "%codebookmark.contributes.commands.39.title%",
         "icon": "$(settings)",
         "category": "Code Bookmarks"
       },
@@ -374,13 +379,13 @@
       },
       {
         "command": "codebookmark.exportToText",
-        "title": "纯文本",
+        "title": "%codebookmark.contributes.commands.43.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.exportSourceFiles",
-        "title": "配置源文件",
+        "title": "%codebookmark.contributes.commands.44.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
@@ -404,255 +409,255 @@
       },
       {
         "command": "codebookmark.batchExportToText",
-        "title": "纯文本",
+        "title": "%codebookmark.contributes.commands.48.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.batchExportSourceFiles",
-        "title": "配置源文件",
+        "title": "%codebookmark.contributes.commands.49.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.clearInvalidBookmarks",
-        "title": "$(trash) 清除失效书签",
+        "title": "%codebookmark.contributes.commands.50.title%",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.modifyBookmarks",
-        "title": "撤销：修改书签",
+        "title": "%codebookmark.contributes.commands.51.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.reorderFiles",
-        "title": "撤销：调整文件顺序",
+        "title": "%codebookmark.contributes.commands.52.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.moveBookmarks",
-        "title": "撤销：移动书签",
+        "title": "%codebookmark.contributes.commands.53.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.addBookmarks",
-        "title": "撤销：添加书签",
+        "title": "%codebookmark.contributes.commands.54.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.toggleBookmarks",
-        "title": "撤销：添加/删除书签",
+        "title": "%codebookmark.contributes.commands.55.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.deleteBookmarks",
-        "title": "撤销：删除书签",
+        "title": "%codebookmark.contributes.commands.56.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.generateAIBookmarks",
-        "title": "撤销：AI 生成书签",
+        "title": "%codebookmark.contributes.commands.57.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.optimizeAIBookmarks",
-        "title": "撤销：AI 优化书签标签",
+        "title": "%codebookmark.contributes.commands.58.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.importBookmarks",
-        "title": "撤销：导入书签配置",
+        "title": "%codebookmark.contributes.commands.59.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.renameBookmarks",
-        "title": "撤销：重命名书签",
+        "title": "%codebookmark.contributes.commands.60.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.updateBookmarkPosition",
-        "title": "撤销：更新书签位置",
+        "title": "%codebookmark.contributes.commands.61.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.updateBookmarkAndRename",
-        "title": "撤销：更新位置并重命名",
+        "title": "%codebookmark.contributes.commands.62.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.changeBookmarkIcons",
-        "title": "撤销：更改书签图标",
+        "title": "%codebookmark.contributes.commands.63.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.restoreBookmarkIcons",
-        "title": "撤销：恢复默认图标",
+        "title": "%codebookmark.contributes.commands.64.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.clearInvalidBookmarks",
-        "title": "撤销：清除失效书签",
+        "title": "%codebookmark.contributes.commands.65.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.setBookmarkContainer",
-        "title": "撤销：设置新书签容器",
+        "title": "%codebookmark.contributes.commands.66.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.undo.unsetBookmarkContainer",
-        "title": "撤销：取消新书签容器",
+        "title": "%codebookmark.contributes.commands.67.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.modifyBookmarks",
-        "title": "重做：修改书签",
+        "title": "%codebookmark.contributes.commands.68.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.reorderFiles",
-        "title": "重做：调整文件顺序",
+        "title": "%codebookmark.contributes.commands.69.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.moveBookmarks",
-        "title": "重做：移动书签",
+        "title": "%codebookmark.contributes.commands.70.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.addBookmarks",
-        "title": "重做：添加书签",
+        "title": "%codebookmark.contributes.commands.71.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.toggleBookmarks",
-        "title": "重做：添加/删除书签",
+        "title": "%codebookmark.contributes.commands.72.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.deleteBookmarks",
-        "title": "重做：删除书签",
+        "title": "%codebookmark.contributes.commands.73.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.generateAIBookmarks",
-        "title": "重做：AI 生成书签",
+        "title": "%codebookmark.contributes.commands.74.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.optimizeAIBookmarks",
-        "title": "重做：AI 优化书签标签",
+        "title": "%codebookmark.contributes.commands.75.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.importBookmarks",
-        "title": "重做：导入书签配置",
+        "title": "%codebookmark.contributes.commands.76.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.renameBookmarks",
-        "title": "重做：重命名书签",
+        "title": "%codebookmark.contributes.commands.77.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.updateBookmarkPosition",
-        "title": "重做：更新书签位置",
+        "title": "%codebookmark.contributes.commands.78.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.updateBookmarkAndRename",
-        "title": "重做：更新位置并重命名",
+        "title": "%codebookmark.contributes.commands.79.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.changeBookmarkIcons",
-        "title": "重做：更改书签图标",
+        "title": "%codebookmark.contributes.commands.80.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.restoreBookmarkIcons",
-        "title": "重做：恢复默认图标",
+        "title": "%codebookmark.contributes.commands.81.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.clearInvalidBookmarks",
-        "title": "重做：清除失效书签",
+        "title": "%codebookmark.contributes.commands.82.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.setBookmarkContainer",
-        "title": "重做：设置新书签容器",
+        "title": "%codebookmark.contributes.commands.83.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.redo.unsetBookmarkContainer",
-        "title": "重做：取消新书签容器",
+        "title": "%codebookmark.contributes.commands.84.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
         "category": "Code Bookmarks"
@@ -666,28 +671,28 @@
       },
       {
         "command": "codebookmark.renameBookmark",
-        "title": "重命名书签",
+        "title": "%codebookmark.contributes.keybindings.1.title%",
         "key": "f2",
         "when": "listFocus && focusedView == 'codebookmarkTreeView'",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.toggleBookmark",
-        "title": "添加/删除书签",
+        "title": "%codebookmark.contributes.keybindings.2.title%",
         "key": "ctrl+b",
         "category": "Code Bookmarks",
         "when": "editorTextFocus"
       },
       {
         "command": "codebookmark.forceAddBookmark",
-        "title": "强制添加书签",
+        "title": "%codebookmark.contributes.keybindings.3.title%",
         "key": "ctrl+alt+shift+b",
         "category": "Code Bookmarks",
         "when": "editorTextFocus"
       },
       {
         "command": "codebookmark.forceDeleteBookmark",
-        "title": "强制删除书签",
+        "title": "%codebookmark.contributes.keybindings.4.title%",
         "key": "ctrl+alt+shift+d",
         "category": "Code Bookmarks",
         "when": "editorTextFocus"
@@ -908,14 +913,14 @@
       "view/item/context": [
         {
           "command": "codebookmark.pinView",
-          "title": "设为当前文件的新书签容器",
+          "title": "%codebookmark.contributes.menus.view_item_context.0.title%",
           "icon": "$(folder-opened)",
           "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom))",
           "group": "inline@2"
         },
         {
           "command": "codebookmark.unpinView",
-          "title": "取消新书签容器",
+          "title": "%codebookmark.contributes.menus.view_item_context.1.title%",
           "icon": "$(folder)",
           "when": "(view == codebookmarkTreeView) && (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom)",
           "group": "inline@2"
@@ -927,7 +932,7 @@
         },
         {
           "command": "codebookmark.deleteBookmark",
-          "title": "删除",
+          "title": "%codebookmark.contributes.menus.view_item_context.3.title%",
           "icon": "$(trash)",
           "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || viewItem == bookmarkInvalid || viewItem == bookmarkPinned)",
           "group": "inline@4"
@@ -1396,102 +1401,102 @@
     "submenus": [
       {
         "id": "codebookmark.editSubmenu",
-        "label": "编辑书签",
+        "label": "%codebookmark.contributes.submenus.0.label%",
         "icon": "$(edit)"
       },
       {
         "id": "codebookmark.moreSubmenu",
-        "label": "更多",
+        "label": "%codebookmark.contributes.submenus.1.label%",
         "icon": "$(three-bars)"
       },
       {
         "id": "codebookmark.exportSubmenu",
-        "label": "导出书签为…",
+        "label": "%codebookmark.contributes.submenus.2.label%",
         "icon": "$(export)"
       },
       {
         "id": "codebookmark.batchExportSubmenu",
-        "label": "批量导出当前文件夹下…"
+        "label": "%codebookmark.contributes.submenus.3.label%"
       },
       {
         "id": "codebookmark.aiSubmenu",
-        "label": "AI 辅助",
+        "label": "%codebookmark.contributes.submenus.4.label%",
         "icon": "$(symbol-event)"
       },
       {
         "id": "codebookmark.aiGenerateSubmenu",
-        "label": "生成书签"
+        "label": "%codebookmark.contributes.submenus.5.label%"
       },
       {
         "id": "codebookmark.aiGenerateWorkspaceSubmenu",
-        "label": "生成书签"
+        "label": "%codebookmark.contributes.submenus.6.label%"
       },
       {
         "id": "codebookmark.aiGenerateFileSubmenu",
-        "label": "当前脚本"
+        "label": "%codebookmark.contributes.submenus.7.label%"
       },
       {
         "id": "codebookmark.aiGenerateFolderSubmenu",
-        "label": "当前文件夹"
+        "label": "%codebookmark.contributes.submenus.8.label%"
       },
       {
         "id": "codebookmark.aiOptimizeSubmenu",
-        "label": "优化书签标签"
+        "label": "%codebookmark.contributes.submenus.9.label%"
       }
     ],
     "configuration": [
       {
         "type": "object",
-        "title": "代码书签设置",
+        "title": "%codebookmark.contributes.configuration.0.title%",
         "properties": {
           "codebookmark.globalStoragePath": {
             "order": 1,
             "type": "string",
             "default": "",
-            "description": "书签配置目录的绝对路径（必填，支持 ~ 和 %ENV%）"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.globalStoragePath.description%"
           },
           "codebookmark.defaultExpandLevel": {
             "order": 2,
             "type": "integer",
             "default": 3,
             "minimum": 0,
-            "description": "展开/折叠按钮的默认展开级别。设为 3 表示展开时显示前三级书签；设为 0 表示展开全部层级。"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.defaultExpandLevel.description%"
           },
           "codebookmark.autoSpace": {
             "order": 3,
             "type": "boolean",
             "default": true,
-            "description": "是否在书签标签的中英文/数字之间自动插入空格，优化排版显示。"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.autoSpace.description%"
           },
           "codebookmark.inlineLabel": {
             "order": 4,
             "type": "boolean",
             "default": true,
-            "description": "在光标所在行的代码末尾显示书签标签的幽灵文本（类似 GitLens 的行内注释效果）。"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.inlineLabel.description%"
           },
-          "codebookmark.AI.endpoint": {
+          "codebookmark.AI.address": {
             "order": 5,
             "type": "string",
             "default": "",
-            "description": "AI 接口地址；远程服务应使用 HTTPS"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.address.description%"
           },
-          "codebookmark.AI.apiKey": {
+          "codebookmark.AI.APIKey": {
             "order": 6,
             "type": "string",
             "default": "",
-            "description": "AI 接口密钥（API Key）"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.APIKey.description%"
           },
           "codebookmark.AI.model": {
             "order": 7,
             "type": "string",
             "default": "",
-            "markdownDescription": "AI 模型名称。配置 API Key 后可 [验证 AI 连接](command:codebookmark.ai.testConnection)"
+            "markdownDescription": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.model.markdownDescription%"
           },
           "codebookmark.AI.assignIcons": {
             "order": 8,
             "type": "boolean",
             "default": true,
-            "description": "让 AI 在生成书签后选择书签图标"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.assignIcons.description%"
           },
           "codebookmark.AI.timeoutS": {
             "order": 9,
@@ -1499,21 +1504,21 @@
             "default": 60,
             "minimum": 1,
             "maximum": 600,
-            "description": "AI 请求超时时间（秒，范围 1–600）"
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.timeoutS.description%"
           },
           "codebookmark.AI.prompt": {
             "order": 10,
             "type": "string",
             "editPresentation": "multilineText",
-            "default": "你是代码导航书签规划器。请先理解文件的整体职责，再识别值得反复跳转的模块入口、类/接口、函数/方法、生命周期阶段、状态转换、重要分支、错误处理、外部 I/O、性能关键点和高价值注释；忽略导入、样板代码、简单赋值、重复包装和琐碎语句。\n书签必须落在用户实际需要阅读的源码行上，标签说明该位置“为什么重要”，而不是重复代码文本。插件会像手动添加书签一样生成 ID、路径、创建时间、选区、上下文指纹和展开状态。\n\n请只返回严格 JSON，不要使用 Markdown。根对象格式为：\n{\"bookmarks\":[{\"label\":\"启动入口\",\"lineNumber\":12,\"anchor\":\"原始源码完整一行\",\"icon\":\"entry\",\"children\":[]},{\"label\":\"处理结果\",\"lineNumber\":24,\"anchor\":\"另一行原始源码\",\"children\":[]}]}\n\n字段约束：\n- label：准确、可扫描的短标签，优先使用“动作 + 对象”或“阶段 + 目的”，尽量不超过 15 个汉字。\n- lineNumber：输入源码左侧显示的 1 基行号。\n- anchor：对应行去掉“行号 | ”前缀后的原始完整文本，必须逐字摘录，不得改写；不要选择空行。\n- icon：可选。仅在书签语义与某个图标键高度匹配时输出；匹配不明确时省略，让插件使用默认图标。\n- children：只在子逻辑真实包含于父逻辑时嵌套；类/函数内部的阶段可以作为子项，同级逻辑保持并列，并保留多个合理的根节点。\n- 同一源码行最多生成一个书签，不要重复。\n- 不要为了凑数量生成书签；没有明确导航价值的位置应省略。\n\n不要输出 id、path、createdAt、line、collapsibleState、pinned、content、params、iconName、contextBefore、contextAfter 等持久化字段。",
-            "description": "AI 自动提取书签的系统提示词。"
+            "default": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.prompt.default%",
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.prompt.description%"
           },
           "codebookmark.AI.optimizePrompt": {
             "order": 11,
             "type": "string",
             "editPresentation": "multilineText",
-            "default": "你是代码导航书签编辑器。根据带行号源码以及现有书签的标签、行号和原文锚点，判断每个书签实际指向的模块、类、函数、阶段、分支或故障处理逻辑，并改进不准确、含糊或冗长的标签。\n标签要让用户在树视图中快速区分相邻逻辑，优先保留领域术语和关键动作，尽量不超过 15 个汉字；不得修改书签位置、层级、ID 或锚点。已经清晰的标签可以省略。\n\n只返回严格 JSON 数组，不要使用 Markdown。每项包含输入中已有的 id，以及需要更新的 new_label 或 icon：\n[{\"id\":\"已有 ID\",\"new_label\":\"优化后的标签\"},{\"id\":\"另一已有 ID\",\"icon\":\"error\"}]\n\n不要虚构 ID，同一 ID 最多返回一次；不要返回空标签、换行、位置描述或与代码无关的宣传语。",
-            "description": "AI 优化书签标签和语义图标时的提示词。"
+            "default": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.optimizePrompt.default%",
+            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.optimizePrompt.description%"
           }
         }
       }
@@ -1525,7 +1530,7 @@
           "dark": "#f76f53",
           "light": "#f76f53"
         },
-        "description": "一级书签颜色"
+        "description": "%codebookmark.contributes.colors.0.description%"
       },
       {
         "id": "codebookmark.color.Lvl2Blue",
@@ -1533,7 +1538,7 @@
           "dark": "#24acf2",
           "light": "#24acf2"
         },
-        "description": "二级书签颜色"
+        "description": "%codebookmark.contributes.colors.1.description%"
       }
     ]
   }

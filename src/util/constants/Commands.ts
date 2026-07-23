@@ -746,23 +746,23 @@ export class Commands {
 					"default": true,
 					"description": "在光标所在行的代码末尾显示书签标签的幽灵文本（类似 GitLens 的行内注释效果）。"
 				},
-				"codebookmark.AI.endpoint": {
+				"codebookmark.AI.address": {
 					"order": 5,
 					"type": "string",
 					"default": "",
-					"description": "AI 接口地址；远程服务应使用 HTTPS"
+					"description": "支持资源地址、API Base URL 和完整请求 URL，插件会自动识别并补全。远程服务请使用 HTTPS。"
 				},
-				"codebookmark.AI.apiKey": {
+				"codebookmark.AI.APIKey": {
 					"order": 6,
 					"type": "string",
 					"default": "",
-					"description": "AI 接口密钥（API Key）"
+					"description": "AI 接口密钥"
 				},
 				"codebookmark.AI.model": {
 					"order": 7,
 					"type": "string",
 					"default": "",
-					"markdownDescription": "AI 模型名称。配置 API Key 后可 [验证 AI 连接](command:codebookmark.ai.testConnection)"
+					"markdownDescription": "AI 模型名称。配置接口地址及所需密钥后可 [验证 AI 连接](command:codebookmark.ai.testConnection)"
 				},
 				"codebookmark.AI.assignIcons": {
 					"order": 8,

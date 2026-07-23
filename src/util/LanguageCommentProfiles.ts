@@ -1,5 +1,6 @@
 import * as path from 'path'
 import * as vscode from 'vscode'
+import { localize } from '../i18n/Localization'
 import {
 	CODE_MARKER_FILE_GLOB,
 	supportsCodeMarkerSyntax,
@@ -297,7 +298,7 @@ export class LanguageCommentProfileRegistry {
 	initialize(): Promise<void> {
 		if (!this.initializePromise) {
 			this.initializePromise = this.load().catch(error => {
-				logger.error(`读取 VS Code 语言注释配置失败: ${error}`)
+				logger.error(localize(`读取 VS Code 语言注释配置失败: ${error}`, `Failed to read a VS Code language comment configuration: ${error}`))
 			}).finally(() => {
 				this.initialized = true
 			})
@@ -404,9 +405,15 @@ export class LanguageCommentProfileRegistry {
 		}
 		this.state = next
 		if (failedConfigurations > 0) {
-			logger.error(`有 ${failedConfigurations} 个语言注释配置无法读取；对应语言将使用内置兜底规则。`)
+			logger.error(localize(
+				`有 ${failedConfigurations} 个语言注释配置无法读取；对应语言将使用内置兜底规则。`,
+				`${failedConfigurations} language comment configurations could not be read; the affected languages will use built-in fallback rules.`,
+			))
 		}
-		if (failedPatterns > 0) logger.error(`已跳过 ${failedPatterns} 个无效的语言文件匹配模式。`)
+		if (failedPatterns > 0) logger.error(localize(
+			`已跳过 ${failedPatterns} 个无效的语言文件匹配模式。`,
+			`Skipped ${failedPatterns} invalid language file-matching patterns.`,
+		))
 	}
 
 	profileFor(languageId: string | undefined, fileName: string): CodeMarkerSyntaxProfile | undefined {

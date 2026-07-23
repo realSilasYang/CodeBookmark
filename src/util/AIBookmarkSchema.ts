@@ -1,4 +1,5 @@
 import { findBestFingerprintLine } from './FingerprintMatcher'
+import { localize } from '../i18n/Localization'
 import { resolveAIIconNameForSemantic } from './AIIconCatalog'
 import { isJsonRecord } from './JsonRecord'
 
@@ -52,7 +53,10 @@ function generatedBookmarkItems(payload: unknown): unknown[] {
 		const items = payload.bookmarks
 		if (Array.isArray(items)) return items
 	}
-	throw new Error('AI response must contain a bookmarks array')
+	throw new Error(localize(
+		'AI 响应必须包含 bookmarks 数组。',
+		'AI response must contain a bookmarks array.',
+	))
 }
 
 export function normalizeAIBookmarkPayload(payload: unknown): AIBookmark[] {
@@ -60,13 +64,15 @@ export function normalizeAIBookmarkPayload(payload: unknown): AIBookmark[] {
 
 	const normalizeItems = (items: unknown[], depth: number): AIBookmark[] => {
 		if (items.length > 0 && depth > MAX_AI_BOOKMARK_DEPTH) {
-			throw new Error(`AI 书签层级不能超过 ${MAX_AI_BOOKMARK_DEPTH} 层`)
+			throw new Error(localize(`AI 书签层级不能超过 ${MAX_AI_BOOKMARK_DEPTH} 层`, `AI bookmark nesting cannot exceed ${MAX_AI_BOOKMARK_DEPTH} levels.`))
 		}
 		const normalized: AIBookmark[] = []
 
 		for (const value of items) {
 			visited++
-			if (visited > MAX_AI_BOOKMARKS) throw new Error(`AI 单次生成不能超过 ${MAX_AI_BOOKMARKS} 个书签`)
+			if (visited > MAX_AI_BOOKMARKS) {
+				throw new Error(localize(`AI 单次生成不能超过 ${MAX_AI_BOOKMARKS} 个书签`, `AI cannot generate more than ${MAX_AI_BOOKMARKS} bookmarks in one request.`))
+			}
 			if (!isJsonRecord(value)) continue
 
 			const rawChildren = Array.isArray(value.children) ? value.children : []
@@ -150,7 +156,9 @@ export function normalizeAIOptimizedBookmarks(
 	const seen = new Set<string>()
 	const normalized: AIOptimizedBookmark[] = []
 
-	if (!Array.isArray(payload)) throw new Error('AI response must be a JSON array')
+	if (!Array.isArray(payload)) {
+		throw new Error(localize('AI 响应必须是 JSON 数组。', 'AI response must be a JSON array.'))
+	}
 	for (const value of payload) {
 		if (!isJsonRecord(value)) continue
 		const id = typeof value.id === 'string' ? value.id : ''

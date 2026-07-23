@@ -1,6 +1,7 @@
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
+import { localize } from '../i18n/Localization'
 import { isJsonRecord } from '../util/JsonRecord'
 import { isScriptId } from '../util/ScriptIdentity'
 import {
@@ -209,7 +210,7 @@ async function inspectBookmarkConfigurationFile(
 			modifiedAt: stat.mtimeMs,
 			role,
 			health: 'invalid',
-			problem: '配置文件过大，未解析',
+			problem: localize('配置文件过大，未解析', 'Configuration file is too large and was not parsed'),
 			sourceExists: false,
 			bookmarkSummary: emptyInspection.summary,
 			automaticBookmarkCount: 0,
@@ -239,7 +240,7 @@ async function inspectBookmarkConfigurationFile(
 			modifiedAt: stat.mtimeMs,
 			role,
 			health: 'invalid',
-			problem: 'JSON 格式损坏',
+			problem: localize('JSON 格式损坏', 'Invalid JSON'),
 			sourceExists: false,
 			bookmarkSummary: emptyInspection.summary,
 			automaticBookmarkCount: 0,
@@ -294,8 +295,8 @@ async function inspectBookmarkConfigurationFile(
 		role,
 		health,
 		problem: validEnvelope ? undefined : identityMatchesFile
-			? '缺少有效的脚本身份、绝对路径或书签数组'
-			: '配置文件名与脚本身份不一致',
+			? localize('缺少有效的脚本身份、绝对路径或书签数组', 'Missing a valid script identity, absolute path, or bookmarks array')
+			: localize('配置文件名与脚本身份不一致', 'Configuration file name does not match the script identity'),
 		scriptId,
 		scriptPath,
 		sourceExists,
@@ -331,7 +332,7 @@ async function inspectWorkspaceOrderFile(
 		return {
 			...metadataEntryBase('workspaceOrder', 'workspaceOrder', filePath, storageRoot, stat, content),
 			health: 'invalid',
-			problem: '工作区排序 JSON 格式损坏',
+			problem: localize('工作区排序 JSON 格式损坏', 'Workspace order JSON is invalid'),
 			workspaceName: match?.[1] ?? folderName,
 			workspacePathHash: match?.[2],
 		}
@@ -341,7 +342,7 @@ async function inspectWorkspaceOrderFile(
 	return {
 		...metadataEntryBase('workspaceOrder', 'workspaceOrder', filePath, storageRoot, stat, content),
 		health: validOrder ? 'metadata' : 'invalid',
-		problem: validOrder ? undefined : '工作区排序文件不是有效的路径数组',
+		problem: validOrder ? undefined : localize('工作区排序文件不是有效的路径数组', 'Workspace order file is not a valid array of paths'),
 		workspaceName: match?.[1] ?? folderName,
 		workspacePathHash: match?.[2],
 		orderedPaths,
@@ -368,7 +369,7 @@ async function inspectTransferJournal(
 	try {
 		parsed = JSON.parse(content.toString('utf8')) as unknown
 	} catch {
-		return { ...base, health: 'invalid', problem: '存储迁移记录 JSON 格式损坏' }
+		return { ...base, health: 'invalid', problem: localize('存储迁移记录 JSON 格式损坏', 'Storage transfer journal JSON is invalid') }
 	}
 	const status = isJsonRecord(parsed) && (parsed.status === 'complete' || parsed.status === 'in_progress') ? parsed.status : undefined
 	const source = isJsonRecord(parsed) && typeof parsed.source === 'string' ? parsed.source : undefined
@@ -393,7 +394,10 @@ async function inspectTransferJournal(
 	return {
 		...base,
 		health: valid ? 'metadata' : 'invalid',
-		problem: valid ? undefined : '存储迁移记录缺少有效状态、来源、目标、开始时间或文件计数',
+		problem: valid ? undefined : localize(
+			'存储迁移记录缺少有效状态、来源、目标、开始时间或文件计数',
+			'Storage transfer journal is missing a valid status, source, target, start time, or file counts',
+		),
 		transferStatus: status,
 		transferSource: source,
 		transferTarget: target,

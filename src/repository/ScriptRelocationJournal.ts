@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import { localize } from '../i18n/Localization'
 import { canonicalBookmarkPath } from '../util/BookmarkPath'
 import { createOperationId } from '../util/ScriptIdentity'
 import { isJsonRecord } from '../util/JsonRecord'
@@ -67,7 +68,10 @@ export async function createScriptRelocation(
 	const oldBookmarkFolder = path.relative(root, path.resolve(value.oldBookmarkFolder))
 	const newBookmarkFolder = path.relative(root, path.resolve(value.newBookmarkFolder))
 	if (!isSafeRelativeFolder(oldBookmarkFolder) || !isSafeRelativeFolder(newBookmarkFolder)) {
-		throw new Error('书签转移目录必须位于当前书签存储根目录内')
+		throw new Error(localize(
+			'书签转移目录必须位于当前书签存储根目录内',
+			'The bookmark transfer directory must be inside the current bookmark storage root.',
+		))
 	}
 	const record: ScriptRelocationRecord = {
 		id: createOperationId(),

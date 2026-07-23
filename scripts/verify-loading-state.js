@@ -1,7 +1,8 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
-const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+const { loadLocalizedManifest } = require('./localized-manifest')
+const manifest = loadLocalizedManifest('zh-cn')
 const provider = fs.readFileSync('src/providers/CodeBookmarkViewProvider.ts', 'utf8')
 const finalizer = fs.readFileSync('src/providers/ViewLoadFinalizer.ts', 'utf8')
 const watcherLifecycle = fs.readFileSync('src/providers/ConfigWatcherLifecycle.ts', 'utf8')

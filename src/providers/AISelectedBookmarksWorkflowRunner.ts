@@ -9,6 +9,7 @@ import { assertAISourceSnapshot, readAISourceSnapshot, type AIFileSnapshot } fro
 import { formatBookmarkLevelSummary, summarizeBookmarks } from '../util/BookmarkStatistics'
 import { isBookmarkItemContext } from '../util/ContextValue'
 import type { AIFolderWorkflowPort } from './AIFolderWorkflowRunner'
+import { isUserCancelledError, localize } from '../i18n/Localization'
 
 export interface AISelectedBookmarksWorkflowPort extends AIFolderWorkflowPort {
 	absoluteBookmarkPath(bookmarkPath: string): string
@@ -36,7 +37,10 @@ export async function runOptimizeSelectedBookmarks(
 
 	const bookmarksToOptimize = targets.filter(target => isBookmarkItemContext(target.contextValue))
 	if (bookmarksToOptimize.length === 0) {
-		vscode.window.showInformationMessage('选中的项不包含可优化的书签。')
+		vscode.window.showInformationMessage(localize(
+			'选中的项不包含可优化的书签。',
+			'The selection does not contain bookmarks that can be improved.',
+		))
 		return
 	}
 
@@ -57,7 +61,10 @@ export async function runOptimizeSelectedBookmarks(
 		const taskKey = port.taskRegistry.fileTaskKey(taskScope, pathRel)
 		const bookmarkInputSnapshot = port.workflowGuard.captureBookmarkInput(pathRel)
 		if (!port.taskRegistry.tryStartFile(taskKey)) {
-			vscode.window.showWarningMessage(`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`)
+			vscode.window.showWarningMessage(localize(
+				`文件 ${path.basename(filePath)} 正在进行 AI 任务，请稍后再试。`,
+				`An AI task is already running for ${path.basename(filePath)}. Try again shortly.`,
+			))
 			continue
 		}
 
@@ -67,8 +74,11 @@ export async function runOptimizeSelectedBookmarks(
 		} catch (error) {
 			port.taskRegistry.finishFile(taskKey)
 			const message = errorMessage(error)
-			if (message.includes('主动取消')) break
-			vscode.window.showErrorMessage(`无法读取文件源码 ${filePath}：${message}`)
+			if (isUserCancelledError(error)) break
+			vscode.window.showErrorMessage(localize(
+				`无法读取文件源码 ${filePath}：${message}`,
+				`Unable to read source from ${filePath}: ${message}`,
+			))
 			continue
 		}
 		const fileContent = sourceSnapshot.content
@@ -76,7 +86,10 @@ export async function runOptimizeSelectedBookmarks(
 		try {
 			await vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
-				title: `AI 正在优化 ${path.basename(filePath)} 中的 ${bookmarks.length} 个书签...`,
+				title: localize(
+					`AI 正在优化 ${path.basename(filePath)} 中的 ${bookmarks.length} 个书签...`,
+					`AI is improving ${bookmarks.length} bookmarks in ${path.basename(filePath)}…`,
+				),
 				cancellable: true,
 			}, async (_progress, token) => {
 				let statusDisposable: vscode.Disposable | undefined
@@ -114,9 +127,16 @@ export async function runOptimizeSelectedBookmarks(
 							changedPaths.add(filePath)
 							port.saveBookmarks([filePath])
 							const summary = summarizeBookmarks(changes.map(change => change.bookmark))
-							vscode.window.showInformationMessage(`选中书签优化完成，更新结果：${formatBookmarkLevelSummary(summary)}。`)
+							const formattedSummary = formatBookmarkLevelSummary(summary)
+							vscode.window.showInformationMessage(localize(
+								`选中书签优化完成，更新结果：${formattedSummary}。`,
+								`Selected bookmark improvement completed. Updated: ${formattedSummary}.`,
+							))
 						} else {
-							vscode.window.showInformationMessage('AI 未能返回任何有效的标签更新。')
+							vscode.window.showInformationMessage(localize(
+								'AI 未能返回任何有效的标签更新。',
+								'AI did not return any valid label updates.',
+							))
 						}
 					}
 				} finally {
@@ -125,10 +145,16 @@ export async function runOptimizeSelectedBookmarks(
 			})
 		} catch (error: unknown) {
 			const message = errorMessage(error)
-			if (message.includes('取消')) {
-				vscode.window.showInformationMessage(`已取消 AI 选中书签优化任务：${path.basename(filePath)}`)
+			if (isUserCancelledError(error)) {
+				vscode.window.showInformationMessage(localize(
+					`已取消 AI 选中书签优化任务：${path.basename(filePath)}`,
+					`Cancelled AI improvement for selected bookmarks in ${path.basename(filePath)}.`,
+				))
 			} else {
-				vscode.window.showErrorMessage(`AI 优化选中书签失败：${message}`)
+				vscode.window.showErrorMessage(localize(
+					`AI 优化选中书签失败：${message}`,
+					`AI improvement for selected bookmarks failed: ${message}`,
+				))
 			}
 		} finally {
 			port.taskRegistry.finishFile(taskKey)

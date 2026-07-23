@@ -1,4 +1,5 @@
 import * as path from 'path'
+import { localize } from '../i18n/Localization'
 import { absolutePathKey } from '../util/AbsolutePath'
 import {
 	appendWorkspaceOrderPath,
@@ -127,7 +128,7 @@ export class WorkspaceOrderStore {
 
 	private async write(filePath: string, order: readonly string[], failureMessage?: string): Promise<void> {
 		if (!await this.io.writeJson(filePath, order)) {
-			throw new Error(failureMessage ?? `无法更新工作区排序文件: ${filePath}`)
+			throw new Error(failureMessage ?? localize(`无法更新工作区排序文件: ${filePath}`, `Unable to update the workspace order file: ${filePath}`))
 		}
 	}
 }

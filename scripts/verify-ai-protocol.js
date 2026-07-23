@@ -76,8 +76,8 @@ async function main() {
   })
   const address = server.address()
   Object.defineProperties(ExtensionConfig, {
-    aiEndpoint: { configurable: true, get: () => `http://127.0.0.1:${address.port}/v1/chat/completions` },
-    aiApiKey: { configurable: true, get: () => 'test-key' },
+    aiAddress: { configurable: true, get: () => `http://127.0.0.1:${address.port}/v1/chat/completions` },
+    aiAPIKey: { configurable: true, get: () => 'test-key' },
     aiModel: { configurable: true, get: () => 'test-model' },
     aiTimeoutS: { configurable: true, get: () => 10 },
     aiPrompt: { configurable: true, get: () => 'custom generation instruction' },
@@ -126,7 +126,16 @@ async function main() {
     assert.equal(isAIRateLimitError(error), true)
     return true
   })
-  await assert.rejects(AIService.testConnection(), /choices/)
+  const connectionErrors = []
+  const originalConsoleError = console.error
+  console.error = (...args) => connectionErrors.push(args)
+  try {
+    await assert.rejects(AIService.testConnection(), /可用文本内容/)
+  } finally {
+    console.error = originalConsoleError
+  }
+  assert.equal(connectionErrors.length, 1)
+  assert.match(String(connectionErrors[0][0]), /可用文本内容/)
   assert.equal(
     repairJsonStringEscapes(String.raw`{"value":"quoted \" text \\ slash \/ line \b \f \n \r \t \\u1234"}`),
     String.raw`{"value":"quoted \" text \\ slash \/ line \b \f \n \r \t \\u1234"}`

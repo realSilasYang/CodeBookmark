@@ -3,7 +3,10 @@ const fs = require('node:fs')
 const { installModuleMocks } = require('./test-support/module-mocks')
 
 const vscodeMock = {
-  Uri: { file: fsPath => ({ scheme: 'file', fsPath }) },
+  Uri: {
+    file: fsPath => ({ scheme: 'file', fsPath }),
+    joinPath: (base, ...segments) => ({ path: [base.path, ...segments].filter(Boolean).join('/') }),
+  },
   window: { createOutputChannel: () => ({ appendLine() {}, dispose() {} }) },
 }
 
@@ -13,6 +16,7 @@ const {
   IconPickerWebview,
   shouldShowRestoreDefaultIcon,
 } = require('../out/util/quick_pick_icon/IconPickerWebview')
+const localization = require('../out/i18n/Localization')
 
 const defaultTodoIcon = 'status_idea_yellow.svg'
 assert.equal(shouldShowRestoreDefaultIcon(defaultTodoIcon, defaultTodoIcon), false)
@@ -50,6 +54,7 @@ async function main() {
   rendered._panel = { webview: { html: '' } }
   rendered._getHtmlForWebview = () => firstRender
   IconPickerWebview._cachedIconDict = null
+  localization.initializeLocalization('zh-cn')
   rendered._update()
   assert.match(rendered._panel.webview.html, /正在加载图标/)
 
@@ -67,6 +72,38 @@ async function main() {
   assert.match(source, /fuse\.search\(query, \{ limit: 200 \}\)/)
   assert.match(source, /id="search" disabled/)
   assert.match(source, /function recentIconIds\(/)
+
+  const sampleIcon = { id: 'status_sample.svg', name: 'sample', keywords: ['sample', '示例'] }
+  IconPickerWebview._cachedIconDict = [sampleIcon]
+  IconPickerWebview._cachedIconMap = new Map([[sampleIcon.id, sampleIcon]])
+  const localizedPicker = Object.create(IconPickerWebview.prototype)
+  localizedPicker._context = {
+    extensionUri: { path: 'extension' },
+    globalState: { get: () => [] },
+  }
+  localizedPicker._panel = {
+    webview: {
+      cspSource: 'webview-resource:',
+      asWebviewUri: uri => ({ toString: () => `webview-resource:/${uri.path}` }),
+    },
+  }
+  localizedPicker._currentIcon = ''
+  localizedPicker._defaultIcon = undefined
+
+  localization.initializeLocalization('en-US')
+  const englishHtml = await localizedPicker._getHtmlForWebview()
+  assert.match(englishHtml, /<html lang="en">/)
+  assert.match(englishHtml, /Choose a Bookmark Icon/)
+  assert.match(englishHtml, /Code Status/)
+  assert.match(englishHtml, /No matching icons found/)
+  assert.doesNotMatch(englishHtml, />选择书签图标</)
+
+  localization.initializeLocalization('zh-cn')
+  const chineseHtml = await localizedPicker._getHtmlForWebview()
+  assert.match(chineseHtml, /<html lang="zh-cn">/)
+  assert.match(chineseHtml, /选择书签图标/)
+  assert.match(chineseHtml, /代码状态/)
+  assert.match(chineseHtml, /未找到匹配的图标/)
 }
 
 main().catch(error => {

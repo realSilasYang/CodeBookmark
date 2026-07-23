@@ -12,7 +12,7 @@ export default tseslint.config(
       }
     },
     rules: {
-      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+      "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
       "@typescript-eslint/no-require-imports": "off",
       "@typescript-eslint/no-unused-expressions": "off",
       "no-empty": "off"
