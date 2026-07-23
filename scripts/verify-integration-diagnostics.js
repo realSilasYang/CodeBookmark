@@ -12,12 +12,13 @@ const knownDiagnostics = [
   "[vscode.mermaid-markdown-features]: Extension 'vscode.mermaid-markdown-features' CANNOT use 'legacyToolReferenceFullNames' without the 'chatParticipantPrivate' API proposal enabled",
   'SettingsEditor2: Settings not included in settingsLayout.ts: example.setting',
   '(node:123) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized\n(Use `Code --trace-deprecation ...` to show where the warning was created)',
+  '[34240:0723/134735.530:ERROR:gpu\\ipc\\client\\command_buffer_proxy_impl.cc:488] GPU state invalid after WaitForGetOffsetInRange.',
 ].join('\n')
 
 const stripped = stripKnownExternalDiagnostics(knownDiagnostics)
-assert.equal(stripped.count, 5)
+assert.equal(stripped.count, 6)
 assert.equal(stripped.remaining.trim(), '')
-assert.equal(assertNoUnexpectedExtensionHostDiagnostics(knownDiagnostics, ''), 5)
+assert.equal(assertNoUnexpectedExtensionHostDiagnostics(knownDiagnostics, ''), 6)
 assert.throws(
   () => assertNoUnexpectedExtensionHostDiagnostics('Error: CodeBookmark activation failed', ''),
   /Unexpected Extension Host diagnostics/,

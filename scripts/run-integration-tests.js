@@ -5,7 +5,7 @@ const fsSync = require('node:fs')
 const { spawnSync } = require('node:child_process')
 const { Writable } = require('node:stream')
 const { pathToFileURL } = require('node:url')
-const { downloadAndUnzipVSCode, runTests } = require('@vscode/test-electron')
+const { downloadAndUnzipVSCode, runTests, runVSCodeCommand } = require('@vscode/test-electron')
 
 const knownExternalDiagnosticPatterns = [
   /^(?:Warning: 'cached-data' is not in the list of known options, but still passed to Electron\/Chromium\.|警告: "cached-data"不在已知选项列表中，但仍传递给 Electron\/Chromium。)\r?\n?/gmu,
@@ -13,6 +13,7 @@ const knownExternalDiagnosticPatterns = [
   /^\[vscode\.mermaid-markdown-features\]: Extension 'vscode\.mermaid-markdown-features' CANNOT use 'legacyToolReferenceFullNames' without the 'chatParticipantPrivate' API proposal enabled\r?\n?/gmu,
   /^SettingsEditor2: Settings not included in settingsLayout\.ts:.*\r?\n?/gmu,
   /^\(node:\d+\) \[DEP0169\] DeprecationWarning: `url\.parse\(\)`[^\r\n]*(?:\r?\n\(Use `Code --trace-deprecation \.\.\.` to show where the warning was created\))?\r?\n?/gmu,
+  /^\[\d+:\d+\/\d+\.\d+:ERROR:gpu[\\/]ipc[\\/]client[\\/]command_buffer_proxy_impl\.cc:\d+\] GPU state invalid after WaitForGetOffsetInRange\.\r?\n?/gmu,
 ]
 
 function outputSink(chunks) {
@@ -203,15 +204,28 @@ function removeTemporaryDirectory(tempRoot) {
   remove()
 }
 
-async function runLocale(root, vscodeExecutablePath, locale) {
+async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVersion) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), `codebookmark-integration-${locale}-`))
   const fixturePath = path.join(tempRoot, 'workspace')
   const userDataPath = path.join(tempRoot, 'user-data')
+  const extensionsPath = downloadedVSCodeVersion && locale === 'zh-cn'
+    ? path.join(tempRoot, 'extensions')
+    : undefined
   const fixtureUri = pathToFileURL(fixturePath).href
   await fs.mkdir(fixturePath, { recursive: true })
   await fs.mkdir(path.join(userDataPath, 'User'), { recursive: true })
   const languagePacksFile = findInstalledLanguagePacksFile()
-  if (locale === 'zh-cn' && languagePacksFile) {
+  if (extensionsPath) {
+    await fs.mkdir(extensionsPath, { recursive: true })
+    console.log('正在为远端中文集成测试准备 VS Code 简体中文语言包。')
+    await runVSCodeCommand([
+      '--install-extension',
+      'MS-CEINTL.vscode-language-pack-zh-hans',
+      '--force',
+      `--user-data-dir=${userDataPath}`,
+      `--extensions-dir=${extensionsPath}`,
+    ], { version: downloadedVSCodeVersion })
+  } else if (locale === 'zh-cn' && languagePacksFile) {
     await fs.copyFile(languagePacksFile, path.join(userDataPath, 'languagepacks.json'))
   }
   await fs.copyFile(
@@ -245,6 +259,7 @@ async function runLocale(root, vscodeExecutablePath, locale) {
         stderr: outputSink(stderrChunks),
         launchArgs: [
           `--user-data-dir=${userDataPath}`,
+          ...(extensionsPath ? [`--extensions-dir=${extensionsPath}`] : []),
           '--disable-extensions',
           '--disable-extension=vscode.git',
           '--disable-extension=vscode.git-base',
@@ -293,6 +308,7 @@ async function main() {
   let vscodeExecutablePath = configuredExecutablePath
     ? existingFile(path.resolve(configuredExecutablePath))
     : findInstalledVSCodeExecutable()
+  let downloadedVSCodeVersion
   if (configuredExecutablePath && !vscodeExecutablePath) {
     throw new Error(`指定的 VS Code 程序不存在或不是文件：${path.resolve(configuredExecutablePath)}`)
   }
@@ -300,13 +316,16 @@ async function main() {
     const version = process.env.CODEBOOKMARK_VSCODE_TEST_VERSION?.trim() || 'stable'
     console.log(`未找到已安装的 VS Code；远端测试已显式允许下载 VS Code ${version}。`)
     vscodeExecutablePath = await downloadAndUnzipVSCode(version)
+    downloadedVSCodeVersion = version
   }
   if (!vscodeExecutablePath) {
     throw new Error('未找到本机已安装的 VS Code。请安装 VS Code，或通过 CODEBOOKMARK_VSCODE_EXECUTABLE_PATH 指定 Code 可执行文件。')
   }
-  console.log(`Using installed VS Code: ${vscodeExecutablePath}`)
+  console.log(`Using VS Code: ${vscodeExecutablePath}`)
   const locales = requestedLocale ? [requestedLocale] : ['zh-cn', 'en']
-  for (const locale of locales) await runLocale(root, vscodeExecutablePath, locale)
+  for (const locale of locales) {
+    await runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVersion)
+  }
 }
 
 if (require.main === module) {
