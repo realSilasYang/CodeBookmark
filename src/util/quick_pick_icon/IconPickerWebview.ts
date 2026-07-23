@@ -1,27 +1,10 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { normalizeBookmarkIconName } from '../BookmarkIconName';
 import { logger } from '../Logger';
-import { ExtensionStateKeys } from '../constants/ExtensionStateKeys';
+import { readRecentIconIds, writeRecentIconIds } from '../RecentIconState';
 import { currentFormattingLocale, currentLanguage, localize } from '../../i18n/Localization';
-
-interface IconDictionaryEntry {
-    id: string;
-    name: string;
-    keywords?: string[];
-}
-
-const ICON_DICTIONARY_ID_PATTERN = /^(status|arch|ui|fun|brand)_[a-z0-9][a-z0-9_-]*\.svg$/
-
-function isSafeDisplayText(value: unknown): value is string {
-    return typeof value === 'string'
-        && value.length > 0
-        && value.length <= 120
-        && !/[<>&"']/.test(value)
-        && !Array.from(value).some(character => character.charCodeAt(0) < 32)
-}
+import { iconDictionaryCatalog, type IconDictionaryEntry } from './IconDictionaryCatalog';
 
 function normalizedDefaultIcon(value: string | undefined): string | undefined {
     if (value === undefined || value === '') return value;
@@ -33,8 +16,7 @@ export function shouldShowRestoreDefaultIcon(currentIcon: string | undefined, de
 }
 
 function recentIconIds(context: vscode.ExtensionContext): string[] {
-    const value = context.globalState.get<unknown>(ExtensionStateKeys.recentIcons);
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    return readRecentIconIds(context);
 }
 
 export class IconPickerWebview {
@@ -120,7 +102,7 @@ export class IconPickerWebview {
         if (typeof candidate.command !== 'string' || typeof candidate.iconName !== 'string') return;
 
         const iconName = candidate.iconName;
-        const isKnownIcon = IconPickerWebview._cachedIconMap.has(iconName);
+        const isKnownIcon = iconDictionaryCatalog.has(iconName);
         switch (candidate.command) {
             case 'selectIcon':
                 if (iconName !== '' && !isKnownIcon) return;
@@ -144,15 +126,15 @@ export class IconPickerWebview {
 
     private async _addRecentIcon(iconId: string): Promise<void> {
         let recent = recentIconIds(this._context);
-        recent = recent.filter(id => id !== iconId && IconPickerWebview._cachedIconMap.has(id));
+        recent = recent.filter(id => id !== iconId && iconDictionaryCatalog.has(id));
         recent.unshift(iconId);
-        await this._context.globalState.update(ExtensionStateKeys.recentIcons, recent.slice(0, 100));
+        await writeRecentIconIds(this._context, recent.slice(0, 100));
     }
 
     private async _removeRecentIcon(iconId: string): Promise<void> {
         let recent = recentIconIds(this._context);
         recent = recent.filter(id => id !== iconId);
-        await this._context.globalState.update(ExtensionStateKeys.recentIcons, recent);
+        await writeRecentIconIds(this._context, recent);
     }
 
     public dispose() {
@@ -173,7 +155,7 @@ export class IconPickerWebview {
 
     private _update(): void {
         const generation = ++this._renderGeneration;
-        if (!IconPickerWebview._cachedIconDict) {
+        if (!iconDictionaryCatalog.isLoaded) {
             this._panel.webview.html = `<!DOCTYPE html><html lang="${currentLanguage()}"><body>${localize('正在加载图标…', 'Loading icons…')}</body></html>`;
         }
         void this._getHtmlForWebview().then(html => {
@@ -186,41 +168,11 @@ export class IconPickerWebview {
         });
     }
 
-    private static _cachedIconDict: IconDictionaryEntry[] | null = null;
-    private static _cachedIconMap = new Map<string, IconDictionaryEntry>();
-    private static _iconDictionaryPromise: Promise<IconDictionaryEntry[]> | undefined;
-
-    private static loadIconDictionary(context: vscode.ExtensionContext): Promise<IconDictionaryEntry[]> {
-        if (this._cachedIconDict) return Promise.resolve(this._cachedIconDict);
-        if (!this._iconDictionaryPromise) {
-            const jsonPath = path.join(context.extensionPath, 'resources', 'icon_dictionary.json');
-            this._iconDictionaryPromise = fs.promises.readFile(jsonPath, 'utf8').then(content => {
-                const parsed: unknown = JSON.parse(content);
-                const icons = Array.isArray(parsed)
-                    ? parsed.filter((entry): entry is IconDictionaryEntry => {
-                        if (typeof entry !== 'object' || entry === null) return false;
-                        const icon = entry as Record<string, unknown>;
-                        return normalizeBookmarkIconName(icon.id) !== ''
-                            && ICON_DICTIONARY_ID_PATTERN.test(String(icon.id))
-                            && isSafeDisplayText(icon.name)
-                            && (icon.keywords === undefined || (Array.isArray(icon.keywords) && icon.keywords.every(isSafeDisplayText)));
-                    })
-                    : [];
-                this._cachedIconMap = new Map(icons.map(icon => [icon.id, icon]));
-                this._cachedIconDict = icons;
-                return icons;
-            }).finally(() => {
-                this._iconDictionaryPromise = undefined;
-            });
-        }
-        return this._iconDictionaryPromise;
-    }
-
     private async _getHtmlForWebview(): Promise<string> {
         const baseUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'resources', 'custom_icons'));
         const fuseUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'resources', 'fuse.min.js'));
         const nonce = crypto.randomBytes(16).toString('base64');
-        const iconDictionary = await IconPickerWebview.loadIconDictionary(this._context);
+        const iconDictionary = await iconDictionaryCatalog.load(this._context);
         const locale = currentFormattingLocale();
         const htmlLanguage = currentLanguage();
         const text = {
@@ -290,7 +242,7 @@ export class IconPickerWebview {
         }
 
         const recentIcons = recentIds
-            .map(id => IconPickerWebview._cachedIconMap.get(id))
+            .map(id => iconDictionaryCatalog.get(id))
             .filter((icon): icon is IconDictionaryEntry => icon !== undefined);
         if (recentIcons.length === 0 && !showRestoreDefault) {
             recentInnerGrid = `<div class="empty-recent">${text.emptyRecent}</div>`;

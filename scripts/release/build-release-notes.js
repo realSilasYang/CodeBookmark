@@ -23,7 +23,7 @@ const match = changelog.match(versionPattern)
 if (!match) fail(`CHANGELOG.md 中缺少版本 ${version} 的规范更新日志。`)
 
 const changes = match[1].trim()
-const allowedCategories = new Set(['⚠ 重要说明', '✨ 新增', '🚀 优化', '🐛 修复'])
+const allowedCategories = new Set(['⚠️ 重要说明', '✨ 新增', '🚀 优化', '🐛 修复'])
 const categories = [...changes.matchAll(/^### (.+)$/gm)].map(category => category[1])
 if (categories.length === 0) {
   fail(`版本 ${version} 至少需要一个规范的中文更新分类。`)
@@ -35,7 +35,7 @@ if (unsupportedCategory) {
 if (new Set(categories).size !== categories.length) {
   fail(`版本 ${version} 包含重复的更新分类。`)
 }
-const importantNotesIndex = categories.indexOf('⚠ 重要说明')
+const importantNotesIndex = categories.indexOf('⚠️ 重要说明')
 if (importantNotesIndex > 0) {
   fail(`版本 ${version} 的重要说明必须放在版本内容首位。`)
 }

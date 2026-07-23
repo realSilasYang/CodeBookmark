@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -49,6 +49,29 @@
     "vscode": "^1.125.0",
     "node": ">=24 <25"
   },
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "%codebookmark.capabilities.virtualWorkspaces.description%"
+    },
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%codebookmark.capabilities.untrustedWorkspaces.description%",
+      "restrictedConfigurations": [
+        "codebookmark.globalStoragePath",
+        "codebookmark.AI.address",
+        "codebookmark.AI.APIKey",
+        "codebookmark.AI.model",
+        "codebookmark.AI.assignIcons",
+        "codebookmark.AI.timeoutS",
+        "codebookmark.AI.prompt",
+        "codebookmark.AI.optimizePrompt"
+      ]
+    }
+  },
   "categories": [
     "Other"
   ],
@@ -72,11 +95,17 @@
     "compile": "node scripts/build/clean-output.js && tsc -p config/tsconfig.json && npm run bundle && npm run generate-package-json",
     "watch": "tsc --watch -p config/tsconfig.json",
     "lint": "eslint --config config/eslint.config.mjs --max-warnings=0 \"src/**/*.ts\" \"scripts/**/*.js\" \"tests/**/*.js\"",
-    "verify": "npm run compile && npm run lint && node scripts/verify-all.js",
+    "test:unit": "npm run compile && npm run test:unit:compiled",
+    "test:unit:compiled": "node --test --test-reporter=spec \"tests/unit/*.test.js\"",
+    "test:contract": "npm run compile && npm run test:contract:compiled",
+    "test:contract:compiled": "node --test --test-reporter=spec \"tests/contracts/*.test.js\"",
+    "test:coverage": "npm run compile && node --test --experimental-test-coverage --test-coverage-include=out/models/BookmarkCodec.js --test-coverage-include=out/models/WorkspaceOrder.js --test-coverage-include=out/util/PersistenceMigration.js --test-coverage-include=out/util/PersistenceSchema.js --test-coverage-include=out/util/WorkspaceCapabilities.js --test-coverage-lines=90 --test-coverage-branches=75 --test-coverage-functions=85 --test-reporter=spec \"tests/unit/*.test.js\" \"tests/contracts/*.test.js\"",
+    "verify": "npm run compile && npm run lint && npm run test:unit:compiled && npm run test:contract:compiled && node scripts/verify-all.js",
     "test:integration": "npm run compile && node scripts/integration/run-integration-tests.js",
     "verify:icons": "node scripts/verify-icon-assets.js",
-    "package:list": "npx --yes @vscode/vsce@3.9.2 ls --no-dependencies",
-    "package:vsix": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
+    "package:list": "vsce ls --no-dependencies",
+    "package:vsix": "vsce package --no-dependencies",
+    "sbom": "node scripts/release/write-sbom.js",
     "check:release": "npm run verify && npm run test:integration && npm audit --audit-level=low && npm run package:list"
   },
   "devDependencies": {
@@ -84,6 +113,7 @@
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "3.9.2",
     "esbuild": "^0.28.1",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
@@ -254,97 +284,97 @@
       {
         "command": "codebookmark.ai.generateAppend",
         "title": "%codebookmark.contributes.commands.22.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwrite",
         "title": "%codebookmark.contributes.commands.23.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkip",
         "title": "%codebookmark.contributes.commands.24.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimize",
         "title": "%codebookmark.contributes.commands.25.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeDirect",
         "title": "%codebookmark.contributes.commands.26.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeFolderDirect",
         "title": "%codebookmark.contributes.commands.27.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeSelectedDirect",
         "title": "%codebookmark.contributes.commands.28.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeSelected",
         "title": "%codebookmark.contributes.commands.29.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateAppendFolder",
         "title": "%codebookmark.contributes.commands.30.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwriteFolder",
         "title": "%codebookmark.contributes.commands.31.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateAppendFolderDirect",
         "title": "%codebookmark.contributes.commands.32.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateOverwriteFolderDirect",
         "title": "%codebookmark.contributes.commands.33.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkipFolder",
         "title": "%codebookmark.contributes.commands.34.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.generateSkipFolderDirect",
         "title": "%codebookmark.contributes.commands.35.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeFolder",
         "title": "%codebookmark.contributes.commands.36.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
         "command": "codebookmark.ai.optimizeContextItem",
         "title": "%codebookmark.contributes.commands.37.title%",
-        "enablement": "codebookmark.aiAnalysisAvailable",
+        "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
         "category": "Code Bookmarks"
       },
       {
@@ -1260,42 +1290,42 @@
         {
           "submenu": "codebookmark.aiGenerateSubmenu",
           "group": "1_items@1",
-          "when": "codebookmark.aiAnalysisAvailable && codebookmark.activeFileAvailable && (codebookmark.activeFileHasBookmark || (workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript)))"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && codebookmark.activeFileAvailable && (codebookmark.activeFileHasBookmark || (workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript)))"
         },
         {
           "submenu": "codebookmark.aiGenerateWorkspaceSubmenu",
           "group": "1_items@1",
-          "when": "codebookmark.aiAnalysisAvailable && !codebookmark.activeFileAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && !codebookmark.activeFileAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
         },
         {
           "command": "codebookmark.ai.generateSkip",
           "group": "1_items@1",
-          "when": "codebookmark.aiAnalysisAvailable && codebookmark.activeFileAvailable && !codebookmark.activeFileHasBookmark && !(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript))"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && codebookmark.activeFileAvailable && !codebookmark.activeFileHasBookmark && !(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript))"
         },
         {
           "command": "codebookmark.ai.generateSkipFolderDirect",
           "group": "1_items@1",
-          "when": "codebookmark.aiAnalysisAvailable && !codebookmark.activeFileAvailable && workspaceFolderCount > 0 && codebookmark.currentFolderHasUnbookmarkedScript && !codebookmark.currentFolderHasBookmarkedScript"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && !codebookmark.activeFileAvailable && workspaceFolderCount > 0 && codebookmark.currentFolderHasUnbookmarkedScript && !codebookmark.currentFolderHasBookmarkedScript"
         },
         {
           "submenu": "codebookmark.aiOptimizeSubmenu",
           "group": "1_items@2",
-          "when": "codebookmark.aiAnalysisAvailable && (((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)) || ((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && codebookmark.hasSelection) || ((workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && codebookmark.hasSelection))"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && (((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)) || ((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && codebookmark.hasSelection) || ((workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && codebookmark.hasSelection))"
         },
         {
           "command": "codebookmark.ai.optimizeDirect",
           "group": "1_items@2",
-          "when": "codebookmark.aiAnalysisAvailable && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
         },
         {
           "command": "codebookmark.ai.optimizeFolderDirect",
           "group": "1_items@2",
-          "when": "codebookmark.aiAnalysisAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection"
         },
         {
           "command": "codebookmark.ai.optimizeSelectedDirect",
           "group": "1_items@2",
-          "when": "codebookmark.aiAnalysisAvailable && workspaceFolderCount > 0 && codebookmark.hasSelection && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
+          "when": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted) && workspaceFolderCount > 0 && codebookmark.hasSelection && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)"
         },
         {
           "command": "codebookmark.ai.openSettings",

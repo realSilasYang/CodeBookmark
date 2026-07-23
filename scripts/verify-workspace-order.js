@@ -4,7 +4,7 @@ const {
   insertWorkspaceOrderFile,
   mergeWorkspaceOrder,
   moveWorkspaceOrderDirectory,
-  parseWorkspaceOrder,
+  decodeWorkspaceOrderPersistence,
   removeWorkspaceOrderFile,
   removeWorkspaceOrderTree,
   renameWorkspaceOrderDirectory,
@@ -12,8 +12,8 @@ const {
   workspaceOrderFileIndex,
 } = require('../out/models/WorkspaceOrder')
 
-assert.deepEqual(parseWorkspaceOrder(['src/a.ts', 1, null, 'src/b.ts']), ['src/a.ts', 'src/b.ts'])
-assert.deepEqual(parseWorkspaceOrder({}), [])
+assert.deepEqual(decodeWorkspaceOrderPersistence(['src/a.ts', 1, null, 'src/b.ts']).order, ['src/a.ts', 'src/b.ts'])
+assert.throws(() => decodeWorkspaceOrderPersistence({}))
 assert.deepEqual(appendWorkspaceOrderPath(['src/a.ts'], 'src/b.ts'), ['src/a.ts', 'src/b.ts'])
 assert.deepEqual(appendWorkspaceOrderPath(['src\\a.ts'], 'src/a.ts'), ['src\\a.ts'])
 

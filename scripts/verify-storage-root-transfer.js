@@ -117,7 +117,10 @@ async function main() {
     }
     assert.equal(fs.existsSync(`${mergedPath}.transfer-base`), true)
     assert.equal(fs.readdirSync(targetWorkspace).some(file => file.startsWith(`${sharedFile}.transfer-copy_`)), true)
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(targetScope, '_workspace_order.json'), 'utf8')), [
+    const mergedOrder = JSON.parse(fs.readFileSync(path.join(targetScope, '_workspace_order.json'), 'utf8'))
+    assert.equal(mergedOrder.format, 'codebookmark.workspace-order')
+    assert.equal(mergedOrder.schemaVersion, 1)
+    assert.deepEqual(mergedOrder.order, [
       'src/b.ts', 'src/c.ts', 'src/a.ts',
     ])
 
@@ -126,6 +129,8 @@ async function main() {
     const mergedAgain = JSON.parse(fs.readFileSync(mergedPath, 'utf8'))
     assert.equal(mergedAgain.bookmarks.length, 5)
     const state = JSON.parse(fs.readFileSync(path.join(target, '.storage-transfer.json'), 'utf8'))
+    assert.equal(state.format, 'codebookmark.storage-transfer')
+    assert.equal(state.schemaVersion, 1)
     assert.equal(state.status, 'complete')
 
     const resumeSource = path.join(sandbox, 'resume-source')
@@ -147,8 +152,11 @@ async function main() {
     const resumed = await transferStorageRoot(resumeSource, resumeTarget)
     assert.deepEqual(resumed, { copiedFiles: 2, mergedFiles: 0, conflictFiles: 0 })
     const resumedState = JSON.parse(fs.readFileSync(path.join(resumeTarget, '.storage-transfer.json'), 'utf8'))
+    assert.equal(resumedState.format, 'codebookmark.storage-transfer')
+    assert.equal(resumedState.schemaVersion, 1)
     assert.equal(resumedState.status, 'complete')
     assert.equal(resumedState.startedAt, '2026-01-01T00:00:00.000Z')
+    assert.equal(fs.existsSync(path.join(resumeTarget, '.storage-transfer.json.migration-v0.backup')), false)
     assert.equal(fs.existsSync(path.join(resumeTarget, 'scripts', 'remaining.json')), true)
     assert.equal(fs.existsSync(path.join(resumeSource, 'scripts')), false)
 

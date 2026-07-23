@@ -1,8 +1,29 @@
 # 📋 更新日志
 
-[简体中文](./CHANGELOG.md) · [English](./docs/CHANGELOG.en.md)
+[简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
-本项目的显著变化记录在此文件中，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。新增版本时请使用[中文更新日志模板](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/CHANGELOG_TEMPLATE.md)，从用户视角说明实际变化，并删除没有内容的分类。
+## 🎉 版本 3.0.0 - 2026-07-23
+
+### ⚠️ 重要说明
+
+- **持久化格式升级**：脚本配置、工作区排序、移动恢复、存储迁移、撤销会话和最近图标记录现在具有明确的格式身份与版本号。完全无版本头的既有数据会自动迁移一次并按数据类型保留必要备份；格式不完整、身份不匹配或来自未来版本的数据将被安全拒绝，不再猜测解析。
+
+---
+
+### ✨ 新增
+
+- **工作区能力声明**：明确支持本地、远程和多根工作区，不支持虚拟工作区；未受信任工作区仍可使用本地书签，但 AI 功能和相关敏感配置会停用。
+- **标准测试与覆盖率门槛**：引入 Node.js 标准测试运行器，建立单元测试与契约测试分层，并对持久化、工作区能力和核心模型设置行、分支与函数覆盖率门槛。
+- **可验证发布产物**：正式发布同步生成 CycloneDX SBOM、SHA-256 校验和、构建来源证明和 SBOM 证明，GitHub Release 附件可独立核验。
+
+---
+
+### 🚀 优化
+
+- **真实扩展宿主测试**：中英文 VS Code Extension Host 测试扩展到激活、命令与设置、书签添加、撤销重做、持久化重载、VS Code 内移动和外部文件移动后的身份追随。
+- **核心模块解耦**：将 AI 工作流、代码标记、配置管理、配置导入、脚本编解码、移动候选索引、图标目录和最近图标状态从大型模块中拆出，同时保留原有调用边界与行为。
+- **架构回归保护**：新增模块可达性、运行时循环和核心文件规模守卫，防止职责重新集中或出现隐蔽依赖环。
+- **发布供应链收紧**：精确锁定 VSIX 发布工具和第三方 GitHub Action 提交，限制发布标签必须为 `main` 历史上的注解标签，并关闭 checkout 凭据持久化。
 
 ## 🎉 版本 2.0.1 - 2026-07-23
 
@@ -18,11 +39,10 @@
 ### 🐛 修复
 
 - **配置路径解析**：修复 TypeScript 配置移动后源码输入和模块图验证可能按错误基准解析相对路径的问题，保证本地、CI 与发布构建使用同一输入范围。
-- **更新日志显示**：将 2.0.0 的重要说明移到版本内容首位，并统一警告符号的文本呈现，改善标题与正文的视觉对齐。
 
 ## 🎉 版本 2.0.0 - 2026-07-23
 
-### ⚠ 重要说明
+### ⚠️ 重要说明
 
 - **AI 配置键升级**：2.0.0 不再读取旧键 `codebookmark.AI.endpoint` 和 `codebookmark.AI.apiKey`。升级后请在设置中重新填写 `codebookmark.AI.address` 与 `codebookmark.AI.APIKey`；API Key 仍以明文保存在所选 VS Code 设置层级中。
 

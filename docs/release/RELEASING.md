@@ -31,7 +31,7 @@ npm run check:release
 
 ## 2. 准备版本
 
-版本号只在 `src/util/constants/BasePackage.ts` 中修改，随后运行 `npm run compile` 生成 `package.json`。同时按照[中文更新日志模板](CHANGELOG_TEMPLATE.md)在 `CHANGELOG.md` 顶部增加对应版本，并确认 README 描述与实际功能一致。版本标题必须使用 `🎉 版本 X.Y.Z - YYYY-MM-DD`；如有 `⚠ 重要说明`，必须放在版本内容首位，其后再按 `✨ 新增`、`🚀 优化`、`🐛 修复` 分类；没有内容的分类应直接删除。
+版本号只在 `src/util/constants/BasePackage.ts` 中修改，随后运行 `npm run compile` 生成 `package.json`。同时按照[中文更新日志模板](CHANGELOG_TEMPLATE.md)在 `CHANGELOG.md` 顶部增加对应版本，并确认 README 描述与实际功能一致。版本标题必须使用 `🎉 版本 X.Y.Z - YYYY-MM-DD`；如有 `⚠️ 重要说明`，必须放在版本内容首位，其后再按 `✨ 新增`、`🚀 优化`、`🐛 修复` 分类；没有内容的分类应直接删除。
 
 Marketplace 上的扩展身份已经固定为 Publisher `realSilasYang` 下的 `codebookmark`。不要在普通版本中修改 `publisher`、`name` 或 `displayName`；这类修改会改变扩展身份，必须作为单独迁移评估。
 
@@ -40,23 +40,23 @@ Marketplace 上的扩展身份已经固定为 Publisher `realSilasYang` 下的 `
 ```bash
 npm ci
 npm run check:release
-npm run package:vsix -- --out codebookmark-2.0.0.vsix
+npm run package:vsix -- --out codebookmark-3.0.0.vsix
 ```
 
-`package:list` 和 VSIX 打包会使用固定版本的 `@vscode/vsce`。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、双语 README/CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。扩展没有运行时依赖或原生模块，生成的 VSIX 是跨平台通用包，不需要 `--target`。
+`package:list` 和 VSIX 打包使用 `devDependencies` 与 `package-lock.json` 中精确固定的 `@vscode/vsce`，发布工作流不临时下载另一份工具。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、双语 README/CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。扩展没有运行时依赖或原生模块，生成的 VSIX 是跨平台通用包，不需要 `--target`。
 
 ## 3. 联动发布 Marketplace 与 GitHub Release
 
 创建版本标签前，必须先完成第 4 节的 Publisher 注册和 Microsoft Entra ID 联合身份配置。工作流会同时核对 `VSCODE_MARKETPLACE_PUBLISHER` 与 `package.json.publisher`，并检查三个 Azure 标识变量；任何配置缺失时都会在发布前主动失败，防止只发布其中一个平台。
 
-提交发布版本后创建与清单版本完全一致的标签：
+先把发布提交合入 `main`，再在该提交或其 `main` 祖先提交上创建与清单版本完全一致的注解标签。轻量标签和不属于 `main` 历史的标签都会被工作流拒绝：
 
 ```bash
-git tag -a v2.0.0 -m "CodeBookmark 2.0.0"
-git push origin v2.0.0
+git tag -a v3.0.0 -m "CodeBookmark 3.0.0"
+git push origin v3.0.0
 ```
 
-`.github/workflows/release.yml` 会串行执行全量验证、扩展宿主集成测试、标签与版本核对、中文 Release 更新日志生成和 VSIX 打包，再通过 GitHub OIDC 登录 Microsoft Entra ID，使用 `vsce publish --azure-credential --skip-duplicate` 把同一个 VSIX 发布到 Marketplace，最后创建 GitHub Release。Release 正文直接取自 `CHANGELOG.md` 的对应版本块，并将其转换成以 `🎉 CodeBookmark vX.Y.Z 更新日志` 开头的中文结构，避免 GitHub 自动生成与用户无关的英文提交摘要。工作流会下载 Marketplace 线上包，与本次构建产物进行 SHA-256 比对，只有逐字节一致才继续。GitHub Release 已存在时会更新标题和正文，并补齐或替换同名 VSIX，因此失败后可以安全重跑；全局 `release` 并发组会阻止多个版本同时发布。不要在失败的工作流上手工补发未经验证的包。
+`.github/workflows/release.yml` 会串行执行全量验证、真实扩展宿主测试、标签身份与 `main` 历史核对、中文 Release 正文生成和 VSIX 打包。它还会生成 CycloneDX SBOM 与 `SHA256SUMS`，通过固定提交 SHA 的 GitHub 官方 Action 为 VSIX 写入构建来源和 SBOM 证明。随后工作流通过 GitHub OIDC 登录 Microsoft Entra ID，使用本地锁定的 `vsce publish --azure-credential --skip-duplicate` 发布 Marketplace，并下载线上包做逐字节 SHA-256 比对；全部通过后，GitHub Release 同时附带 VSIX、SBOM 和校验和。Release 正文来自 `CHANGELOG.md` 的对应版本块。已存在的 Release 会更新正文并覆盖同名附件，失败后可安全重跑；全局 `release` 并发组阻止多个版本同时发布。不要手工补发未经验证的包。
 
 ## 4. 配置 VS Code Marketplace 自动发布
 

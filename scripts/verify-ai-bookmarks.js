@@ -308,56 +308,58 @@ const currentFileOptimizeMenu = manifest.contributes.menus['codebookmark.aiOptim
 assert.equal(currentFileOptimizeMenu.when, '(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)')
 const optimizeTargetSubmenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.submenu === 'codebookmark.aiOptimizeSubmenu')
+const trustedAIAvailable = '(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)'
 assert.equal(
   optimizeTargetSubmenu.when,
-  'codebookmark.aiAnalysisAvailable && (((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)) || ((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && codebookmark.hasSelection) || ((workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && codebookmark.hasSelection))',
+  `${trustedAIAvailable} && (((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)) || ((codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && codebookmark.hasSelection) || ((workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && codebookmark.hasSelection))`,
 )
 const directOptimizeMenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.command === 'codebookmark.ai.optimizeDirect')
 assert.equal(
   directOptimizeMenu.when,
-  'codebookmark.aiAnalysisAvailable && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)',
+  `${trustedAIAvailable} && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)`,
 )
 const directFolderOptimizeMenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.command === 'codebookmark.ai.optimizeFolderDirect')
 assert.equal(
   directFolderOptimizeMenu.when,
-  'codebookmark.aiAnalysisAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection',
+  `${trustedAIAvailable} && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript) && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !codebookmark.hasSelection`,
 )
 const directSelectedOptimizeMenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.command === 'codebookmark.ai.optimizeSelectedDirect')
 assert.equal(
   directSelectedOptimizeMenu.when,
-  'codebookmark.aiAnalysisAvailable && workspaceFolderCount > 0 && codebookmark.hasSelection && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)',
+  `${trustedAIAvailable} && workspaceFolderCount > 0 && codebookmark.hasSelection && !(codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark) && !(workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)`,
 )
 const generateTargetSubmenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.submenu === 'codebookmark.aiGenerateSubmenu')
 assert.equal(
   generateTargetSubmenu.when,
-  'codebookmark.aiAnalysisAvailable && codebookmark.activeFileAvailable && (codebookmark.activeFileHasBookmark || (workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript)))',
+  `${trustedAIAvailable} && codebookmark.activeFileAvailable && (codebookmark.activeFileHasBookmark || (workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript)))`,
 )
 const generateWorkspaceTargetSubmenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.submenu === 'codebookmark.aiGenerateWorkspaceSubmenu')
 assert.equal(
   generateWorkspaceTargetSubmenu.when,
-  'codebookmark.aiAnalysisAvailable && !codebookmark.activeFileAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)',
+  `${trustedAIAvailable} && !codebookmark.activeFileAvailable && (workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript)`,
 )
 const directGenerateMenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.command === 'codebookmark.ai.generateSkip')
 assert.equal(
   directGenerateMenu.when,
-  'codebookmark.aiAnalysisAvailable && codebookmark.activeFileAvailable && !codebookmark.activeFileHasBookmark && !(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript))',
+  `${trustedAIAvailable} && codebookmark.activeFileAvailable && !codebookmark.activeFileHasBookmark && !(workspaceFolderCount > 0 && (codebookmark.currentFolderHasUnbookmarkedScript || codebookmark.currentFolderHasBookmarkedScript))`,
 )
 const directFolderGenerateMenu = manifest.contributes.menus['codebookmark.aiSubmenu']
   .find(item => item.command === 'codebookmark.ai.generateSkipFolderDirect')
 assert.equal(
   directFolderGenerateMenu.when,
-  'codebookmark.aiAnalysisAvailable && !codebookmark.activeFileAvailable && workspaceFolderCount > 0 && codebookmark.currentFolderHasUnbookmarkedScript && !codebookmark.currentFolderHasBookmarkedScript',
+  `${trustedAIAvailable} && !codebookmark.activeFileAvailable && workspaceFolderCount > 0 && codebookmark.currentFolderHasUnbookmarkedScript && !codebookmark.currentFolderHasBookmarkedScript`,
 )
 assert.equal(
   manifest.contributes.menus['codebookmark.aiSubmenu']
     .filter(item => item.group.startsWith('1_items'))
-    .every(item => item.when.includes('codebookmark.aiAnalysisAvailable')),
+    .every(item => item.when.includes('codebookmark.aiAnalysisAvailable')
+      && item.when.includes('isWorkspaceTrusted')),
   true,
 )
 
@@ -365,6 +367,7 @@ const menuIdentity = item => item.command ?? item.submenu
 const visibleMenuItems = (menuId, state) => manifest.contributes.menus[menuId]
   .filter(item => !item.when || vm.runInNewContext(item.when, {
     workspaceFolderCount: state.workspaceFolders,
+    isWorkspaceTrusted: state.workspaceTrusted,
     view: 'codebookmarkTreeView',
     codebookmarkTreeView: 'codebookmarkTreeView',
     codebookmark: {
@@ -381,12 +384,24 @@ const visibleMenuItems = (menuId, state) => manifest.contributes.menus[menuId]
 const menuState = overrides => ({
   fileOpen: true,
   workspaceFolders: 0,
+  workspaceTrusted: true,
   hasBookmarks: false,
   hasSelection: false,
   folderHasBookmarkedScript: false,
   folderHasUnbookmarkedScript: false,
   ...overrides,
 })
+
+assert.deepEqual(
+  visibleMenuItems('codebookmark.aiSubmenu', menuState({
+    workspaceFolders: 1,
+    workspaceTrusted: false,
+    hasBookmarks: true,
+    folderHasBookmarkedScript: true,
+    folderHasUnbookmarkedScript: true,
+  })),
+  ['codebookmark.ai.openSettings'],
+)
 
 const menuStateCases = [
   {
@@ -624,13 +639,14 @@ const folderPresenceSource = fs.readFileSync('src/providers/AIFolderPresenceCach
 const workflowGuardSource = fs.readFileSync('src/providers/AIWorkflowGuard.ts', 'utf8')
 const singleFileRunnerSource = fs.readFileSync('src/providers/AISingleFileWorkflowRunner.ts', 'utf8')
 const folderRunnerSource = fs.readFileSync('src/providers/AIFolderWorkflowRunner.ts', 'utf8')
+const workflowControllerSource = fs.readFileSync('src/providers/AIWorkflowController.ts', 'utf8')
 const selectedRunnerSource = fs.readFileSync('src/providers/AISelectedBookmarksWorkflowRunner.ts', 'utf8')
 const serviceSource = fs.readFileSync('src/util/AIService.ts', 'utf8')
 const endpointResolverSource = fs.readFileSync('src/util/AIEndpointResolver.ts', 'utf8')
 const protocolCodecSource = fs.readFileSync('src/util/AIProtocolCodec.ts', 'utf8')
 const httpTransportSource = fs.readFileSync('src/util/AIHttpTransport.ts', 'utf8')
 const bookmarkCommandsSource = fs.readFileSync('src/commands/bookmarkCommands.ts', 'utf8')
-const aiWorkflowSource = providerSource + singleFileRunnerSource + folderRunnerSource + selectedRunnerSource
+const aiWorkflowSource = providerSource + workflowControllerSource + singleFileRunnerSource + folderRunnerSource + selectedRunnerSource
 const aiRunnerSource = singleFileRunnerSource + folderRunnerSource + selectedRunnerSource
 assert.match(providerSource, /import \{ AITaskRegistry \} from '\.\/AITaskRegistry'/)
 assert.match(providerSource, /private readonly aiTaskRegistry = new AITaskRegistry\(\)/)
@@ -655,10 +671,14 @@ assert.match(singleFileRunnerSource, /AI 智能代码书签提取运行中/)
 assert.match(singleFileRunnerSource, /AI 书签优化运行中/)
 assert.match(singleFileRunnerSource, /saveUndoState\('generateAIBookmarks'\)/)
 assert.match(singleFileRunnerSource, /saveUndoState\('optimizeAIBookmarks'\)/)
-assert.match(providerSource, /return runGenerateBookmarksForFolder\([\s\S]*?await this\.aiFolderWorkflowTarget\(\)/)
-assert.match(providerSource, /return runOptimizeBookmarksForFolder\([\s\S]*?await this\.aiFolderWorkflowTarget\(\)/)
-assert.match(providerSource, /const directory = this\.workspaceFolderRootForCurrentScope\(\)/)
-assert.match(providerSource, /await this\.refresh\(undefined, storageScope\)/)
+assert.match(providerSource, /return this\.aiWorkflowController\.generateFolder\(mode\)/)
+assert.match(providerSource, /return this\.aiWorkflowController\.optimizeFolder\(\)/)
+assert.match(workflowControllerSource, /await runGenerateBookmarksForFolder\([\s\S]*?await this\.folderWorkflowTarget\(\)/)
+assert.match(workflowControllerSource, /await runOptimizeBookmarksForFolder\([\s\S]*?await this\.folderWorkflowTarget\(\)/)
+assert.match(workflowControllerSource, /const editor = vscode\.window\.activeTextEditor[\s\S]*?await this\.port\.ensureEditorScope\(editor\)[\s\S]*?this\.port\.workspaceFolderRootForCurrentScope\(\)/)
+assert.match(workflowControllerSource, /await this\.port\.refreshScope\(storageScope\)/)
+assert.match(workflowControllerSource, /folderWorkflowPort\(\): AIFolderWorkflowPort/)
+assert.equal((workflowControllerSource.match(/this\.port\.folderWorkflowPort\(\)/g) || []).length, 2)
 assert.doesNotMatch(providerSource, /AI 批量智能提取书签运行中|AI 正在扫描文件夹中的书签/)
 assert.match(folderRunnerSource, /AI 批量智能提取书签运行中/)
 assert.match(folderRunnerSource, /AI 正在扫描文件夹中的书签/)
@@ -671,13 +691,14 @@ assert.match(selectedRunnerSource, /saveUndoState\('optimizeAIBookmarks'\)/)
 assert.doesNotMatch(providerSource, /AIService|readAISourceSnapshot|assertAISourceSnapshot|resolveAIOptimizationChanges|applyAIOptimizationChanges/)
 assert.ok((aiRunnerSource.match(/saveBookmarks\(\[filePath\]\)/g) || []).length >= 3)
 assert.match(providerSource, /folderBookmarkPresence/)
-assert.match(providerSource, /aiFolderPresence\.getPresence\(/)
-assert.match(providerSource, /presence\.hasBookmarkedScript && presence\.hasUnbookmarkedScript/)
-assert.match(providerSource, /aiFolderPresence\.invalidateSourceFiles\(\)/)
-assert.match(providerSource, /bookmarkPathPresenceSignature\(this\.codeBookmarks\.values\)/)
+assert.match(providerSource, /this\.aiWorkflowController\.folderBookmarkPresence\(directory\)/)
+assert.match(workflowControllerSource, /this\.folderPresenceCache\.getPresence\(/)
+assert.match(workflowControllerSource, /presence\.hasBookmarkedScript && presence\.hasUnbookmarkedScript/)
+assert.match(providerSource, /this\.aiWorkflowController\.invalidateSourceFiles\(\)/)
+assert.match(workflowControllerSource, /bookmarkPathPresenceSignature\(this\.port\.bookmarkRoots\(\)\)/)
 assert.doesNotMatch(providerSource, /aiFolderSourceGeneration|aiFolderPresenceCache/)
 assert.match(folderRunnerSource, /listAISourceFilesInFolder\(dirPath\)/)
-assert.match(providerSource, /visitAISourceFilesInFolder\(dirPath/)
+assert.match(workflowControllerSource, /visitAISourceFilesInFolder\(directory/)
 assert.match(contextCoordinatorSource, /Commands\.varCurrentFolderHasUnbookmarkedScript/)
 assert.match(contextCoordinatorSource, /Commands\.varCurrentFolderHasBookmarkedScript/)
 assert.match(folderPresenceSource, /async getPresence\(/)

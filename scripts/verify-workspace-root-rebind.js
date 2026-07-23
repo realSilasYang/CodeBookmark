@@ -100,7 +100,10 @@ async function main() {
     const data = JSON.parse(fs.readFileSync(path.join(scriptFolder, `${ids[index]}.json`), 'utf8'))
     assert.equal(path.resolve(data.script.path), path.resolve(newRoot, 'src', names[index]))
   }
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(newScope, '_workspace_order.json'), 'utf8')), ['src/b.ts', 'src/a.ts'])
+  const reboundOrder = JSON.parse(fs.readFileSync(path.join(newScope, '_workspace_order.json'), 'utf8'))
+  assert.equal(reboundOrder.format, 'codebookmark.workspace-order')
+  assert.equal(reboundOrder.schemaVersion, 1)
+  assert.deepEqual(reboundOrder.order, ['src/b.ts', 'src/a.ts'])
   assert.equal(fs.existsSync(oldScope), false)
   assert.equal(fs.existsSync(path.join(storageRoot, '.script-relocations')), false)
 }

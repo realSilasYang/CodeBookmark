@@ -104,7 +104,7 @@ async function main() {
   fs.writeFileSync(path.join(scriptFolder, `${idA}.json`), JSON.stringify(envelope(idA, targetA, contentA, 'bookmark-a')))
   fs.writeFileSync(path.join(scriptFolder, `${idB}.json`), JSON.stringify(envelope(idB, path.join(sourceDirectory, 'b.ts'), contentB, 'bookmark-b')))
   fs.writeFileSync(path.join(sourceScope, '_workspace_order.json'), JSON.stringify(['src/source/a.ts', 'src/source/b.ts']))
-  await createScriptRelocation(storageRoot, {
+  const pendingRelocation = await createScriptRelocation(storageRoot, {
     oldAbsolutePath: sourceDirectory,
     newAbsolutePath: targetDirectory,
     oldBookmarkFolder: sourceScope,
@@ -112,17 +112,25 @@ async function main() {
     oldBookmarkPath: 'src/source',
     newBookmarkPath: 'src/target',
   })
+  const legacyJournal = JSON.parse(fs.readFileSync(pendingRelocation.journalPath, 'utf8'))
+  delete legacyJournal.format
+  delete legacyJournal.schemaVersion
+  fs.writeFileSync(pendingRelocation.journalPath, JSON.stringify(legacyJournal))
 
   const loaded = await bookmarkRepository.readBookmarksFromFile([targetA])
   assert.deepEqual(loaded.map(node => node.scriptId).sort(), [idA, idB])
   const recoveredB = JSON.parse(fs.readFileSync(path.join(scriptFolder, `${idB}.json`), 'utf8'))
   assert.equal(path.resolve(recoveredB.script.path), path.resolve(targetB))
   assert.equal(path.resolve(recoveredB.bookmarks[0].path), path.resolve(targetB))
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(targetScope, '_workspace_order.json'), 'utf8')), [
+  const recoveredOrder = JSON.parse(fs.readFileSync(path.join(targetScope, '_workspace_order.json'), 'utf8'))
+  assert.equal(recoveredOrder.format, 'codebookmark.workspace-order')
+  assert.equal(recoveredOrder.schemaVersion, 1)
+  assert.deepEqual(recoveredOrder.order, [
     'src/target/a.ts',
     'src/target/b.ts',
   ])
   assert.equal(fs.existsSync(path.join(storageRoot, '.script-relocations')), false)
+  assert.equal(fs.existsSync(`${pendingRelocation.journalPath}.migration-v0.backup`), false)
 }
 
 main().catch(error => {

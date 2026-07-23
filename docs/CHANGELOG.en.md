@@ -1,8 +1,29 @@
 # 📋 Changelog
 
-[简体中文](../CHANGELOG.md) · [English](./CHANGELOG.en.md)
+[简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
-Notable changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/). For a new release, use the [English changelog template](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/CHANGELOG_TEMPLATE.en.md), describe actual user-facing changes, and remove empty categories.
+## 🎉 Version 3.0.0 - 2026-07-23
+
+### ⚠️ Important Notes
+
+- **Persisted-format upgrade:** Script configurations, workspace order, relocation recovery, storage transfer, undo sessions, and recent-icon records now carry explicit format identities and schema versions. Existing data with no version header is migrated once with the necessary type-specific backup; partial headers, foreign identities, and future versions are rejected safely instead of being guessed.
+
+---
+
+### ✨ Added
+
+- **Workspace capability declaration:** Local, remote, and multi-root workspaces are explicitly supported, while virtual workspaces are not. Local bookmarks remain available in untrusted workspaces, but AI features and related sensitive settings are disabled.
+- **Standard tests and coverage gates:** Added the Node.js standard test runner with separate unit and contract suites, plus line, branch, and function coverage thresholds for persistence, workspace capabilities, and core models.
+- **Verifiable release artifacts:** Formal releases now include a CycloneDX SBOM, SHA-256 checksums, build-provenance attestation, and SBOM attestation so GitHub Release assets can be independently verified.
+
+---
+
+### 🚀 Improvements
+
+- **Real Extension Host coverage:** Chinese and English VS Code Extension Host tests now cover activation, commands and settings, bookmark creation, undo and redo, persistence reload, VS Code file moves, and identity tracking after external file moves.
+- **Decoupled core modules:** AI workflows, code markers, configuration management and import, script codecs, relocation candidate indexing, the icon catalog, and recent-icon state were extracted from oversized modules while preserving their existing behavioral boundaries.
+- **Architecture regression protection:** Added guards for production-module reachability, runtime dependency cycles, and core-file size so responsibilities cannot silently collapse back into monoliths.
+- **Hardened release supply chain:** The VSIX publisher and third-party GitHub Actions are pinned exactly, release tags must be annotated tags on `main` history, and checkout credential persistence is disabled.
 
 ## 🎉 Version 2.0.1 - 2026-07-23
 
@@ -18,11 +39,10 @@ Notable changes are recorded here. Versions follow [Semantic Versioning](https:/
 ### 🐛 Fixed
 
 - **Configuration path resolution:** Fixed TypeScript source inputs and module-graph verification resolving relative paths from the wrong base after the configuration move, keeping local, CI, and release builds on the same input set.
-- **Changelog presentation:** Moved the 2.0.0 important notice to the beginning of its version entry and standardized the warning symbol as text for cleaner heading alignment.
 
 ## 🎉 Version 2.0.0 - 2026-07-23
 
-### ⚠ Important Notes
+### ⚠️ Important Notes
 
 - **AI setting-key upgrade:** Version 2.0.0 no longer reads the old `codebookmark.AI.endpoint` and `codebookmark.AI.apiKey` keys. Re-enter the values under `codebookmark.AI.address` and `codebookmark.AI.APIKey` after upgrading. The API key remains stored as plain text at the selected VS Code configuration scope.
 

@@ -9,6 +9,7 @@ export class Commands {
 	static readonly varActiveFileAvailable = 'codebookmark.activeFileAvailable'
 	static readonly varActiveFileHasBookmark = 'codebookmark.activeFileHasBookmark'
 	static readonly varAIAnalysisAvailable = 'codebookmark.aiAnalysisAvailable'
+	static readonly whenAIAnalysisAvailable = `(${Commands.varAIAnalysisAvailable} && isWorkspaceTrusted)`
 	static readonly varCurrentFolderHasUnbookmarkedScript = 'codebookmark.currentFolderHasUnbookmarkedScript'
 	static readonly varCurrentFolderHasBookmarkedScript = 'codebookmark.currentFolderHasBookmarkedScript'
 	static readonly whenWorkspaceFolderOpen = 'workspaceFolderCount > 0'
@@ -228,100 +229,100 @@ export class Commands {
 		aiGenerateAppend: {
 			'command': Commands.nameExtension + '.ai.generateAppend',
 			'title': '$(add) 追加',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateOverwrite: {
 			'command': Commands.nameExtension + '.ai.generateOverwrite',
 			'title': '$(replace) 重新生成并替换',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateSkip: {
 			'command': Commands.nameExtension + '.ai.generateSkip',
 			'title': '$(diff-added) 生成',
 			'when': `${Commands.viewCodeBookmarkView} && !${Commands.varActiveFileHasBookmark}`,
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiOptimize: {
 			'command': Commands.nameExtension + '.ai.optimize',
 			'title': '$(hubot) 当前脚本',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiOptimizeDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeDirect',
 			'title': '$(hubot) 优化当前脚本的书签标签',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiOptimizeFolderDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeFolderDirect',
 			'title': '$(hubot) 优化当前文件夹内有书签的脚本中的书签标签',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiOptimizeSelectedDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeSelectedDirect',
 			'title': '$(hubot) 优化选中书签的标签',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiOptimizeSelected: {
 			'command': Commands.nameExtension + '.ai.optimizeSelected',
 			'title': '$(hubot) 选中的书签',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateAppendFolder: {
 			'command': Commands.nameExtension + '.ai.generateAppendFolder',
 			'title': '$(add) 为有书签的脚本追加',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateOverwriteFolder: {
 			'command': Commands.nameExtension + '.ai.generateOverwriteFolder',
 			'title': '$(replace) 为有书签的脚本重新生成并替换',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateAppendFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateAppendFolderDirect',
 			'title': '$(add) 为当前文件夹内有书签的脚本追加',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateOverwriteFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateOverwriteFolderDirect',
 			'title': '$(replace) 为当前文件夹内有书签的脚本重新生成并替换',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateSkipFolder: {
 			'command': Commands.nameExtension + '.ai.generateSkipFolder',
 			'title': '$(diff-added) 为所有无书签脚本生成',
 			'when': `${Commands.viewCodeBookmarkView} && ${Commands.varCurrentFolderHasUnbookmarkedScript}`,
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiGenerateSkipFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateSkipFolderDirect',
 			'title': '$(diff-added) 为当前文件夹内无书签脚本生成',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiOptimizeFolder: {
 			'command': Commands.nameExtension + '.ai.optimizeFolder',
 			'title': '$(hubot) 当前文件夹内有书签的脚本',
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiOptimizeContextItem: {
 			'command': Commands.nameExtension + '.ai.optimizeContextItem',
 			'title': '$(hubot) AI 优化书签标签',
 			'when': `${Commands.viewCodeBookmarkView} && ${Commands.editableBookmarkOnTree}`,
-			'enablement': Commands.varAIAnalysisAvailable,
+			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "Code Bookmarks"
 		},
 		aiTestConnection: {
@@ -518,42 +519,42 @@ export class Commands {
 		{
 			submenu: this.aiGenerateSubmenuId,
 			group: "1_items@1",
-			when: `${this.varAIAnalysisAvailable} && ${this.varActiveFileAvailable} && (${this.varActiveFileHasBookmark} || ${this.whenAIFolderTarget})`,
+			when: `${this.whenAIAnalysisAvailable} && ${this.varActiveFileAvailable} && (${this.varActiveFileHasBookmark} || ${this.whenAIFolderTarget})`,
 		},
 		{
 			submenu: this.aiGenerateWorkspaceSubmenuId,
 			group: "1_items@1",
-			when: `${this.varAIAnalysisAvailable} && !${this.varActiveFileAvailable} && ${this.whenBookmarkedFolderTarget}`,
+			when: `${this.whenAIAnalysisAvailable} && !${this.varActiveFileAvailable} && ${this.whenBookmarkedFolderTarget}`,
 		},
 		{
 			command: this.bookmarkCommands.aiGenerateSkip.command,
 			group: "1_items@1",
-			when: `${this.varAIAnalysisAvailable} && ${this.varActiveFileAvailable} && !${this.varActiveFileHasBookmark} && !${this.whenAIFolderTarget}`,
+			when: `${this.whenAIAnalysisAvailable} && ${this.varActiveFileAvailable} && !${this.varActiveFileHasBookmark} && !${this.whenAIFolderTarget}`,
 		},
 		{
 			command: this.bookmarkCommands.aiGenerateSkipFolderDirect.command,
 			group: "1_items@1",
-			when: `${this.varAIAnalysisAvailable} && !${this.varActiveFileAvailable} && ${this.whenWorkspaceFolderOpen} && ${this.varCurrentFolderHasUnbookmarkedScript} && !${this.varCurrentFolderHasBookmarkedScript}`,
+			when: `${this.whenAIAnalysisAvailable} && !${this.varActiveFileAvailable} && ${this.whenWorkspaceFolderOpen} && ${this.varCurrentFolderHasUnbookmarkedScript} && !${this.varCurrentFolderHasBookmarkedScript}`,
 		},
 		{
 			submenu: this.aiOptimizeSubmenuId,
 			group: "1_items@2",
-			when: `${this.varAIAnalysisAvailable} && ((${this.whenActiveBookmarkedFile} && ${this.whenBookmarkedFolderTarget}) || (${this.whenActiveBookmarkedFile} && codebookmark.hasSelection) || (${this.whenBookmarkedFolderTarget} && codebookmark.hasSelection))`,
+			when: `${this.whenAIAnalysisAvailable} && ((${this.whenActiveBookmarkedFile} && ${this.whenBookmarkedFolderTarget}) || (${this.whenActiveBookmarkedFile} && codebookmark.hasSelection) || (${this.whenBookmarkedFolderTarget} && codebookmark.hasSelection))`,
 		},
 		{
 			command: this.bookmarkCommands.aiOptimizeDirect.command,
 			group: "1_items@2",
-			when: `${this.varAIAnalysisAvailable} && ${this.whenActiveBookmarkedFile} && !codebookmark.hasSelection && !${this.whenBookmarkedFolderTarget}`,
+			when: `${this.whenAIAnalysisAvailable} && ${this.whenActiveBookmarkedFile} && !codebookmark.hasSelection && !${this.whenBookmarkedFolderTarget}`,
 		},
 		{
 			command: this.bookmarkCommands.aiOptimizeFolderDirect.command,
 			group: "1_items@2",
-			when: `${this.varAIAnalysisAvailable} && ${this.whenBookmarkedFolderTarget} && !${this.whenActiveBookmarkedFile} && !codebookmark.hasSelection`,
+			when: `${this.whenAIAnalysisAvailable} && ${this.whenBookmarkedFolderTarget} && !${this.whenActiveBookmarkedFile} && !codebookmark.hasSelection`,
 		},
 		{
 			command: this.bookmarkCommands.aiOptimizeSelectedDirect.command,
 			group: "1_items@2",
-			when: `${this.varAIAnalysisAvailable} && ${this.whenWorkspaceFolderOpen} && codebookmark.hasSelection && !${this.whenActiveBookmarkedFile} && !${this.whenBookmarkedFolderTarget}`,
+			when: `${this.whenAIAnalysisAvailable} && ${this.whenWorkspaceFolderOpen} && codebookmark.hasSelection && !${this.whenActiveBookmarkedFile} && !${this.whenBookmarkedFolderTarget}`,
 		},
 		{ command: this.bookmarkCommands.aiOpenSettings.command, group: "2_configuration@1" },
 	]

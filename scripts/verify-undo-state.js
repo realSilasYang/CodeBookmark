@@ -309,6 +309,9 @@ async function verifySessionPersistence() {
   persistedManager.saveState(new BookmarkSet([fileNode]), 'deleteBookmarks', scopeA)
   await persistedManager.flushPersistence()
   assert.equal(persistenceUpdateCount, 1)
+  const persistedSession = persistedState.get('codebookmark.undoSessionState')
+  assert.equal(persistedSession.format, 'codebookmark.undo-session')
+  assert.equal(persistedSession.schemaVersion, 1)
   await persistedManager.flushPersistence()
   assert.equal(persistenceUpdateCount, 1, 'Unchanged undo state must not be persisted again')
 

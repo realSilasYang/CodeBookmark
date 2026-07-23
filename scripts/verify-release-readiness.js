@@ -39,6 +39,8 @@ assert.equal(lockfile.version, manifest.version)
 assert.equal(lockfile.packages[''].version, manifest.version)
 assert.deepEqual(manifest.dependencies, lockfile.packages[''].dependencies ?? {})
 assert.deepEqual(manifest.devDependencies, lockfile.packages[''].devDependencies ?? {})
+assert.equal(manifest.devDependencies['@vscode/vsce'], '3.9.2')
+assert.equal(lockfile.packages['node_modules/@vscode/vsce'].version, '3.9.2')
 
 assert.deepEqual(manifest.files, [
   'out/extension.js',
@@ -52,8 +54,12 @@ assert.deepEqual(manifest.files, [
   'docs/legal/THIRD_PARTY_NOTICES.md',
   'docs/legal/licenses',
 ])
-assert.equal(manifest.scripts['package:list'], 'npx --yes @vscode/vsce@3.9.2 ls --no-dependencies')
-assert.equal(manifest.scripts['package:vsix'], 'npx --yes @vscode/vsce@3.9.2 package --no-dependencies')
+assert.equal(manifest.scripts['package:list'], 'vsce ls --no-dependencies')
+assert.equal(manifest.scripts['package:vsix'], 'vsce package --no-dependencies')
+assert.equal(manifest.scripts.sbom, 'node scripts/release/write-sbom.js')
+assert.match(manifest.scripts['test:coverage'], /--test-coverage-lines=90/)
+assert.match(manifest.scripts['test:coverage'], /--test-coverage-branches=75/)
+assert.match(manifest.scripts['test:coverage'], /--test-coverage-functions=85/)
 assert.match(manifest.scripts['check:release'], /npm run verify/)
 assert.match(manifest.scripts['check:release'], /npm run test:integration/)
 assert.equal(manifest.scripts.bundle, 'node scripts/build/bundle-extension.js')
@@ -155,6 +161,13 @@ const notices = read(path.join('docs', 'legal', 'THIRD_PARTY_NOTICES.md'))
 const icon = fs.readFileSync(path.join(root, manifest.icon))
 assert.match(readme, /<h1>代码书签 - CodeBookmark<\/h1>/)
 assert.match(englishReadme, /<h1>CodeBookmark<\/h1>/)
+const githubDocumentUrl = 'https://github.com/realSilasYang/CodeBookmark/blob/main/'
+assert.ok(readme.includes(`<a href="${githubDocumentUrl}docs/README.en.md">English</a>`))
+assert.ok(englishReadme.includes(`<a href="${githubDocumentUrl}README.md">简体中文</a>`))
+for (const content of [changelog, englishChangelog]) {
+  assert.ok(content.includes(`[简体中文](${githubDocumentUrl}CHANGELOG.md)`))
+  assert.ok(content.includes(`[English](${githubDocumentUrl}docs/CHANGELOG.en.md)`))
+}
 const repositoryMarkdownDocuments = [
   ['README.md', readme],
   [path.join('docs', 'README.en.md'), englishReadme],
@@ -191,6 +204,10 @@ assert.match(
 )
 assert.match(englishChangelog, /^# 📋 Changelog$/m)
 assert.doesNotMatch(changelog, /^### (?:Added|Changed|Fixed|Removed|Security)$/m)
+assert.doesNotMatch(changelog, /语义化版本|新增版本时请使用|中文更新日志模板/)
+assert.doesNotMatch(englishChangelog, /Semantic Versioning|For a new release|English changelog template/)
+assert.doesNotMatch(changelog, /^### ⚠(?!️)/m)
+assert.doesNotMatch(englishChangelog, /^### ⚠(?!️)/m)
 assert.match(license, /Copyright \(c\) 2026 阳熙来/)
 assert.match(readme, /\[发布指南\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.md\)/)
 assert.match(englishReadme, /\[English release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.en\.md\)/)
@@ -227,15 +244,29 @@ const releaseWorkflow = read(path.join('.github', 'workflows', 'release.yml'))
 const marketplaceIdentityWorkflow = read(
   path.join('.github', 'workflows', 'marketplace-identity.yml')
 )
+for (const workflowPath of [
+  path.join('.github', 'workflows', 'ci.yml'),
+  path.join('.github', 'workflows', 'marketplace-identity.yml'),
+  path.join('.github', 'workflows', 'release.yml'),
+]) {
+  const workflow = read(workflowPath)
+  const uses = [...workflow.matchAll(/^\s*-?\s*uses:\s+([^\s#]+)/gm)].map(match => match[1])
+  assert.ok(uses.length > 0, `${workflowPath} must use at least one pinned action`)
+  for (const action of uses) {
+    assert.match(action, /^[^@\s]+@[0-9a-f]{40}$/, `${workflowPath} contains an unpinned action: ${action}`)
+  }
+}
 assert.match(marketplaceIdentityWorkflow, /workflow_dispatch:/)
 assert.match(marketplaceIdentityWorkflow, /verify_marketplace_access:/)
 assert.match(marketplaceIdentityWorkflow, /environment: marketplace-release/)
 assert.match(marketplaceIdentityWorkflow, /id-token: write/)
-assert.match(marketplaceIdentityWorkflow, /uses: azure\/login@v3/)
+assert.match(marketplaceIdentityWorkflow, /uses: azure\/login@[0-9a-f]{40} # v3/)
 assert.match(marketplaceIdentityWorkflow, /app\.vssps\.visualstudio\.com\/_apis\/profile\/profiles\/me/)
 assert.match(marketplaceIdentityWorkflow, /499b84ac-1321-427f-aa17-267ca6975798/)
 assert.match(marketplaceIdentityWorkflow, /GITHUB_STEP_SUMMARY/)
-assert.match(marketplaceIdentityWorkflow, /@vscode\/vsce@3\.9\.2 verify-pat --azure-credential/)
+assert.match(marketplaceIdentityWorkflow, /npm ci/)
+assert.match(marketplaceIdentityWorkflow, /npm exec -- vsce verify-pat --azure-credential/)
+assert.doesNotMatch(marketplaceIdentityWorkflow, /\bnpx\b/)
 assert.match(marketplaceIdentityWorkflow, /VSCODE_MARKETPLACE_PUBLISHER/)
 assert.doesNotMatch(marketplaceIdentityWorkflow, /VSCE_PAT|secrets\.|--pat\b/)
 assert.match(
@@ -247,14 +278,16 @@ assert.match(releaseWorkflow, /GITHUB_REF_NAME/)
 assert.match(releaseWorkflow, /VSCODE_MARKETPLACE_PUBLISHER/)
 assert.match(releaseWorkflow, /CONFIRMED_PUBLISHER/)
 assert.match(releaseWorkflow, /environment: marketplace-release/)
+assert.match(releaseWorkflow, /attestations: write/)
 assert.match(releaseWorkflow, /id-token: write/)
-assert.match(releaseWorkflow, /uses: azure\/login@v3/)
+assert.match(releaseWorkflow, /uses: azure\/login@[0-9a-f]{40} # v3/)
 for (const variableName of ['AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID']) {
   assert.match(releaseWorkflow, new RegExp(`\\b${variableName}\\b`))
 }
 assert.match(releaseWorkflow, /\[Guid\]::Parse/)
 assert.match(releaseWorkflow, /npm run test:integration/)
-assert.match(releaseWorkflow, /@vscode\/vsce@3\.9\.2 publish/)
+assert.match(releaseWorkflow, /npm exec -- vsce publish/)
+assert.doesNotMatch(releaseWorkflow, /\bnpx\b/)
 assert.match(releaseWorkflow, /--azure-credential/)
 assert.match(releaseWorkflow, /--packagePath/)
 assert.match(releaseWorkflow, /--skip-duplicate/)
@@ -263,6 +296,13 @@ assert.doesNotMatch(releaseWorkflow, /secrets\./)
 assert.doesNotMatch(releaseWorkflow, /--pat\b/)
 assert.match(releaseWorkflow, /_apis\/public\/gallery\/publishers/)
 assert.match(releaseWorkflow, /Get-FileHash -Algorithm SHA256/)
+assert.match(releaseWorkflow, /fetch-depth: 0/)
+assert.match(releaseWorkflow, /git cat-file -t \$env:GITHUB_REF_NAME/)
+assert.match(releaseWorkflow, /git merge-base --is-ancestor \$tagCommit origin\/main/)
+assert.match(releaseWorkflow, /npm run sbom -- \$sbom/)
+assert.match(releaseWorkflow, /write-sha256sums\.js SHA256SUMS/)
+assert.match(releaseWorkflow, /actions\/attest-build-provenance@[0-9a-f]{40} # v3/)
+assert.match(releaseWorkflow, /actions\/attest-sbom@[0-9a-f]{40} # v3/)
 assert.match(releaseWorkflow, /scripts\/release\/build-release-notes\.js/)
 assert.match(releaseWorkflow, /CODEBOOKMARK_ALLOW_VSCODE_DOWNLOAD: 'true'/)
 assert.match(releaseWorkflow, /CODEBOOKMARK_VSCODE_TEST_VERSION: '1\.130\.0'/)
@@ -270,6 +310,8 @@ assert.match(releaseWorkflow, /--notes-file/)
 assert.match(releaseWorkflow, /gh release edit/)
 assert.match(releaseWorkflow, /gh release create/)
 assert.match(releaseWorkflow, /gh release upload/)
+assert.match(releaseWorkflow, /\$vsix \$sbom SHA256SUMS --clobber/)
+assert.match(releaseWorkflow, /\$vsix \$sbom SHA256SUMS `/)
 assert.doesNotMatch(releaseWorkflow, /--generate-notes/)
 assert.match(releaseWorkflow, /group: release/)
 const publishStep = releaseWorkflow.indexOf('Publish to VS Code Marketplace')

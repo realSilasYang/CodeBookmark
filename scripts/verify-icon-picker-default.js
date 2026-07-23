@@ -78,6 +78,7 @@ async function main() {
   IconPickerWebview._cachedIconMap = new Map([[sampleIcon.id, sampleIcon]])
   const localizedPicker = Object.create(IconPickerWebview.prototype)
   localizedPicker._context = {
+    extensionPath: process.cwd(),
     extensionUri: { path: 'extension' },
     globalState: { get: () => [] },
   }

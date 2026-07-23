@@ -1,7 +1,7 @@
 <div align="center">
   <img src="../resources/bookmark_logo.png" width="112" height="112" alt="CodeBookmark Logo">
 
-  <p><a href="../README.md">简体中文</a> · <strong>English</strong></p>
+  <p><a href="https://github.com/realSilasYang/CodeBookmark/blob/main/README.md">简体中文</a> · <strong>English</strong></p>
 
   <h1>CodeBookmark</h1>
 
@@ -34,7 +34,7 @@ The Code Bookmarks panel on the left shows bookmarks bound to scripts, their hie
 
 ---
 **[User Guide](#user-guide)**<br>
-[Install](#install) · [Getting Started](#1-getting-started) · [Keyboard Shortcuts and Basics](#2-keyboard-shortcuts-and-basics) · [Hierarchy, Drag and Drop, Containers, and Sorting](#3-hierarchy-drag-and-drop-containers-and-sorting) · [Search, Inline Labels, and Icons](#4-search-inline-labels-and-icons) · [Automatic TODO, FIXME, and BUG Bookmarks](#5-automatic-todo-fixme-and-bug-bookmarks)<br>
+[Getting Started](#1-getting-started) · [Keyboard Shortcuts and Basics](#2-keyboard-shortcuts-and-basics) · [Hierarchy, Drag and Drop, Containers, and Sorting](#3-hierarchy-drag-and-drop-containers-and-sorting) · [Search, Inline Labels, and Icons](#4-search-inline-labels-and-icons) · [Automatic TODO, FIXME, and BUG Bookmarks](#5-automatic-todo-fixme-and-bug-bookmarks)<br>
 [Moves, Renames, and Recovery](#6-moves-renames-and-recovery) · [Import and Export](#7-import-and-export) · [AI Assistance](#8-ai-assistance) · [Undo, Redo, and Failure Handling](#9-undo-redo-and-failure-handling) · [Settings Reference](#10-settings-reference)
 
 **[Developer Guide](#developer-guide)**<br>
@@ -45,24 +45,6 @@ The Code Bookmarks panel on the left shows bookmarks bound to scripts, their hie
 <br>
 
 # User Guide
-
-## Install
-
-### 🛍️ Install from VS Code Marketplace
-
-Open the [CodeBookmark page on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=realSilasYang.codebookmark) directly, select Install, and let VS Code complete the installation. The publisher should be `realSilasYang`. The extension requires VS Code `1.125.0` or later; update from the [official VS Code download page](https://code.visualstudio.com/download) if needed.
-
-### 📦 Install from a VSIX
-
-Open the [latest CodeBookmark release](https://github.com/realSilasYang/CodeBookmark/releases/latest) and download `codebookmark-version.vsix` from Assets. Then run "Extensions: Install from VSIX..." in VS Code and select the downloaded file, or use:
-
-```bash
-code --install-extension "/path/to/codebookmark-version.vsix"
-```
-
-### 🧑‍💻 Run from source
-
-Install [Node.js 24](https://nodejs.org/en/download) and [VS Code](https://code.visualstudio.com/download), then obtain the source from the [CodeBookmark repository](https://github.com/realSilasYang/CodeBookmark). In the project folder, run `npm ci` and `npm run compile`, then press `F5` to start an Extension Development Host. See the [Developer Guide](#developer-guide) for the complete build and test workflow.
 
 ## 1. Getting Started
 
@@ -80,6 +62,8 @@ Before first use, tell the extension where to store bookmark configurations:
 All bookmark data is stored in the folder you selected. It is not written into the source project.
 
 When a workspace is open, the panel shows every bookmarked file in that workspace. When only one script is open, it shows bookmarks for that script. Both modes read the same script configuration, so they do not duplicate or fork the data.
+
+The extension supports local folders, remote folders, and multi-root workspaces, and runs in the workspace-side Extension Host. The bookmark storage folder must be accessible from that host. VS Code virtual workspaces are not supported. Local bookmark features remain available in an untrusted workspace, but AI menus, commands, and network requests stay disabled until you explicitly trust it.
 
 ## 2. Keyboard Shortcuts and Basics
 
@@ -324,7 +308,7 @@ CodeBookmark/
 |  |- icons/                        Icon manifest, download, and dictionary generation
 |  |- integration/                  Extension Host integration-test launcher
 |  |- lib/                          Shared manifest-localization build and verification helpers
-|  |- release/                      GitHub Release-notes generation
+|  |- release/                      Release notes, SBOM, and checksum generation
 |  |- verify-*.js                   Module regression and architecture contracts
 |  `- verify-all.js                 Unified contract-test entry
 |- src/
@@ -337,7 +321,10 @@ CodeBookmark/
 |  |- repository/                   Script configuration catalog, move recovery, deletion, and storage transfer
 |  |- subscriptions/                Editor, file-system, and configuration event adapters
 |  `- util/                         Identity, paths, fingerprints, AI, code markers, and icon tools
-|- tests/integration/               VS Code Extension Host integration tests
+|- tests/
+|  |- unit/                         node:test unit tests
+|  |- contracts/                    Manifest, capability, and supply-chain contracts
+|  `- integration/                  VS Code Extension Host integration tests
 |- .vscode/settings.json            Project file-nesting rules
 |- README.md / CHANGELOG.md         Chinese project documentation and release history
 |- LICENSE                          Main project license
@@ -350,6 +337,8 @@ CodeBookmark/
 ## 2. Activation and View State
 
 `activate()` must synchronously register commands, TreeView, subscribers, and UndoManager, then delegate disk reads to the Provider in the background so slow storage cannot time out VS Code activation. `ExtensionConfig` reads the AI API key from VS Code configuration; it has no separate activation-time secret store.
+
+`CodeBookmarkViewProvider` remains the VS Code-facing composition root instead of owning every workflow. Dedicated controllers now own folder AI, configuration management, and automatic-marker lifecycle, while save, refresh, view, and document-change concerns use their respective coordinators and runners. `BookmarkRepository` remains a stable facade and delegates source-candidate indexing, script-envelope coding, file-node coding, and import-folder scanning to acyclic single-purpose modules. Architecture contracts also cap both facade sizes so implementation cannot silently accumulate there again.
 
 ```text
 extension.activate
@@ -386,7 +375,9 @@ View switching uses generations, AbortSignal, and a serialized preparation queue
 `- .storage-transfer.json
 ```
 
-A script envelope is `{ script, bookmarks }`. `script` stores `id`, absolute `path`, last confirmation time, optional missing time/order position, and source fingerprint. `bookmarks` contains that script's bookmark tree only. Workspace folders no longer duplicate bookmark data and store view order only, so opening a script from a workspace or alone resolves to the same `scripts/<scriptId>.json`.
+Every persistence family has its own `format` identity and `schemaVersion: 1`, including script envelopes, workspace order, script-relocation journals, storage-root transfer journals, undo sessions, and recent icons. Only a value with no version header at all may be upgraded once. Partial headers, foreign formats, and future versions are rejected explicitly rather than guessed. Migration backups remain for irreplaceable script data; a successful transaction removes its journal and temporary migration backup so stale metadata cannot keep an old folder alive.
+
+A script envelope is `{ format, schemaVersion, script, bookmarks }`. `script` stores `id`, absolute `path`, last confirmation time, optional missing time/order position, and source fingerprint. `bookmarks` contains that script's bookmark tree only. Workspace folders no longer duplicate bookmark data and store view order only, so opening a script from a workspace or alone resolves to the same `scripts/<scriptId>.json`.
 
 A single-file import from an empty workspace view still targets the active script. Folder import removes the `*.codebookmark.json` suffix to obtain a relative source path and joins it to the selected workspace root. For a raw `scripts` directory, it uses absolute source paths from envelopes but accepts only paths still inside that workspace. The complete batch is structurally validated before import and fingerprint differences produce one confirmation. Successful files form one undo action; damaged configurations, missing sources, and individual write failures are counted independently without stopping other candidates.
 
@@ -465,6 +456,9 @@ Third-party icon collections, authors, and licenses are listed in `docs/legal/TH
 npm ci
 npm run compile
 npm run verify
+npm run test:unit
+npm run test:contract
+npm run test:coverage
 npm run test:integration
 npm audit
 npm run package:list
@@ -473,15 +467,17 @@ npm run package:vsix
 
 - `npm run compile`: clean `out/`, compile TypeScript strictly, bundle the extension runtime into one entry point, and generate `package.json` plus localization catalogs.
 - `npm run lint`: check `src/**/*.ts`, the manifest generator, and every `scripts/**/*.js`.
-- `npm run verify`: compile, lint, then run every `verify-*.js` contract.
-- `npm run test:integration`: compile, automatically find and reuse an installed VS Code, then start the Extension Host with isolated user data to verify real activation, command registration, configuration, and file opening in Chinese and English locales. It fails clearly when no installed VS Code is available and never downloads another test runtime.
+- `npm run test:unit` / `npm run test:contract`: use the standard Node `node:test` runner for unit and external-behavior contracts, with no third-party test framework.
+- `npm run test:coverage`: run the standard suites with native Node coverage and minimum coverage thresholds.
+- `npm run verify`: compile, run zero-warning lint, run the standard unit/contract suites, then execute every `verify-*.js` regression contract.
+- `npm run test:integration`: compile, automatically find and reuse an installed VS Code, and start a real Extension Host with isolated user data. In both Chinese and English it verifies activation, commands, and configuration, then actually adds a bookmark, performs undo/redo, reloads persisted state, and checks identity-following after both VS Code and external moves. It fails clearly when no installed VS Code is available and never downloads another test runtime.
 - To select another VS Code, run `node scripts/integration/run-integration-tests.js "--vscode-executable=<path-to-Code.exe>"` or set `CODEBOOKMARK_VSCODE_EXECUTABLE_PATH`; an explicit path wins over auto-detection.
 - `npm run verify:icons`: verify SVG file names, safe content, and one-to-one dictionary coverage.
 - `npm run package:list`: use the pinned official VS Code packaging tool to preview VSIX contents.
 - `npm run package:vsix`: compile and create an installable VSIX; add `-- --out <file>` to select the output path.
 - `npm run check:release`: run all verification, Extension Host integration, dependency audit, and package-list checks.
 
-Current contracts cover activation order, complete runtime and manifest localization, AI address normalization, five AI protocols, same-origin routing fallback, authentication, size, cancellation, automatic markers, import/export, command manifests, storage-root transfer, move recovery, external configuration changes, save queues, scopes, undo, view transitions, and icon assets. Add new behavior to the corresponding `verify-*.js` first; add integration coverage for VS Code API lifecycle behavior.
+The standard and specialized contracts cover activation order, workspace capabilities, persistence versions, complete localization, AI address normalization, five AI protocols, same-origin fallback, authentication, size, cancellation, automatic markers, import/export, command manifests, storage transfer, move recovery, external configuration, save queues, scopes, undo, view transitions, icon assets, and the release supply chain. Put pure logic in `tests/unit`, public manifests and cross-module boundaries in `tests/contracts`, retain complex historical regressions in the matching `verify-*.js`, and require real Extension Host coverage for VS Code API lifecycle behavior.
 
 Icon maintenance:
 
@@ -492,7 +488,7 @@ node scripts/icons/generate-icon-dictionary.js
 npm run verify:icons
 ```
 
-Run `npm run check:release` before publication. The VSIX contains only `out`, `resources`, `package.nls*.json`, the root Chinese `README` and `CHANGELOG`, their English versions under `docs`, `LICENSE`, and the third-party notices and licenses under `docs/legal`. After a version tag is pushed, the Release workflow obtains a short-lived token through GitHub OIDC and Microsoft Entra ID, publishes the same VSIX to Marketplace, and creates or updates the GitHub Release without storing a long-lived publishing credential. Identity setup, retry behavior, and the full procedure are in the [English release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md). The Marketplace Publisher ID is fixed as `realSilasYang` and enforced by the workflow. Source is MIT licensed; third-party icons and Fuse.js retain their respective licenses.
+Run `npm run check:release` before publication. The VSIX contains only `out`, `resources`, `package.nls*.json`, the root Chinese `README` and `CHANGELOG`, their English versions under `docs`, `LICENSE`, and the third-party notices and licenses under `docs/legal`. `@vscode/vsce` is pinned in development dependencies and the lockfile, and every GitHub Action is pinned to a full commit SHA. Release accepts only an annotated tag in `main` history. The workflow generates the VSIX, CycloneDX SBOM, and `SHA256SUMS`, records GitHub build-provenance and SBOM attestations, publishes through a short-lived OIDC identity, verifies the Marketplace hash, and then creates the GitHub Release. See the [English release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md). Publisher ID is fixed as `realSilasYang`. Source is MIT licensed; third-party icons and Fuse.js retain their respective licenses.
 
 # Star History
 

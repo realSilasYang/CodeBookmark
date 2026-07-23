@@ -12,6 +12,12 @@ import {
 	normalizedAbsolutePath,
 	renamedAbsolutePath,
 } from '../util/AbsolutePath'
+import {
+	decodePersistenceRecord,
+	persistenceHeader,
+	PersistenceFormats,
+	type PersistenceHeader,
+} from '../util/PersistenceSchema'
 
 interface UndoBookmarkData extends Record<string, unknown> {
 	id?: string
@@ -47,7 +53,7 @@ interface PersistedScopeHistory {
 	redoHistory: UndoEntry[]
 }
 
-interface PersistedUndoSession {
+interface PersistedUndoSession extends PersistenceHeader {
 	sessionId: string
 	sequence: number
 	scopes: PersistedScopeHistory[]
@@ -95,6 +101,7 @@ export class UndoManager {
 	private persistenceDirty = false
 	private contextUpdateGeneration = 0
 	private contextUpdateRunning = false
+	private persistenceBlocked = false
 
 	public initialize(context: vscode.ExtensionContext): void {
 		this.persistence = context.workspaceState
@@ -103,20 +110,30 @@ export class UndoManager {
 		this.sequence = 0
 		this.accessSequence = 0
 		this.totalHistoryBytes = 0
+		this.persistenceBlocked = false
 		const saved = context.workspaceState.get<unknown>(UNDO_SESSION_STATE_KEY)
-		if (typeof saved === 'object' && saved !== null && !Array.isArray(saved)) {
-			const session = saved as Partial<PersistedUndoSession>
-			if (session.sessionId === this.sessionId && Array.isArray(session.scopes)) {
-				for (const item of session.scopes) {
-					if (typeof item !== 'object' || item === null || typeof item.scope !== 'string'
-						|| !Array.isArray(item.history) || !Array.isArray(item.redoHistory)
-						|| !item.history.every(isUndoEntry) || !item.redoHistory.every(isUndoEntry)) continue
-					const history = item.history.slice(-this.maxHistory)
-					const redoHistory = item.redoHistory.slice(-this.maxHistory)
-					this.scopes.set(item.scope, { history, redoHistory, lastAccess: ++this.accessSequence })
-					this.totalHistoryBytes += [...history, ...redoHistory].reduce((total, entry) => total + entry.bytes, 0)
-					for (const entry of [...history, ...redoHistory]) this.sequence = Math.max(this.sequence, entry.sequence)
+		if (saved !== undefined) {
+			try {
+				const session = decodePersistenceRecord(saved, PersistenceFormats.undoSession)
+					.value as Partial<PersistedUndoSession>
+				if (session.sessionId === this.sessionId && Array.isArray(session.scopes)) {
+					for (const item of session.scopes) {
+						if (typeof item !== 'object' || item === null || typeof item.scope !== 'string'
+							|| !Array.isArray(item.history) || !Array.isArray(item.redoHistory)
+							|| !item.history.every(isUndoEntry) || !item.redoHistory.every(isUndoEntry)) continue
+						const history = item.history.slice(-this.maxHistory)
+						const redoHistory = item.redoHistory.slice(-this.maxHistory)
+						this.scopes.set(item.scope, { history, redoHistory, lastAccess: ++this.accessSequence })
+						this.totalHistoryBytes += [...history, ...redoHistory].reduce((total, entry) => total + entry.bytes, 0)
+						for (const entry of [...history, ...redoHistory]) this.sequence = Math.max(this.sequence, entry.sequence)
+					}
 				}
+			} catch (error) {
+				this.persistenceBlocked = true
+				logger.error(localize(
+					`撤销会话使用不受支持的持久化格式，已保留原数据且停止覆盖：${error}`,
+					`The undo session uses an unsupported persistence format. The original data was preserved and will not be overwritten: ${error}`,
+				))
 			}
 		}
 		this.enforceGlobalLimits()
@@ -125,7 +142,7 @@ export class UndoManager {
 	}
 
 	private schedulePersistence(): void {
-		if (!this.persistence || !this.sessionId) return
+		if (!this.persistence || !this.sessionId || this.persistenceBlocked) return
 		this.persistenceDirty = true
 		if (this.persistenceTimer) clearTimeout(this.persistenceTimer)
 		this.persistenceTimer = setTimeout(() => {
@@ -137,13 +154,14 @@ export class UndoManager {
 	public async flushPersistence(): Promise<void> {
 		if (this.persistenceTimer) clearTimeout(this.persistenceTimer)
 		this.persistenceTimer = undefined
-		if (!this.persistence || !this.sessionId) return
+		if (!this.persistence || !this.sessionId || this.persistenceBlocked) return
 		if (!this.persistenceDirty) {
 			await this.persistencePromise
 			return
 		}
 		this.persistenceDirty = false
 		const state: PersistedUndoSession = {
+			...persistenceHeader(PersistenceFormats.undoSession),
 			sessionId: this.sessionId,
 			sequence: this.sequence,
 			scopes: [...this.scopes.entries()].map(([scope, stack]) => ({

@@ -216,8 +216,8 @@ main().catch(error => {
   process.exitCode = 1
 })
 
-const repositorySource = fs.readFileSync('src/repository/BookmarkRepository.ts', 'utf8')
-assert.match(repositorySource, /MAX_SOURCE_CONTENT_CACHE_BYTES/)
-assert.match(repositorySource, /candidates\.contentBytes \+ bytes > MAX_SOURCE_CONTENT_CACHE_BYTES/)
+const sourceCandidateIndex = fs.readFileSync('src/repository/SourceCandidateIndex.ts', 'utf8')
+assert.match(sourceCandidateIndex, /MAX_SOURCE_CONTENT_CACHE_BYTES/)
+assert.match(sourceCandidateIndex, /this\.contentBytes \+ bytes > MAX_SOURCE_CONTENT_CACHE_BYTES/)
 const identitySource = fs.readFileSync('src/util/ScriptIdentity.ts', 'utf8')
 assert.doesNotMatch(identitySource, /fingerprintCache|CachedSourceFingerprint/)

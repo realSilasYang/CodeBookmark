@@ -33,7 +33,7 @@ const ENGLISH_MANIFEST_LOCALES = Object.freeze([
 
 const englishByChineseText = new Map([
   ['代码书签 - CodeBookmark', 'CodeBookmark'],
-  ['面向代码阅读与导航的智能书签。粘性引擎让书签持续绑定脚本，随代码编辑、文件改名和目录移动自动追随，无需反复校准；配置本地保存，AI 辅助生成书签、优化标签并匹配丰富图标，让关键逻辑一眼可见、随时直达。', 'Smart bookmarks for reading and navigating code. The sticky engine keeps bookmarks bound to scripts and automatically follows code edits, file renames, and folder moves—no manual recalibration required. Configurations stay local, while AI generates bookmarks, improves labels, and matches rich icons so important logic is easy to spot and instantly accessible.'],
+	['为代码智能导航而生，符合你的直觉。粘性引擎让书签持续绑定脚本，随代码编辑、文件改名和目录移动自动追随，无需反复校准；配置本地保存，AI 辅助生成书签、优化标签并匹配丰富图标，让关键逻辑一眼可见、随时直达。', 'Built for intelligent code navigation, shaped around your intuition. The sticky engine keeps bookmarks bound to scripts and automatically follows code edits, file renames, and folder moves—no manual recalibration required. Configurations stay local, while AI generates bookmarks, improves labels, and matches rich icons so important logic is easy to spot and instantly accessible.'],
   ['代码书签', 'Code Bookmarks'],
   ['暂无书签，按下 Ctrl+B 即刻添加！\n\n[导入书签配置文件](command:codebookmark.importBookmarkConfig)\n\n[查看使用说明](command:codebookmark.openHelp)', 'No bookmarks yet. Press Ctrl+B to add one instantly!\n\n[Import Bookmark Configuration](command:codebookmark.importBookmarkConfig)\n\n[View Documentation](command:codebookmark.openHelp)'],
   ['[查看使用说明](command:codebookmark.openHelp)', '[View Documentation](command:codebookmark.openHelp)'],
@@ -89,6 +89,8 @@ const englishByChineseText = new Map([
   ['当前文件夹', 'Current Folder'],
   ['优化书签标签', 'Improve Bookmark Labels'],
   ['代码书签设置', 'CodeBookmark Settings'],
+  ['代码书签需要本地文件系统来绑定脚本并持久化书签配置。', 'CodeBookmark requires a local file system to bind scripts and persist bookmark configurations.'],
+  ['未受信任工作区中可使用本地书签功能，但 AI 功能和工作区级敏感配置会停用。', 'Local bookmark features remain available in untrusted workspaces, but AI features and sensitive workspace-level settings are disabled.'],
   ['书签配置目录的绝对路径（必填，支持 ~ 和 %ENV%）', 'Absolute path to the bookmark configuration directory (required; supports ~ and %ENV%).'],
   ['展开/折叠按钮的默认展开级别。设为 3 表示展开时显示前三级书签；设为 0 表示展开全部层级。', 'Default expansion level used by the expand/collapse button. Set to 3 to show the first three bookmark levels when expanding, or 0 to expand all levels.'],
   ['是否在书签标签的中英文/数字之间自动插入空格，优化排版显示。', 'Automatically insert spacing between Chinese text and Latin letters or numbers in bookmark labels.'],

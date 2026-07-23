@@ -82,6 +82,7 @@ async function main() {
   let contextUpdates = 0
   const pinnedContainer = { id: 'pinned' }
   const port = {
+    showInputBox: options => vscode.window.showInputBox(options),
     absoluteToRelative: () => 'source.ts',
     updateBookmarkContextAnchors: () => { contextUpdates++ },
     bookmarksForPath: () => bookmarks,

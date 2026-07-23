@@ -61,6 +61,8 @@ const requiredPaths = [
   'scripts/lib/localized-manifest.js',
   'scripts/lib/manifest-localizations.js',
   'scripts/release/build-release-notes.js',
+  'scripts/release/write-sbom.js',
+  'scripts/release/write-sha256sums.js',
   'tests/integration/fixture/sample.ts',
   'tests/integration/suite/index.js',
 ]

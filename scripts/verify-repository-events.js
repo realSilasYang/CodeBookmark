@@ -109,7 +109,10 @@ async function main() {
     assert.equal(configsByPath.has(path.resolve(newAbsolutePath)), true)
     assert.equal(path.resolve(configsByPath.get(path.resolve(newAbsolutePath)).data.bookmarks[0].path), path.resolve(newAbsolutePath))
   }
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(scopeFolder, '_workspace_order.json'), 'utf8')), [
+  const folderRenameOrder = JSON.parse(fs.readFileSync(path.join(scopeFolder, '_workspace_order.json'), 'utf8'))
+  assert.equal(folderRenameOrder.format, 'codebookmark.workspace-order')
+  assert.equal(folderRenameOrder.schemaVersion, 1)
+  assert.deepEqual(folderRenameOrder.order, [
     'src/renamed/a.ts',
     'src/renamed/b.ts',
   ])
@@ -160,7 +163,10 @@ async function main() {
   const recoveredConfig = JSON.parse(fs.readFileSync(path.join(scriptFolder, `${tombstoneId}.json`), 'utf8'))
   assert.equal(path.resolve(recoveredConfig.script.path), path.resolve(tombstoneTarget))
   assert.equal(path.resolve(recoveredConfig.bookmarks[0].path), path.resolve(tombstoneTarget))
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(scopeFolder, '_workspace_order.json'), 'utf8')), [
+  const externalRenameOrder = JSON.parse(fs.readFileSync(path.join(scopeFolder, '_workspace_order.json'), 'utf8'))
+  assert.equal(externalRenameOrder.format, 'codebookmark.workspace-order')
+  assert.equal(externalRenameOrder.schemaVersion, 1)
+  assert.deepEqual(externalRenameOrder.order, [
     'src/renamed/external.ts',
     'src/renamed/recovered-tombstone.ts',
     'src/renamed/b.ts',

@@ -293,12 +293,14 @@ function removeTemporaryDirectory(tempRoot) {
 async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVersion) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), `codebookmark-integration-${locale}-`))
   const fixturePath = path.join(tempRoot, 'workspace')
+  const bookmarkStoragePath = path.join(tempRoot, 'bookmark-storage')
   const userDataPath = path.join(tempRoot, 'user-data')
   const extensionsPath = downloadedVSCodeVersion && locale === 'zh-cn'
     ? path.join(tempRoot, 'extensions')
     : undefined
   const fixtureUri = pathToFileURL(fixturePath).href
   await fs.mkdir(fixturePath, { recursive: true })
+  await fs.mkdir(bookmarkStoragePath, { recursive: true })
   await fs.mkdir(path.join(userDataPath, 'User'), { recursive: true })
   const languagePacksFile = findInstalledLanguagePacksFile()
   if (extensionsPath) {
@@ -329,6 +331,8 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
         extensionDevelopmentPath: root,
         extensionTestsPath: path.join(root, 'tests', 'integration', 'suite', 'index.js'),
         extensionTestsEnv: {
+          CODEBOOKMARK_INTEGRATION_TEST: '1',
+          CODEBOOKMARK_TEST_STORAGE_ROOT: bookmarkStoragePath,
           VSCODE_NLS_CONFIG: JSON.stringify({
             userLocale: locale,
             osLocale: locale,

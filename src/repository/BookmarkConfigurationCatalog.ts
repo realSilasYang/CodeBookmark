@@ -3,6 +3,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { localize } from '../i18n/Localization'
 import { isJsonRecord } from '../util/JsonRecord'
+import { decodeWorkspaceOrderPersistence } from '../models/WorkspaceOrder'
+import { decodePersistenceRecord, PersistenceFormats } from '../util/PersistenceSchema'
 import { isScriptId } from '../util/ScriptIdentity'
 import {
 	mergeBookmarkLevelSummaries,
@@ -249,6 +251,12 @@ async function inspectBookmarkConfigurationFile(
 		}
 	}
 
+	try {
+		parsed = decodePersistenceRecord(parsed, PersistenceFormats.script).value
+	} catch {
+		// The health result below reports the unsupported envelope as invalid.
+		parsed = undefined
+	}
 	const script = isJsonRecord(parsed) && isJsonRecord(parsed.script) ? parsed.script : undefined
 	const bookmarks = isJsonRecord(parsed) ? parsed.bookmarks : undefined
 	const inspection = inspectBookmarks(bookmarks)
@@ -337,8 +345,14 @@ async function inspectWorkspaceOrderFile(
 			workspacePathHash: match?.[2],
 		}
 	}
-	const validOrder = Array.isArray(parsed) && parsed.every(item => typeof item === 'string' && item.length > 0)
-	const orderedPaths = validOrder ? parsed as string[] : []
+	let orderedPaths: string[] = []
+	let validOrder: boolean
+	try {
+		orderedPaths = decodeWorkspaceOrderPersistence(parsed).order
+		validOrder = orderedPaths.every(item => item.length > 0)
+	} catch {
+		validOrder = false
+	}
 	return {
 		...metadataEntryBase('workspaceOrder', 'workspaceOrder', filePath, storageRoot, stat, content),
 		health: validOrder ? 'metadata' : 'invalid',
@@ -370,6 +384,11 @@ async function inspectTransferJournal(
 		parsed = JSON.parse(content.toString('utf8')) as unknown
 	} catch {
 		return { ...base, health: 'invalid', problem: localize('存储迁移记录 JSON 格式损坏', 'Storage transfer journal JSON is invalid') }
+	}
+	try {
+		parsed = decodePersistenceRecord(parsed, PersistenceFormats.storageTransfer).value
+	} catch {
+		parsed = undefined
 	}
 	const status = isJsonRecord(parsed) && (parsed.status === 'complete' || parsed.status === 'in_progress') ? parsed.status : undefined
 	const source = isJsonRecord(parsed) && typeof parsed.source === 'string' ? parsed.source : undefined

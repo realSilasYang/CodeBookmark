@@ -5,6 +5,7 @@ import { Bookmark } from '../models/Bookmark'
 import { ExtensionConfig } from '../config/ExtensionConfig'
 import { AIService } from '../util/AIService'
 import { isUserCancelledError, localize } from '../i18n/Localization'
+import { ensureAIWorkspaceTrusted } from '../util/WorkspaceCapabilityPolicy'
 
 export function bookmarkCommands(
 	context: vscode.ExtensionContext,
@@ -29,6 +30,7 @@ export function bookmarkCommands(
 	})
 
 	const checkAIPrerequisites = async (): Promise<vscode.TextEditor | undefined> => {
+		if (!ensureAIWorkspaceTrusted()) return undefined
 		if (!ExtensionConfig.ensureAIConfigured()) return undefined
 		if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return undefined
 		const editor = vscode.window.activeTextEditor
@@ -58,6 +60,7 @@ export function bookmarkCommands(
 
 	const withAIConfiguration = async (handler: () => Promise<unknown>) => {
 		try {
+			if (!ensureAIWorkspaceTrusted()) return
 			if (!ExtensionConfig.ensureAIConfigured()) return
 			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return
 			await handler()
@@ -151,6 +154,7 @@ export function bookmarkCommands(
 	register(Commands.bookmarkCommands.aiOptimizeContextItem.command,
 		(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]) => withAIConfiguration(() => provider.optimizeSelectedBookmarksWithAI(bookmark, selectedBookmarks)))
 	register(Commands.bookmarkCommands.aiTestConnection.command, async () => {
+		if (!ensureAIWorkspaceTrusted()) return
 		if (!ExtensionConfig.ensureAIConfigured()) return
 		void vscode.window.showInformationMessage(localize('正在测试 AI 连接，请稍候…', 'Testing the AI connection…'))
 		let successfulAddress: string

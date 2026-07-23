@@ -6,6 +6,7 @@ on:
       - v*
 
 permissions:
+  attestations: write
   contents: write
   id-token: write
 
@@ -20,8 +21,11 @@ jobs:
     timeout-minutes: 35
     environment: marketplace-release
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -57,21 +61,49 @@ jobs:
               throw "$variableName must be a valid GUID."
             }
           }
-      - name: Validate tag and build VSIX
+      - name: Validate tag provenance and build release artifacts
+        id: artifacts
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
           if ($env:GITHUB_REF_NAME -ne "v$version") {
             throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
           }
-          npm run package:vsix -- --out "codebookmark-$version.vsix"
+          if ((git cat-file -t $env:GITHUB_REF_NAME) -ne 'tag') {
+            throw "Release tag $env:GITHUB_REF_NAME must be an annotated tag."
+          }
+          git fetch origin main:refs/remotes/origin/main --no-tags
+          $tagCommit = git rev-list -n 1 $env:GITHUB_REF_NAME
+          git merge-base --is-ancestor $tagCommit origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag $env:GITHUB_REF_NAME does not belong to the main branch history."
+          }
+          $vsix = "codebookmark-$version.vsix"
+          $sbom = "codebookmark-$version.sbom.cdx.json"
+          npm run package:vsix -- --out $vsix
+          npm run sbom -- $sbom
+          node scripts/release/write-sha256sums.js SHA256SUMS $vsix $sbom
+          "vsix=$vsix" | Add-Content -Path $env:GITHUB_OUTPUT
+          "sbom=$sbom" | Add-Content -Path $env:GITHUB_OUTPUT
       - name: Build Chinese release notes
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
           node scripts/release/build-release-notes.js $version "$env:RUNNER_TEMP/release-notes.md"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: |
+            ${{ steps.artifacts.outputs.vsix }}
+            ${{ steps.artifacts.outputs.sbom }}
+            SHA256SUMS
+      - name: Attest software bill of materials
+        uses: actions/attest-sbom@51e74621a501c89df81fc1391c5a8f4cfc9fab2f # v3
+        with:
+          subject-path: ${{ steps.artifacts.outputs.vsix }}
+          sbom-path: ${{ steps.artifacts.outputs.sbom }}
       - name: Authenticate to Microsoft Entra ID
-        uses: azure/login@v3
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -80,7 +112,7 @@ jobs:
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          npx --yes @vscode/vsce@3.9.2 publish `
+          npm exec -- vsce publish `
             --azure-credential `
             --packagePath "codebookmark-$version.vsix" `
             --skip-duplicate
@@ -114,14 +146,15 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           $vsix = "codebookmark-$version.vsix"
+          $sbom = "codebookmark-$version.sbom.cdx.json"
           $releaseNotes = "$env:RUNNER_TEMP/release-notes.md"
           if (gh release view $env:GITHUB_REF_NAME --json tagName 2>$null) {
             gh release edit $env:GITHUB_REF_NAME `
               --title "CodeBookmark v$version" `
               --notes-file $releaseNotes
-            gh release upload $env:GITHUB_REF_NAME $vsix --clobber
+            gh release upload $env:GITHUB_REF_NAME $vsix $sbom SHA256SUMS --clobber
           } else {
-            gh release create $env:GITHUB_REF_NAME $vsix `
+            gh release create $env:GITHUB_REF_NAME $vsix $sbom SHA256SUMS `
               --verify-tag `
               --title "CodeBookmark v$version" `
               --notes-file $releaseNotes

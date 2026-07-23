@@ -18,11 +18,17 @@ import {
 	type SupportedLanguage,
 } from './i18n/Localization'
 import { initializeBookmarkIconRoot } from './util/BookmarkIcon'
+import { migrateRecentIconState } from './util/RecentIconState'
+import {
+	createIntegrationTestApi,
+	type CodeBookmarkIntegrationTestApi,
+} from './testing/IntegrationTestApi'
 
 let activeProvider: CodeBookmarksViewProvider | undefined
 
 interface CodeBookmarkExtensionApi {
 	readonly language: SupportedLanguage
+	readonly integration?: CodeBookmarkIntegrationTestApi
 }
 
 function hasActiveTextFile(): boolean {
@@ -46,6 +52,10 @@ export function activate(context: vscode.ExtensionContext): CodeBookmarkExtensio
 	initializeLocalization(vscode.env.language)
 	initializeBookmarkIconRoot(context.extensionUri)
 	context.globalState.setKeysForSync(SyncedGlobalStateKeys)
+	void migrateRecentIconState(context).catch(error => logger.error(localize(
+		`迁移最近使用图标状态失败：${error}`,
+		`Failed to migrate the recently used icon state: ${error}`,
+	)))
 	undoManager.initialize(context)
 	const codeBookmarkProvider = new CodeBookmarksViewProvider(context)
 	activeProvider = codeBookmarkProvider
@@ -80,7 +90,10 @@ export function activate(context: vscode.ExtensionContext): CodeBookmarkExtensio
 	// Activation must complete immediately. The provider owns loading state and error
 	// recovery, so slow disks or a large workspace cannot trigger VS Code's 10s timeout.
 	codeBookmarkProvider.init(viewCodeBookmark)
-	return Object.freeze({ language: currentLanguage() })
+	const language = currentLanguage()
+	return process.env.CODEBOOKMARK_INTEGRATION_TEST === '1'
+		? Object.freeze({ language, integration: createIntegrationTestApi(codeBookmarkProvider) })
+		: Object.freeze({ language })
 }
 
 export async function deactivate() {

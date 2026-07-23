@@ -10,6 +10,18 @@ import {
 } from '../util/AbsolutePath'
 import { atomicCopyFile, atomicWriteFile } from '../util/AtomicFile'
 import { mergeSerializedBookmarks } from '../models/SerializedBookmarkTree'
+import { workspaceOrderPersistence } from '../models/WorkspaceOrder'
+import {
+	persistLegacyJsonMigration,
+	removeLegacyJsonMigrationBackup,
+} from '../util/PersistenceMigration'
+import {
+	decodePersistenceList,
+	decodePersistenceRecord,
+	persistenceHeader,
+	PersistenceFormats,
+	type PersistenceHeader,
+} from '../util/PersistenceSchema'
 
 const TRANSFER_STATE_FILE = '.storage-transfer.json'
 const OWNED_STORAGE_DIRECTORIES = ['scripts', 'scopes', '.script-relocations'] as const
@@ -20,7 +32,7 @@ interface StorageRootTransferResult {
 	conflictFiles: number
 }
 
-interface StorageRootTransferJournal extends StorageRootTransferResult {
+interface StorageRootTransferJournal extends StorageRootTransferResult, PersistenceHeader {
 	status: 'in_progress' | 'complete'
 	source: string
 	target: string
@@ -66,9 +78,22 @@ function scriptIdentity(value: unknown): { id: string, lastSeenAt: number } | un
 }
 
 function mergeJson(source: unknown, target: unknown): unknown | undefined {
-	if (Array.isArray(source) && Array.isArray(target)
-		&& source.every(item => typeof item === 'string') && target.every(item => typeof item === 'string')) {
-		return [...new Set([...target, ...source])]
+	try {
+		const sourceOrder = decodePersistenceList(source, PersistenceFormats.workspaceOrder, 'order').value.order
+		const targetOrder = decodePersistenceList(target, PersistenceFormats.workspaceOrder, 'order').value.order
+		if (Array.isArray(sourceOrder) && Array.isArray(targetOrder)
+			&& sourceOrder.every(item => typeof item === 'string')
+			&& targetOrder.every(item => typeof item === 'string')) {
+			return workspaceOrderPersistence([...new Set([...targetOrder, ...sourceOrder])])
+		}
+	} catch {
+		// Try the script-envelope format below.
+	}
+	try {
+		source = decodePersistenceRecord(source, PersistenceFormats.script).value
+		target = decodePersistenceRecord(target, PersistenceFormats.script).value
+	} catch {
+		return undefined
 	}
 	if (!isJsonRecord(source) || !isJsonRecord(target)) return undefined
 	if (!Array.isArray(source.bookmarks) || !Array.isArray(target.bookmarks)) return undefined
@@ -146,12 +171,23 @@ async function removeSourceStorageEntries(root: string): Promise<void> {
 }
 
 async function writeJournal(targetRoot: string, value: unknown): Promise<void> {
-	await atomicWriteFile(path.join(targetRoot, TRANSFER_STATE_FILE), JSON.stringify(value, null, 2))
+	const versioned = decodePersistenceRecord(value, PersistenceFormats.storageTransfer).value
+	await atomicWriteFile(path.join(targetRoot, TRANSFER_STATE_FILE), JSON.stringify(versioned, null, 2))
+}
+
+async function completeJournal(targetRoot: string, value: unknown): Promise<void> {
+	await writeJournal(targetRoot, value)
+	await removeLegacyJsonMigrationBackup(path.join(targetRoot, TRANSFER_STATE_FILE))
 }
 
 async function readJournal(targetRoot: string): Promise<StorageRootTransferJournal | undefined> {
 	try {
-		const value = JSON.parse(await fs.promises.readFile(path.join(targetRoot, TRANSFER_STATE_FILE), 'utf8')) as unknown
+		const journalPath = path.join(targetRoot, TRANSFER_STATE_FILE)
+		const decoded = decodePersistenceRecord(
+			JSON.parse(await fs.promises.readFile(journalPath, 'utf8')),
+			PersistenceFormats.storageTransfer,
+		)
+		const value = decoded.value
 		if (!isJsonRecord(value) || (value.status !== 'in_progress' && value.status !== 'complete')
 			|| typeof value.source !== 'string' || typeof value.target !== 'string'
 			|| typeof value.startedAt !== 'string') return undefined
@@ -165,7 +201,8 @@ async function readJournal(targetRoot: string): Promise<StorageRootTransferJourn
 		const mergedFiles = count('mergedFiles')
 		const conflictFiles = count('conflictFiles')
 		if (copiedFiles === undefined || mergedFiles === undefined || conflictFiles === undefined) return undefined
-		return {
+		const journal: StorageRootTransferJournal = {
+			...persistenceHeader(PersistenceFormats.storageTransfer),
 			status: value.status,
 			source: value.source,
 			target: value.target,
@@ -175,6 +212,13 @@ async function readJournal(targetRoot: string): Promise<StorageRootTransferJourn
 			mergedFiles,
 			conflictFiles,
 		}
+		if (decoded.migrated) {
+			await persistLegacyJsonMigration(journalPath, journal, async (target, migrated) => {
+				await atomicWriteFile(target, JSON.stringify(migrated, null, 2))
+				return true
+			})
+		}
+		return journal
 	} catch {
 		return undefined
 	}
@@ -215,7 +259,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 	const checkpoint = () => writeJournal(target, { status: 'in_progress', source, target, startedAt, ...result })
 	await checkpoint()
 	if (!await exists(source)) {
-		await writeJournal(target, { status: 'complete', source, target, startedAt, completedAt: new Date().toISOString(), ...result })
+		await completeJournal(target, { status: 'complete', source, target, startedAt, completedAt: new Date().toISOString(), ...result })
 		return result
 	}
 
@@ -260,7 +304,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		await checkpoint()
 	}
 
-	await writeJournal(target, {
+	await completeJournal(target, {
 		status: 'complete',
 		source,
 		target,

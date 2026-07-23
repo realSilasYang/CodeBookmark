@@ -29,6 +29,7 @@ import { resolveAIRequestTargets } from './AIEndpointResolver'
 import { decodeAIProtocolResponse, encodeAIProtocolRequest, type AIMessage } from './AIProtocolCodec'
 import { AIHttpStatusError, postAIJson } from './AIHttpTransport'
 import { parseAIJsonReply } from './AIResponseCodec'
+import { assertAIWorkspaceTrusted } from './WorkspaceCapabilityPolicy'
 
 export type { AIBookmark } from './AIBookmarkSchema';
 export { AIHttpStatusError } from './AIHttpTransport'
@@ -137,6 +138,7 @@ export class AIService {
 		onProgress?: (msg: string) => void,
 		token?: vscode.CancellationToken,
 	): Promise<{ content: string; address: string }> {
+		assertAIWorkspaceTrusted()
 		onProgress?.(localize('正在构建与大模型的网络请求参数...', 'Preparing the AI network request…'));
 		const address = ExtensionConfig.aiAddress;
 		const apiKey = ExtensionConfig.aiAPIKey;

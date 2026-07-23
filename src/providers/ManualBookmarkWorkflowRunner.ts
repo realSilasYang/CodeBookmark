@@ -7,6 +7,7 @@ import { localize } from '../i18n/Localization'
 type ManualBookmarkUndoAction = 'addBookmarks' | 'deleteBookmarks' | 'toggleBookmarks'
 
 export interface ManualBookmarkWorkflowPort {
+	showInputBox(options: vscode.InputBoxOptions): Thenable<string | undefined>
 	absoluteToRelative(filePath: string): string
 	updateBookmarkContextAnchors(bookmark: Bookmark, document: vscode.TextDocument): void
 	bookmarksForPath(pathRel: string): Bookmark[]
@@ -69,7 +70,7 @@ async function prepareBookmarks(
 
 	if (deduplicated.length === 1) {
 		const selection = deduplicated[0]
-		const label = await vscode.window.showInputBox({
+		const label = await port.showInputBox({
 			prompt: localize('请输入书签标签', 'Enter a bookmark label'),
 			value: defaultLabel(editor.document, selection, 80),
 		})
@@ -89,7 +90,7 @@ async function prepareBookmarks(
 	}
 
 	const defaultLabels = deduplicated.map(selection => defaultLabel(editor.document, selection, 30))
-	const labelString = await vscode.window.showInputBox({
+	const labelString = await port.showInputBox({
 		prompt: localize(
 			`请输入 ${deduplicated.length} 个书签标签（使用“│”分隔）`,
 			`Enter ${deduplicated.length} bookmark labels, separated by “│”`,

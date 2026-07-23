@@ -33,7 +33,7 @@ Stage and commit only after reviewing the changes. Repository settings should co
 
 Change the version only in `src/util/constants/BasePackage.ts`, then run `npm run compile` to regenerate `package.json`. Add the corresponding version to `CHANGELOG.md` and `docs/CHANGELOG.en.md` using the structured [Chinese](CHANGELOG_TEMPLATE.md) and [English](CHANGELOG_TEMPLATE.en.md) templates, and confirm that `README.md` and `docs/README.en.md` describe actual behavior.
 
-Chinese headings use `🎉 版本 X.Y.Z - YYYY-MM-DD`; English headings use `🎉 Version X.Y.Z - YYYY-MM-DD`. If `⚠ Important Notes` is present, place it first, followed by the applicable `✨ Added`, `🚀 Improvements`, and `🐛 Fixed` sections. Delete empty sections.
+Chinese headings use `🎉 版本 X.Y.Z - YYYY-MM-DD`; English headings use `🎉 Version X.Y.Z - YYYY-MM-DD`. If `⚠️ Important Notes` is present, place it first, followed by the applicable `✨ Added`, `🚀 Improvements`, and `🐛 Fixed` sections. Delete empty sections.
 
 The Marketplace identity is fixed as extension `codebookmark` under Publisher `realSilasYang`. Do not change `publisher`, `name`, or `displayName` in a routine release. Such changes affect extension identity and require a separate migration review.
 
@@ -42,25 +42,25 @@ A release candidate must pass:
 ```bash
 npm ci
 npm run check:release
-npm run package:vsix -- --out codebookmark-2.0.0.vsix
+npm run package:vsix -- --out codebookmark-3.0.0.vsix
 ```
 
-`package:list` and VSIX packaging use a pinned `@vscode/vsce` version. The package may contain one bundled JavaScript runtime entry point, runtime resources, localization catalogs, both README and CHANGELOG languages, the main license, and third-party notices/licenses. It must not contain maintenance-only docs, source maps, `src`, scripts, tests, `.git`, `.env`, local paths, or bookmark data. The extension has no runtime dependencies or native modules, so the VSIX is cross-platform and requires no `--target`.
+`package:list` and VSIX packaging use the exact `@vscode/vsce` version pinned in `devDependencies` and `package-lock.json`; release does not download a second tool copy. The package may contain one bundled JavaScript runtime entry point, runtime resources, localization catalogs, both README and CHANGELOG languages, the main license, and third-party notices/licenses. It must not contain maintenance-only docs, source maps, `src`, scripts, tests, `.git`, `.env`, local paths, or bookmark data. The extension has no runtime dependencies or native modules, so the VSIX is cross-platform and requires no `--target`.
 
 ## 3. Coordinate Marketplace and GitHub Release
 
 Complete the Publisher and Microsoft Entra ID setup in section 4 before creating a tag. The workflow verifies `VSCODE_MARKETPLACE_PUBLISHER` against `package.json.publisher` and checks all three Azure identifiers. Missing configuration fails before publication, preventing a one-sided release.
 
-After committing the release version, create a tag that exactly matches the manifest:
+Merge the release commit into `main`, then create an annotated tag on that commit or another commit in `main` history. Lightweight tags and tags outside `main` history are rejected:
 
 ```bash
-git tag -a v2.0.0 -m "CodeBookmark 2.0.0"
-git push origin v2.0.0
+git tag -a v3.0.0 -m "CodeBookmark 3.0.0"
+git push origin v3.0.0
 ```
 
-`.github/workflows/release.yml` runs verification, Extension Host integration in Chinese and English, tag/version checks, release-note generation, and VSIX packaging in sequence. It then signs in to Microsoft Entra ID through GitHub OIDC, uses `vsce publish --azure-credential --skip-duplicate` to publish that VSIX to Marketplace, and creates the GitHub Release.
+`.github/workflows/release.yml` runs verification, real Extension Host integration in Chinese and English, tag identity and `main`-history checks, release-note generation, and VSIX packaging. It also produces a CycloneDX SBOM and `SHA256SUMS`, then uses official GitHub Actions pinned to full commit SHAs to record build-provenance and SBOM attestations for the VSIX. It signs in to Microsoft Entra ID through GitHub OIDC, publishes with the locally locked `vsce publish --azure-credential --skip-duplicate`, and downloads the Marketplace package for a byte-for-byte SHA-256 comparison.
 
-Release notes are extracted from the matching `CHANGELOG.md` block and converted to a Chinese structure headed `🎉 CodeBookmark vX.Y.Z 更新日志`. The workflow downloads the Marketplace package and compares its SHA-256 with the build artifact before continuing. If a GitHub Release already exists, its title and notes are updated and the same-named VSIX is added or replaced, so a failed run can be rerun safely. A global `release` concurrency group blocks overlapping versions. Never manually publish an unverified package to compensate for a failed workflow.
+Release notes come from the matching `CHANGELOG.md` block. Only after Marketplace verification does the workflow create or update a GitHub Release carrying the VSIX, SBOM, and checksum file. Existing assets are replaced safely on rerun, and a global `release` concurrency group blocks overlapping versions. Never manually publish an unverified package to compensate for a failed workflow.
 
 ## 4. Configure Automatic Marketplace Publication
 

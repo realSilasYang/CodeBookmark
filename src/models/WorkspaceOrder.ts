@@ -3,6 +3,11 @@ import {
 	isSameOrDescendantBookmarkPath,
 	renamedBookmarkPath,
 } from '../util/BookmarkPath'
+import {
+	decodePersistenceList,
+	PersistenceFormats,
+	versionPersistenceList,
+} from '../util/PersistenceSchema'
 
 interface WorkspaceOrderChange {
 	order: string[]
@@ -19,10 +24,19 @@ interface WorkspaceOrderDirectoryMove {
 	moved: string[]
 }
 
-export function parseWorkspaceOrder(value: unknown): string[] {
-	return Array.isArray(value)
-		? value.filter((entry): entry is string => typeof entry === 'string')
-		: []
+export function workspaceOrderPersistence(order: readonly string[]): unknown {
+	return versionPersistenceList(PersistenceFormats.workspaceOrder, 'order', order)
+}
+
+export function decodeWorkspaceOrderPersistence(value: unknown): { order: string[], migrated: boolean, value: unknown } {
+	const decoded = decodePersistenceList(value, PersistenceFormats.workspaceOrder, 'order')
+	const order = (decoded.value.order as unknown[])
+		.filter((entry): entry is string => typeof entry === 'string')
+	return {
+		order,
+		migrated: decoded.migrated,
+		value: workspaceOrderPersistence(order),
+	}
 }
 
 export function appendWorkspaceOrderPath(order: readonly string[], bookmarkPath: string): string[] {

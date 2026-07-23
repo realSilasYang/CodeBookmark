@@ -14,8 +14,7 @@ import {
 	executeScriptRelocation,
 	type ScriptRelocationRecord,
 } from './ScriptRelocationJournal'
-import { isExcludedSourceRelativePath, SOURCE_SCAN_EXCLUDED_DIRECTORIES } from '../util/SourceFilePolicy'
-import { isJsonRecord, type JsonRecord } from '../util/JsonRecord'
+import { isExcludedSourceRelativePath } from '../util/SourceFilePolicy'
 import {
 	absolutePathKey,
 	isSameOrDescendantAbsolutePath,
@@ -27,10 +26,33 @@ import {
 	setSerializedBookmarkPaths,
 } from '../models/SerializedBookmarkTree'
 import { SerialTaskQueue } from '../util/SerialTaskQueue'
-import { ScriptIndex, type ScriptIndexEntry, type ScriptMetadata } from './ScriptIndex'
+import { persistLegacyJsonMigration } from '../util/PersistenceMigration'
+import {
+	persistenceHeader,
+	PersistenceFormats,
+} from '../util/PersistenceSchema'
+import { ScriptIndex, type ScriptIndexEntry } from './ScriptIndex'
 import { inferDirectoryRelocation, planScriptRelocation } from './ScriptRelocationPlan'
 import { recoverScriptRelocations } from './ScriptRelocationRecovery'
 import { WorkspaceOrderStore } from './WorkspaceOrderStore'
+import { SourceCandidateIndex, type SourceCandidate } from './SourceCandidateIndex'
+import {
+	bookmarkItems,
+	createScriptEnvelope,
+	decodeScriptConfiguration,
+	scriptMetadata,
+	type BookmarkFileEnvelope,
+} from './ScriptEnvelopeCodec'
+import {
+	absoluteBookmarkFileNodePath,
+	createBookmarkFileEnvelope,
+	createBookmarkFileNode,
+	updateBookmarkFileNodePath,
+} from './BookmarkFileNodeCodec'
+import {
+	collectBookmarkConfigurationImportCandidates,
+	type BookmarkConfigurationImportCandidate,
+} from './BookmarkConfigurationImportScanner'
 import {
 	removeBookmarkConfigurationFiles,
 	type BookmarkConfigurationDeleteRequest,
@@ -42,30 +64,6 @@ import {
 	summarizeBookmarkTrees,
 	type BookmarkLevelSummary,
 } from '../util/BookmarkStatistics'
-
-interface BookmarkFileEnvelope extends JsonRecord {
-	script: ScriptMetadata
-	bookmarks: unknown[]
-}
-
-interface SourceCandidate {
-	path: string
-	stat: fs.Stats
-	baseNameKey: string
-	extension: string
-	fileSystemIdentity?: string
-}
-
-interface SourceCandidateIndex {
-	all: SourceCandidate[]
-	bySize: Map<number, SourceCandidate[]>
-	byBaseName: Map<string, SourceCandidate[]>
-	byExtension: Map<string, SourceCandidate[]>
-	byFileSystemIdentity: Map<string, SourceCandidate[]>
-	fingerprints: Map<string, SourceFingerprint | undefined>
-	contents: Map<string, string | undefined>
-	contentBytes: number
-}
 
 interface MissingReconciliation {
 	ambiguousTargets: Set<string>
@@ -92,12 +90,6 @@ export interface BookmarkConfigurationFolderImportResult {
 	bookmarkSummary: BookmarkLevelSummary
 }
 
-const SOURCE_CANDIDATE_STAT_CONCURRENCY = 16
-const MAX_SOURCE_CONTENT_CACHE_BYTES = 32 * 1024 * 1024
-const BOOKMARK_CONFIGURATION_SUFFIX = '.codebookmark.json'
-const MAX_IMPORT_CONFIGURATION_ENTRIES = 20_000
-const MAX_IMPORT_CONFIGURATION_DEPTH = 64
-
 class BookmarkReadCancelledError extends Error {
 	constructor() {
 		super('Bookmark read cancelled')
@@ -111,45 +103,6 @@ function throwIfReadCancelled(signal?: AbortSignal): void {
 
 function isBookmarkReadCancelled(error: unknown): boolean {
 	return error instanceof BookmarkReadCancelledError
-}
-
-interface BookmarkConfigurationImportCandidate {
-	configPath: string
-	targetAbsolutePath: string
-}
-
-function bookmarkItems(value: unknown): unknown[] | undefined {
-	return isJsonRecord(value) && Array.isArray(value.bookmarks) ? value.bookmarks : undefined
-}
-
-function sourceFingerprint(value: unknown): SourceFingerprint | undefined {
-	if (!isJsonRecord(value) || typeof value.sha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(value.sha256)) return undefined
-	if (typeof value.size !== 'number' || !Number.isFinite(value.size) || value.size < 0) return undefined
-	if (value.device !== undefined && typeof value.device !== 'string') return undefined
-	if (value.inode !== undefined && typeof value.inode !== 'string') return undefined
-	return {
-		sha256: value.sha256,
-		size: value.size,
-		device: value.device,
-		inode: value.inode,
-	}
-}
-
-function scriptMetadata(value: unknown): ScriptMetadata | undefined {
-	if (!isJsonRecord(value) || !isJsonRecord(value.script)) return undefined
-	if (!isScriptId(value.script.id) || typeof value.script.path !== 'string' || !path.isAbsolute(value.script.path)) return undefined
-	if (typeof value.script.lastSeenAt !== 'number' || !Number.isFinite(value.script.lastSeenAt) || value.script.lastSeenAt <= 0) return undefined
-	const fingerprint = value.script.fingerprint === undefined ? undefined : sourceFingerprint(value.script.fingerprint)
-	if (value.script.fingerprint !== undefined && !fingerprint) return undefined
-	return {
-		id: value.script.id,
-		path: normalizedAbsolutePath(value.script.path),
-		fingerprint,
-		lastSeenAt: value.script.lastSeenAt,
-		missingSince: typeof value.script.missingSince === 'number' ? value.script.missingSince : undefined,
-		orderIndex: typeof value.script.orderIndex === 'number' && Number.isInteger(value.script.orderIndex)
-			&& value.script.orderIndex >= 0 ? value.script.orderIndex : undefined,
-	}
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -168,6 +121,9 @@ class CodeBookmarksRepository {
 		exists: filePath => pathExists(filePath),
 		readJson: filePath => fileUtils.readJsonFileAsync(filePath),
 		writeJson: (filePath, value) => fileUtils.writeJsonFileAsync(filePath, value),
+		// Workspace order is derived from script configurations. Migrating it in
+		// place avoids leaving a backup that would keep an obsolete scope alive.
+		migrateJson: (filePath, value) => fileUtils.writeJsonFileAsync(filePath, value),
 		deleteFile: filePath => this.deleteFile(filePath),
 	})
 
@@ -202,7 +158,19 @@ class CodeBookmarksRepository {
 	}
 
 	private async readBookmarkFile(filePath: string): Promise<{ data: BookmarkFileEnvelope, filePath: string }> {
-		const data = await fileUtils.readJsonFileAsync(filePath)
+		const decoded = decodeScriptConfiguration(await fileUtils.readJsonFileAsync(filePath))
+		if (decoded.migrated) {
+			const migration = await persistLegacyJsonMigration(
+				filePath,
+				decoded.data,
+				(target, value) => fileUtils.writeJsonFileAsync(target, value),
+			)
+			logger.info(localize(
+				`已将书签配置迁移到持久化格式 v1，并保留备份：${migration.backupPath}`,
+				`Migrated the bookmark configuration to persistence format v1 and kept a backup: ${migration.backupPath}`,
+			))
+		}
+		const data = decoded.data
 		const metadata = scriptMetadata(data)
 		if (!metadata || !bookmarkItems(data)
 			|| path.basename(filePath).toLowerCase() !== `${metadata.id}.json`.toLowerCase()) {
@@ -313,59 +281,11 @@ class CodeBookmarksRepository {
 	}
 
 	private createFileNode(data: unknown, displayPath?: string, strict = false): Bookmark | undefined {
-		const items = bookmarkItems(data)
-		const metadata = scriptMetadata(data)
-		if (!items || items.length === 0 || !metadata) return undefined
-		const pathsMatchScript = (values: unknown[]): boolean => {
-			for (const value of values) {
-				if (!isJsonRecord(value) || typeof value.path !== 'string'
-					|| absolutePathKey(value.path) !== absolutePathKey(metadata.path)) return false
-				if (!Array.isArray(value.subs) || !pathsMatchScript(value.subs)) return false
-			}
-			return true
-		}
-		if (!pathsMatchScript(items)) {
-			if (strict) throw new Error(localize(
-				'配置内书签路径与脚本绝对路径不一致',
-				'The bookmark paths in the configuration do not match the script absolute path.',
-			))
-			return undefined
-		}
-
-		const fileNode = new Bookmark({
-			id: `file_${metadata.id}`,
-			path: metadata.path,
-			scriptId: metadata.id,
-			contextValue: ContextBookmark.File,
-			collapsible: vscode.TreeItemCollapsibleState.Expanded,
-		})
-		const bookmarks: Bookmark[] = []
-		const parseState = { count: 0 }
-		for (const item of items) {
-			try {
-				bookmarks.push(Bookmark.fromJSON(item, 0, parseState))
-			} catch (error) {
-				if (strict) throw error
-				logger.error(localize(`已跳过损坏的书签记录: ${error}`, `Skipped a damaged bookmark record: ${error}`))
-				if (String(error).includes('nodes')) break
-			}
-		}
-		if (bookmarks.length === 0) return undefined
-		fileNode.createdAt = Math.min(...bookmarks.map(bookmark => bookmark.createdAt))
-		for (const bookmark of bookmarks) bookmark.parent = fileNode
-		fileNode.subs.addAll(bookmarks)
-		this.updateFileNodePath(fileNode, displayPath ?? metadata.path)
-		return fileNode
+		return createBookmarkFileNode(data, displayPath, strict)
 	}
 
 	private absolutePathForFileNode(fileNode: Bookmark, scopeUri?: vscode.Uri): string {
-		if (path.isAbsolute(fileNode.path)) return normalizedAbsolutePath(fileNode.path)
-		const workspaceRoot = fileUtils.workspaceRoot(scopeUri)
-		if (!workspaceRoot) throw new Error(localize(
-			`无法将书签相对路径解析为绝对路径: ${fileNode.path}`,
-			`Unable to resolve the bookmark relative path to an absolute path: ${fileNode.path}`,
-		))
-		return normalizedAbsolutePath(path.resolve(workspaceRoot, fileNode.path))
+		return absoluteBookmarkFileNodePath(fileNode, fileUtils.workspaceRoot(scopeUri))
 	}
 
 	private async envelopeForFileNode(
@@ -373,23 +293,9 @@ class CodeBookmarksRepository {
 		scopeUri?: vscode.Uri,
 		absolutePathOverride?: string,
 	): Promise<BookmarkFileEnvelope> {
-		if (!fileNode.scriptId) fileNode.scriptId = createScriptId()
-		const absolutePath = normalizedAbsolutePath(absolutePathOverride ?? this.absolutePathForFileNode(fileNode, scopeUri))
-		const bookmarks = fileNode.subs.values.map(bookmark => bookmark.toJSON())
-		setSerializedBookmarkPaths(bookmarks, absolutePath)
-		const fingerprint = await fingerprintSourceFile(absolutePath)
-		const previousMetadata = this.scriptIndex.get(fileNode.scriptId)?.metadata
-		return {
-			script: {
-				id: fileNode.scriptId,
-				path: absolutePath,
-				fingerprint: fingerprint ?? previousMetadata?.fingerprint,
-				lastSeenAt: Date.now(),
-				missingSince: fingerprint ? undefined : previousMetadata?.missingSince ?? Date.now(),
-				orderIndex: fingerprint ? undefined : previousMetadata?.orderIndex,
-			},
-			bookmarks,
-		}
+		const absolutePath = absolutePathOverride ?? this.absolutePathForFileNode(fileNode, scopeUri)
+		const previousMetadata = fileNode.scriptId ? this.scriptIndex.get(fileNode.scriptId)?.metadata : undefined
+		return createBookmarkFileEnvelope(fileNode, absolutePath, previousMetadata)
 	}
 
 	private async writeEnvelope(filePath: string, data: BookmarkFileEnvelope): Promise<void> {
@@ -457,86 +363,12 @@ class CodeBookmarksRepository {
 		return this.scriptIndex.get(primary.id)
 	}
 
-	private async sourceCandidateIndex(paths: readonly string[], signal?: AbortSignal): Promise<SourceCandidateIndex> {
-		const sortedPaths = [...new Set(paths.map(normalizedAbsolutePath))].sort((left, right) => left.localeCompare(right))
-		const candidates: Array<SourceCandidate | undefined> = new Array(sortedPaths.length)
-		let cursor = 0
-		const worker = async (): Promise<void> => {
-			while (cursor < sortedPaths.length) {
-				const index = cursor++
-				const candidatePath = sortedPaths[index]
-				throwIfReadCancelled(signal)
-				try {
-					const stat = await fs.promises.stat(candidatePath)
-					throwIfReadCancelled(signal)
-					if (!stat.isFile()) continue
-					const baseName = path.basename(candidatePath)
-					candidates[index] = {
-						path: candidatePath,
-						stat,
-						baseNameKey: baseName,
-						extension: path.extname(candidatePath).toLowerCase(),
-						fileSystemIdentity: `${String(stat.dev)}\0${String(stat.ino)}`,
-					}
-				} catch (error) {
-					if (isBookmarkReadCancelled(error)) throw error
-				}
-			}
-		}
-		await Promise.all(Array.from(
-			{ length: Math.min(SOURCE_CANDIDATE_STAT_CONCURRENCY, sortedPaths.length) },
-			() => worker(),
-		))
-
-		const all = candidates.filter((candidate): candidate is SourceCandidate => candidate !== undefined)
-		const result: SourceCandidateIndex = {
-			all,
-			bySize: new Map(),
-			byBaseName: new Map(),
-			byExtension: new Map(),
-			byFileSystemIdentity: new Map(),
-			fingerprints: new Map(),
-			contents: new Map(),
-			contentBytes: 0,
-		}
-		const add = <K>(map: Map<K, SourceCandidate[]>, key: K, candidate: SourceCandidate): void => {
-			const values = map.get(key) ?? []
-			values.push(candidate)
-			map.set(key, values)
-		}
-		for (const candidate of all) {
-			add(result.bySize, candidate.stat.size, candidate)
-			add(result.byBaseName, candidate.baseNameKey, candidate)
-			add(result.byExtension, candidate.extension, candidate)
-			if (candidate.fileSystemIdentity) add(result.byFileSystemIdentity, candidate.fileSystemIdentity, candidate)
-		}
-		return result
+	private sourceCandidateIndex(paths: readonly string[], signal?: AbortSignal): Promise<SourceCandidateIndex> {
+		return SourceCandidateIndex.fromPaths(paths, () => throwIfReadCancelled(signal))
 	}
 
-	private async sourceCandidates(root: string, signal?: AbortSignal): Promise<SourceCandidateIndex> {
-		const files: string[] = []
-		let entriesSeen = 0
-		const visit = async (folder: string): Promise<void> => {
-			throwIfReadCancelled(signal)
-			if (entriesSeen > 50_000) return
-			let entries: fs.Dirent[]
-			try {
-				entries = await fs.promises.readdir(folder, { withFileTypes: true })
-			} catch {
-				return
-			}
-			throwIfReadCancelled(signal)
-			entriesSeen += entries.length
-			for (const entry of entries) {
-				throwIfReadCancelled(signal)
-				if (entriesSeen > 50_000) return
-				const candidate = path.join(folder, entry.name)
-				if (entry.isDirectory() && !SOURCE_SCAN_EXCLUDED_DIRECTORIES.has(entry.name.toLowerCase())) await visit(candidate)
-				else if (entry.isFile()) files.push(candidate)
-			}
-		}
-		await visit(root)
-		return this.sourceCandidateIndex(files, signal)
+	private sourceCandidates(root: string, signal?: AbortSignal): Promise<SourceCandidateIndex> {
+		return SourceCandidateIndex.scan(root, () => throwIfReadCancelled(signal))
 	}
 
 	private bookmarkAnchors(fileNode: Bookmark): string[] {
@@ -553,41 +385,6 @@ class CodeBookmarksRepository {
 		}
 		collect(fileNode.subs.values)
 		return [...anchors].slice(0, 20)
-	}
-
-	private async candidateContent(
-		candidates: SourceCandidateIndex,
-		candidatePath: string,
-	): Promise<string | undefined> {
-		if (candidates.contents.has(candidatePath)) {
-			const cached = candidates.contents.get(candidatePath)
-			candidates.contents.delete(candidatePath)
-			candidates.contents.set(candidatePath, cached)
-			return cached
-		}
-		let content: string | undefined
-		try {
-			content = await fs.promises.readFile(candidatePath, 'utf8')
-		} catch {
-			content = undefined
-		}
-		if (content === undefined) {
-			candidates.contents.set(candidatePath, undefined)
-			return undefined
-		}
-		const bytes = Buffer.byteLength(content)
-		if (bytes <= MAX_SOURCE_CONTENT_CACHE_BYTES) {
-			while (candidates.contentBytes + bytes > MAX_SOURCE_CONTENT_CACHE_BYTES) {
-				const oldestPath = candidates.contents.keys().next().value as string | undefined
-				if (oldestPath === undefined) break
-				const oldest = candidates.contents.get(oldestPath)
-				candidates.contents.delete(oldestPath)
-				if (oldest !== undefined) candidates.contentBytes -= Buffer.byteLength(oldest)
-			}
-			candidates.contents.set(candidatePath, content)
-			candidates.contentBytes += bytes
-		}
-		return content
 	}
 
 	private async findRelocatedSource(
@@ -641,7 +438,7 @@ class CodeBookmarksRepository {
 			throwIfReadCancelled(signal)
 			const baseNameMatches = candidate.baseNameKey === expectedBaseNameKey
 			if (anchors.length > 0 && candidate.stat.size <= 16 * 1024 * 1024) {
-				const content = await this.candidateContent(candidates, candidate.path)
+				const content = await candidates.readContent(candidate.path)
 				throwIfReadCancelled(signal)
 				if (content === undefined) continue
 				const anchorMatches = anchors.filter(anchor => content.includes(anchor)).length
@@ -722,15 +519,7 @@ class CodeBookmarksRepository {
 	}
 
 	private updateFileNodePath(fileNode: Bookmark, nextPath: string): void {
-		fileNode.path = canonicalBookmarkPath(nextPath)
-		fileNode.label = path.basename(fileNode.path)
-		const update = (bookmarks: Bookmark[]): void => {
-			for (const bookmark of bookmarks) {
-				bookmark.path = fileNode.path
-				if (bookmark.subs.size > 0) update(bookmark.subs.values)
-			}
-		}
-		update(fileNode.subs.values)
+		updateBookmarkFileNodePath(fileNode, nextPath)
 	}
 
 	private scopeOrderInfo(absolutePath: string): { folder: string, bookmarkPath: string } | undefined {
@@ -763,6 +552,7 @@ class CodeBookmarksRepository {
 			return
 		}
 		const record: ScriptRelocationRecord = {
+			...persistenceHeader(PersistenceFormats.scriptRelocation),
 			id: 'order-update',
 			oldAbsolutePath: normalizedAbsolutePath(oldAbsolutePath),
 			newAbsolutePath: normalizedAbsolutePath(newAbsolutePath),
@@ -1435,65 +1225,6 @@ class CodeBookmarksRepository {
 		return this.enqueueRelocation(() => this.performBookmarkConfigurationImport(configPath, targetAbsolutePath))
 	}
 
-	private async collectBookmarkConfigurationImportCandidates(
-		configFolderPath: string,
-		workspaceRootPath: string,
-	): Promise<BookmarkConfigurationImportCandidate[]> {
-		const configFolder = normalizedAbsolutePath(configFolderPath)
-		const workspaceRoot = normalizedAbsolutePath(workspaceRootPath)
-		const candidates: BookmarkConfigurationImportCandidate[] = []
-		let scannedEntries = 0
-
-		const visit = async (currentPath: string, depth: number): Promise<void> => {
-			if (depth > MAX_IMPORT_CONFIGURATION_DEPTH) {
-				throw new Error(localize(
-					`书签配置目录层级超过 ${MAX_IMPORT_CONFIGURATION_DEPTH} 层，请缩小导入目录。`,
-					`The bookmark configuration folder is deeper than ${MAX_IMPORT_CONFIGURATION_DEPTH} levels. Choose a smaller import folder.`,
-				))
-			}
-			const entries = await fs.promises.readdir(currentPath, { withFileTypes: true })
-			entries.sort((left, right) => left.name.localeCompare(right.name))
-			scannedEntries += entries.length
-			if (scannedEntries > MAX_IMPORT_CONFIGURATION_ENTRIES) {
-				throw new Error(localize(
-					`书签配置目录项超过 ${MAX_IMPORT_CONFIGURATION_ENTRIES} 个，请缩小导入目录。`,
-					`The bookmark configuration folder contains more than ${MAX_IMPORT_CONFIGURATION_ENTRIES} entries. Choose a smaller import folder.`,
-				))
-			}
-			for (const entry of entries) {
-				const entryPath = path.join(currentPath, entry.name)
-				if (entry.isDirectory()) {
-					if (!SOURCE_SCAN_EXCLUDED_DIRECTORIES.has(entry.name.toLowerCase())) await visit(entryPath, depth + 1)
-					continue
-				}
-				if (!entry.isFile()) continue
-				let targetAbsolutePath: string | undefined
-				if (entry.name.toLowerCase().endsWith(BOOKMARK_CONFIGURATION_SUFFIX)) {
-					const relativeConfigPath = path.relative(configFolder, entryPath)
-					const relativeSourcePath = relativeConfigPath.slice(0, -BOOKMARK_CONFIGURATION_SUFFIX.length)
-					if (!relativeSourcePath || relativeSourcePath.startsWith('..') || path.isAbsolute(relativeSourcePath)) continue
-					targetAbsolutePath = normalizedAbsolutePath(path.join(workspaceRoot, relativeSourcePath))
-				} else if (path.extname(entry.name).toLowerCase() === '.json') {
-					try {
-						const value = await fileUtils.readJsonFileAsync(entryPath)
-						const metadata = scriptMetadata(value)
-						if (metadata && isSameOrDescendantAbsolutePath(metadata.path, workspaceRoot)) targetAbsolutePath = metadata.path
-					} catch {
-						continue
-					}
-				}
-				if (!targetAbsolutePath) continue
-				if (!isSameOrDescendantAbsolutePath(targetAbsolutePath, workspaceRoot)) continue
-				candidates.push({ configPath: entryPath, targetAbsolutePath })
-			}
-		}
-
-		await visit(configFolder, 0)
-		const unique = new Map<string, BookmarkConfigurationImportCandidate>()
-		for (const candidate of candidates) unique.set(absolutePathKey(candidate.targetAbsolutePath), candidate)
-		return [...unique.values()]
-	}
-
 	async importBookmarkConfigurationsFromFolder(
 		configFolderPath: string,
 		workspaceRootPath: string,
@@ -1508,7 +1239,7 @@ class CodeBookmarksRepository {
 		const storageRoot = this.storageRoot()
 		if (!storageRoot) throw new Error(localize('尚未配置书签存储目录', 'The bookmark storage folder is not configured.'))
 		await this.ensureIndex(storageRoot)
-		const candidates = await this.collectBookmarkConfigurationImportCandidates(configFolderPath, workspaceRootPath)
+		const candidates = await collectBookmarkConfigurationImportCandidates(configFolderPath, workspaceRootPath)
 		const result: BookmarkConfigurationFolderImportResult = {
 			total: candidates.length,
 			imported: 0,
@@ -1521,7 +1252,7 @@ class CodeBookmarksRepository {
 		let fingerprintMismatches = 0
 		for (const candidate of candidates) {
 			try {
-				const importedValue = await fileUtils.readJsonFileAsync(candidate.configPath)
+				const { data: importedValue } = decodeScriptConfiguration(await fileUtils.readJsonFileAsync(candidate.configPath))
 				const importedMetadata = scriptMetadata(importedValue)
 				const importedItems = bookmarkItems(importedValue)
 				const targetFingerprint = await fingerprintSourceFile(candidate.targetAbsolutePath)
@@ -1589,7 +1320,7 @@ class CodeBookmarksRepository {
 		if (!storageRoot) throw new Error(localize('尚未配置书签存储目录', 'The bookmark storage folder is not configured.'))
 		await this.ensureIndex(storageRoot)
 		const targetPath = normalizedAbsolutePath(targetAbsolutePath)
-		const importedValue = await fileUtils.readJsonFileAsync(configPath)
+		const { data: importedValue } = decodeScriptConfiguration(await fileUtils.readJsonFileAsync(configPath))
 		const importedMetadata = scriptMetadata(importedValue)
 		const importedItems = bookmarkItems(importedValue)
 		if (!importedMetadata || !importedItems || importedItems.length === 0) {
@@ -1634,15 +1365,12 @@ class CodeBookmarksRepository {
 			bookmarks.forEach(rewriteSerializedBookmarkIds)
 		}
 		setSerializedBookmarkPaths(bookmarks, targetPath)
-		const output: BookmarkFileEnvelope = {
-			script: {
+		const output = createScriptEnvelope({
 				id: targetId,
 				path: targetPath,
 				fingerprint: targetFingerprint,
 				lastSeenAt: Date.now(),
-			},
-			bookmarks,
-		}
+			}, bookmarks)
 		const display = this.displayPath(targetPath, vscode.Uri.file(targetPath))
 		let fileNode = this.createFileNode(output, display, true)
 		if (!fileNode) throw new Error(localize('导入结果没有有效书签', 'The import result contains no valid bookmarks.'))

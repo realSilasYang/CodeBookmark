@@ -125,7 +125,10 @@ async function main() {
       assert.equal(path.resolve(data.script.path), path.resolve(expectedPath))
       assert.equal(path.resolve(data.bookmarks[0].path), path.resolve(expectedPath))
     }
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(scope, '_workspace_order.json'), 'utf8')), [
+    const migratedOrder = JSON.parse(fs.readFileSync(path.join(scope, '_workspace_order.json'), 'utf8'))
+    assert.equal(migratedOrder.format, 'codebookmark.workspace-order')
+    assert.equal(migratedOrder.schemaVersion, 1)
+    assert.deepEqual(migratedOrder.order, [
       'src/after/1.ts',
       'src/after/0.ts',
     ])

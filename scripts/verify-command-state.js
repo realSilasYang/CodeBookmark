@@ -47,7 +47,10 @@ const aiAnalysisCommands = [
   'codebookmark.ai.optimizeContextItem',
 ]
 for (const command of aiAnalysisCommands) {
-  assert.equal(commands.get(command)?.enablement, 'codebookmark.aiAnalysisAvailable')
+  assert.equal(
+    commands.get(command)?.enablement,
+    '(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)',
+  )
 }
 
 const viewTitle = manifest.contributes.menus['view/title']

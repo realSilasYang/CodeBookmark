@@ -3,21 +3,23 @@ import { localize } from '../i18n/Localization'
 import { absolutePathKey } from '../util/AbsolutePath'
 import {
 	appendWorkspaceOrderPath,
+	decodeWorkspaceOrderPersistence,
 	insertWorkspaceOrderFile,
 	mergeWorkspaceOrder,
 	moveWorkspaceOrderDirectory,
-	parseWorkspaceOrder,
 	removeWorkspaceOrderFile,
 	removeWorkspaceOrderTree,
 	renameWorkspaceOrderDirectory,
 	renameWorkspaceOrderFile,
 	workspaceOrderFileIndex,
+	workspaceOrderPersistence,
 } from '../models/WorkspaceOrder'
 
 interface WorkspaceOrderIO {
 	exists(filePath: string): Promise<boolean>
 	readJson(filePath: string): Promise<unknown>
 	writeJson(filePath: string, value: unknown): Promise<boolean>
+	migrateJson?(filePath: string, value: unknown): Promise<boolean>
 	deleteFile(filePath: string): Promise<void>
 }
 
@@ -119,15 +121,24 @@ export class WorkspaceOrderStore {
 	private async read(folder: string): Promise<WorkspaceOrderSnapshot> {
 		const filePath = path.join(folder, '_workspace_order.json')
 		const exists = await this.io.exists(filePath)
+		const decoded = exists
+			? decodeWorkspaceOrderPersistence(await this.io.readJson(filePath))
+			: undefined
+		if (decoded?.migrated) {
+			const writer = this.io.migrateJson ?? this.io.writeJson
+			if (!await writer(filePath, decoded.value)) {
+				throw new Error(localize(`无法迁移工作区排序文件: ${filePath}`, `Unable to migrate the workspace order file: ${filePath}`))
+			}
+		}
 		return {
 			filePath,
 			exists,
-			order: exists ? parseWorkspaceOrder(await this.io.readJson(filePath)) : [],
+			order: decoded?.order ?? [],
 		}
 	}
 
 	private async write(filePath: string, order: readonly string[], failureMessage?: string): Promise<void> {
-		if (!await this.io.writeJson(filePath, order)) {
+		if (!await this.io.writeJson(filePath, workspaceOrderPersistence(order))) {
 			throw new Error(failureMessage ?? localize(`无法更新工作区排序文件: ${filePath}`, `Unable to update the workspace order file: ${filePath}`))
 		}
 	}

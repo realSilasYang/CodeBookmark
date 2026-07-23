@@ -1,5 +1,6 @@
 import * as path from 'path'
 import { bookmarkPathKey, canonicalBookmarkPath } from '../util/BookmarkPath'
+import { decodeWorkspaceOrderPersistence } from '../models/WorkspaceOrder'
 
 export interface WorkspaceOrderSnapshot {
 	order: string[] | null
@@ -27,14 +28,14 @@ export async function readWorkspaceOrderForView(
 	const folder = port.resolveBookmarkFolder(scopeFilePath)
 	const orderFilePath = folder ? path.join(folder, '_workspace_order.json') : undefined
 	let savedOrder: string[] = []
+	let migrated = false
 	if (orderFilePath) {
 		try {
 			const content = await port.readFile(orderFilePath)
 			if (signal?.aborted) return { order: null, needsPersist: false }
-			const parsed: unknown = JSON.parse(content)
-			savedOrder = Array.isArray(parsed)
-				? parsed.filter((entry): entry is string => typeof entry === 'string').map(canonicalBookmarkPath)
-				: []
+			const decoded = decodeWorkspaceOrderPersistence(JSON.parse(content))
+			migrated = decoded.migrated
+			savedOrder = decoded.order.map(canonicalBookmarkPath)
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') port.reportReadFailure(error)
 		}
@@ -62,6 +63,6 @@ export async function readWorkspaceOrderForView(
 	return {
 		order: orderedPaths,
 		filePath: orderFilePath,
-		needsPersist: changed && orderFilePath !== undefined && !signal?.aborted,
+		needsPersist: (changed || migrated) && orderFilePath !== undefined && !signal?.aborted,
 	}
 }

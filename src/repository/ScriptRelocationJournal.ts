@@ -5,10 +5,20 @@ import { canonicalBookmarkPath } from '../util/BookmarkPath'
 import { createOperationId } from '../util/ScriptIdentity'
 import { isJsonRecord } from '../util/JsonRecord'
 import { atomicWriteFile } from '../util/AtomicFile'
+import {
+	persistLegacyJsonMigration,
+	removeLegacyJsonMigrationBackup,
+} from '../util/PersistenceMigration'
+import {
+	decodePersistenceRecord,
+	persistenceHeader,
+	PersistenceFormats,
+	type PersistenceHeader,
+} from '../util/PersistenceSchema'
 
 const JOURNAL_DIRECTORY = '.script-relocations'
 
-export interface ScriptRelocationRecord {
+export interface ScriptRelocationRecord extends PersistenceHeader {
 	id: string
 	oldAbsolutePath: string
 	newAbsolutePath: string
@@ -24,7 +34,14 @@ interface PendingScriptRelocation {
 	journalPath: string
 }
 
-type ScriptRelocationInput = Omit<ScriptRelocationRecord, 'id' | 'createdAt'>
+interface ScriptRelocationInput {
+	oldAbsolutePath: string
+	newAbsolutePath: string
+	oldBookmarkFolder: string
+	newBookmarkFolder: string
+	oldBookmarkPath: string
+	newBookmarkPath: string
+}
 
 function isSafeRelativeFolder(value: string): boolean {
 	if (value === '') return true
@@ -49,6 +66,7 @@ function parseRecord(value: unknown): ScriptRelocationRecord | undefined {
 	if (!path.isAbsolute(oldAbsolutePath) || !path.isAbsolute(newAbsolutePath)) return undefined
 	if (!isSafeRelativeFolder(oldBookmarkFolder) || !isSafeRelativeFolder(newBookmarkFolder)) return undefined
 	return {
+		...persistenceHeader(PersistenceFormats.scriptRelocation),
 		id: value.id,
 		oldAbsolutePath: path.resolve(oldAbsolutePath),
 		newAbsolutePath: path.resolve(newAbsolutePath),
@@ -74,6 +92,7 @@ export async function createScriptRelocation(
 		))
 	}
 	const record: ScriptRelocationRecord = {
+		...persistenceHeader(PersistenceFormats.scriptRelocation),
 		id: createOperationId(),
 		oldAbsolutePath: path.resolve(value.oldAbsolutePath),
 		newAbsolutePath: path.resolve(value.newAbsolutePath),
@@ -102,8 +121,20 @@ export async function readPendingScriptRelocations(storageRoot: string): Promise
 		if (!file.endsWith('.json')) continue
 		const journalPath = path.join(directory, file)
 		try {
-			const record = parseRecord(JSON.parse(await fs.promises.readFile(journalPath, 'utf8')))
-			if (record) pending.push({ record, journalPath })
+			const decoded = decodePersistenceRecord(
+				JSON.parse(await fs.promises.readFile(journalPath, 'utf8')),
+				PersistenceFormats.scriptRelocation,
+			)
+			const record = parseRecord(decoded.value)
+			if (record) {
+				if (decoded.migrated) {
+					await persistLegacyJsonMigration(journalPath, record, async (target, migrated) => {
+						await atomicWriteFile(target, JSON.stringify(migrated, null, 2))
+						return true
+					})
+				}
+				pending.push({ record, journalPath })
+			}
 		} catch {
 			// Leave malformed journals untouched so they remain available for manual recovery.
 		}
@@ -122,6 +153,7 @@ export function resolveRelocationRecord(storageRoot: string, record: ScriptReloc
 
 export async function completeScriptRelocation(journalPath: string): Promise<void> {
 	await fs.promises.unlink(journalPath)
+	await removeLegacyJsonMigrationBackup(journalPath)
 	try {
 		await fs.promises.rmdir(path.dirname(journalPath))
 	} catch {

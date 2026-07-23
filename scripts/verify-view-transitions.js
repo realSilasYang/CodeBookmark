@@ -41,7 +41,7 @@ assert.match(preparation, /if \(target\.storageScope === port\.currentStorageSco
 assert.match(provider, /return loadWorkspaceOrderForView\(/)
 assert.match(orderLoader, /if \(signal\?\.aborted \|\| !storageScope\.startsWith\('workspace:'\)\)/)
 assert.match(orderLoader, /const pathsByKey = new Map\(bookmarkPaths/)
-assert.match(orderLoader, /needsPersist: changed && orderFilePath !== undefined && !signal\?\.aborted/)
+assert.match(orderLoader, /needsPersist: \(changed \|\| migrated\) && orderFilePath !== undefined && !signal\?\.aborted/)
 
 const commit = section('private commitPreparedBookmarkView(', 'private async publishCommittedViewTransition(')
 assert.match(commit, /return commitBookmarkView\(prepared, \{/)
