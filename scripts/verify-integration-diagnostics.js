@@ -5,7 +5,7 @@ const {
   createLanguagePacksConfiguration,
   findProjectDiagnosticsInLog,
   stripKnownExternalDiagnostics,
-} = require('./run-integration-tests')
+} = require('./integration/run-integration-tests')
 
 const knownDiagnostics = [
   "Warning: 'cached-data' is not in the list of known options, but still passed to Electron/Chromium.",

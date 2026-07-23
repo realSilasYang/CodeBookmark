@@ -299,7 +299,7 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
     await fs.copyFile(languagePacksFile, path.join(userDataPath, 'languagepacks.json'))
   }
   await fs.copyFile(
-    path.join(root, 'integration-tests', 'fixture', 'sample.ts'),
+    path.join(root, 'tests', 'integration', 'fixture', 'sample.ts'),
     path.join(fixturePath, 'sample.ts'),
   )
   // Commands launched from a VS Code extension host inherit this flag. Electron
@@ -317,7 +317,7 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
         vscodeExecutablePath,
         reuseMachineInstall: true,
         extensionDevelopmentPath: root,
-        extensionTestsPath: path.join(root, 'integration-tests', 'suite', 'index.js'),
+        extensionTestsPath: path.join(root, 'tests', 'integration', 'suite', 'index.js'),
         extensionTestsEnv: {
           VSCODE_NLS_CONFIG: JSON.stringify({
             userLocale: locale,
@@ -364,7 +364,7 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
 }
 
 async function main() {
-  const root = path.resolve(__dirname, '..')
+  const root = path.resolve(__dirname, '../..')
   const executablePrefix = '--vscode-executable='
   const localePrefix = '--locale='
   const executableArgument = process.argv.find(argument => argument.startsWith(executablePrefix))

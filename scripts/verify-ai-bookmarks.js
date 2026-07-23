@@ -12,7 +12,7 @@ const {
   DEFAULT_AI_GENERATION_PROMPT,
   DEFAULT_AI_OPTIMIZATION_PROMPT,
 } = require('../out/util/constants/AIPrompts')
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const {
   AI_REQUEST_MAX_BYTES,

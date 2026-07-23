@@ -1,10 +1,32 @@
 # 📋 Changelog
 
-[简体中文](./CHANGELOG.md) · [English](./CHANGELOG.en.md)
+[简体中文](../CHANGELOG.md) · [English](./CHANGELOG.en.md)
 
-Notable changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/). For a new release, use the [English changelog template](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG_TEMPLATE.en.md), describe actual user-facing changes, and remove empty categories.
+Notable changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/). For a new release, use the [English changelog template](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/CHANGELOG_TEMPLATE.en.md), describe actual user-facing changes, and remove empty categories.
+
+## 🎉 Version 2.0.1 - 2026-07-23
+
+### 🚀 Improvements
+
+- **Repository structure:** Build configuration, bilingual documentation, third-party licenses, maintenance scripts, and integration tests are grouped by responsibility, leaving only essential entry files at the repository root.
+- **Build and package boundaries:** Manifest generation, runtime bundling, integration tests, and the Release workflow now use the organized paths. Localization catalogs are generated during compilation and remain fully included in the VSIX.
+- **Documentation entry points:** Installation instructions now link directly to Marketplace, GitHub Releases, Node.js, VS Code, and the source repository. Chinese and English documentation, changelog, and release-guide links are aligned with the new layout.
+- **Structure regression protection:** A dedicated repository-structure contract and shared VS Code file-nesting rules prevent obsolete paths, machine-specific settings, and miscellaneous root files from returning.
+
+---
+
+### 🐛 Fixed
+
+- **Configuration path resolution:** Fixed TypeScript source inputs and module-graph verification resolving relative paths from the wrong base after the configuration move, keeping local, CI, and release builds on the same input set.
+- **Changelog presentation:** Moved the 2.0.0 important notice to the beginning of its version entry and standardized the warning symbol as text for cleaner heading alignment.
 
 ## 🎉 Version 2.0.0 - 2026-07-23
+
+### ⚠ Important Notes
+
+- **AI setting-key upgrade:** Version 2.0.0 no longer reads the old `codebookmark.AI.endpoint` and `codebookmark.AI.apiKey` keys. Re-enter the values under `codebookmark.AI.address` and `codebookmark.AI.APIKey` after upgrading. The API key remains stored as plain text at the selected VS Code configuration scope.
+
+---
 
 ### ✨ Added
 
@@ -32,12 +54,6 @@ Notable changes are recorded here. Versions follow [Semantic Versioning](https:/
 - **Irrelevant AI icons:** Fixed broad keywords forcing unrelated icons. Equal-priority ambiguity or insufficient semantic evidence now consistently falls back to the default icon.
 - **Deactivation persistence:** Fixed unchanged undo state being written again during deactivation and prevented a secondary failure when VS Code had already closed the output channel.
 - **Localization behavior boundaries:** Command IDs, setting keys, persisted fields, webview messages, and AI protocols remain language-neutral so translated text cannot alter behavior or data compatibility.
-
----
-
-### ⚠️ Important Notes
-
-- **AI setting-key upgrade:** Version 2.0.0 no longer reads the old `codebookmark.AI.endpoint` and `codebookmark.AI.apiKey` keys. Re-enter the values under `codebookmark.AI.address` and `codebookmark.AI.APIKey` after upgrading. The API key remains stored as plain text at the selected VS Code configuration scope.
 
 ## 🎉 Version 1.1.1 - 2026-07-23
 

@@ -4,7 +4,7 @@ const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8')
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const lockfile = JSON.parse(read('package-lock.json'))
 
@@ -45,33 +45,36 @@ assert.deepEqual(manifest.files, [
   'resources',
   'package.nls*.json',
   'README.md',
-  'README.en.md',
+  'docs/README.en.md',
   'CHANGELOG.md',
-  'CHANGELOG.en.md',
+  'docs/CHANGELOG.en.md',
   'LICENSE',
-  'THIRD_PARTY_NOTICES.md',
-  'THIRD_PARTY_LICENSES',
+  'docs/legal/THIRD_PARTY_NOTICES.md',
+  'docs/legal/licenses',
 ])
 assert.equal(manifest.scripts['package:list'], 'npx --yes @vscode/vsce@3.9.2 ls --no-dependencies')
 assert.equal(manifest.scripts['package:vsix'], 'npx --yes @vscode/vsce@3.9.2 package --no-dependencies')
 assert.match(manifest.scripts['check:release'], /npm run verify/)
 assert.match(manifest.scripts['check:release'], /npm run test:integration/)
-assert.equal(manifest.scripts.bundle, 'node scripts/bundle-extension.js')
+assert.equal(manifest.scripts.bundle, 'node scripts/build/bundle-extension.js')
 assert.match(manifest.scripts.compile, /npm run bundle/)
+assert.match(manifest.scripts.compile, /tsc -p config\/tsconfig\.json/)
+assert.equal(manifest.scripts['generate-package-json'], 'node scripts/build/generate-package-json.js')
+assert.equal(manifest.scripts['test:integration'], 'npm run compile && node scripts/integration/run-integration-tests.js')
 assert.match(manifest.scripts['check:release'], /npm audit --audit-level=low/)
 assert.match(manifest.scripts['check:release'], /npm run package:list/)
 
 const requiredSourceDocuments = [
   'README.md',
-  'README.en.md',
+  path.join('docs', 'README.en.md'),
   'CHANGELOG.md',
-  'CHANGELOG.en.md',
+  path.join('docs', 'CHANGELOG.en.md'),
   'LICENSE',
-  'THIRD_PARTY_NOTICES.md',
-  path.join('docs', 'RELEASING.md'),
-  path.join('docs', 'RELEASING.en.md'),
-  path.join('docs', 'CHANGELOG_TEMPLATE.md'),
-  path.join('docs', 'CHANGELOG_TEMPLATE.en.md'),
+  path.join('docs', 'legal', 'THIRD_PARTY_NOTICES.md'),
+  path.join('docs', 'release', 'RELEASING.md'),
+  path.join('docs', 'release', 'RELEASING.en.md'),
+  path.join('docs', 'release', 'CHANGELOG_TEMPLATE.md'),
+  path.join('docs', 'release', 'CHANGELOG_TEMPLATE.en.md'),
   path.join('.github', 'CONTRIBUTING.md'),
   path.join('.github', 'CONTRIBUTING.en.md'),
   path.join('.github', 'SECURITY.md'),
@@ -99,7 +102,7 @@ const requiredLicenseFiles = [
   'Flat-Color-Icons-MIT.txt',
   'Fluent-Emoji-MIT.txt',
   'VSCode-Icons-MIT.txt',
-].map(file => path.join('THIRD_PARTY_LICENSES', file))
+].map(file => path.join('docs', 'legal', 'licenses', file))
 for (const relativePath of [...requiredSourceDocuments, ...requiredLicenseFiles]) {
   const absolutePath = path.join(root, relativePath)
   assert.equal(fs.statSync(absolutePath).isFile(), true, `${relativePath} must be a file`)
@@ -108,9 +111,12 @@ for (const relativePath of [...requiredSourceDocuments, ...requiredLicenseFiles]
 for (const obsoleteRootDocument of [
   'CODE_OF_CONDUCT.md',
   'CONTRIBUTING.md',
+  'CHANGELOG.en.md',
+  'README.en.md',
   'RELEASING.md',
   'SECURITY.md',
   'SUPPORT.md',
+  'THIRD_PARTY_NOTICES.md',
 ]) {
   assert.equal(
     fs.existsSync(path.join(root, obsoleteRootDocument)),
@@ -141,19 +147,19 @@ assert.match(issueTemplateConfig, /^blank_issues_enabled: false$/m)
 assert.match(issueTemplateConfig, /\/security\/advisories\/new/)
 
 const changelog = read('CHANGELOG.md')
-const englishChangelog = read('CHANGELOG.en.md')
+const englishChangelog = read(path.join('docs', 'CHANGELOG.en.md'))
 const license = read('LICENSE')
 const readme = read('README.md')
-const englishReadme = read('README.en.md')
-const notices = read('THIRD_PARTY_NOTICES.md')
+const englishReadme = read(path.join('docs', 'README.en.md'))
+const notices = read(path.join('docs', 'legal', 'THIRD_PARTY_NOTICES.md'))
 const icon = fs.readFileSync(path.join(root, manifest.icon))
 assert.match(readme, /<h1>代码书签 - CodeBookmark<\/h1>/)
-assert.match(englishReadme, /<h1>Code Bookmarks - CodeBookmark<\/h1>/)
+assert.match(englishReadme, /<h1>CodeBookmark<\/h1>/)
 const repositoryMarkdownDocuments = [
   ['README.md', readme],
-  ['README.en.md', englishReadme],
-  [path.join('docs', 'RELEASING.md'), read(path.join('docs', 'RELEASING.md'))],
-  [path.join('docs', 'RELEASING.en.md'), read(path.join('docs', 'RELEASING.en.md'))],
+  [path.join('docs', 'README.en.md'), englishReadme],
+  [path.join('docs', 'release', 'RELEASING.md'), read(path.join('docs', 'release', 'RELEASING.md'))],
+  [path.join('docs', 'release', 'RELEASING.en.md'), read(path.join('docs', 'release', 'RELEASING.en.md'))],
   [path.join('.github', 'CONTRIBUTING.md'), read(path.join('.github', 'CONTRIBUTING.md'))],
   [path.join('.github', 'CONTRIBUTING.en.md'), read(path.join('.github', 'CONTRIBUTING.en.md'))],
   [path.join('.github', 'SECURITY.md'), read(path.join('.github', 'SECURITY.md'))],
@@ -186,10 +192,10 @@ assert.match(
 assert.match(englishChangelog, /^# 📋 Changelog$/m)
 assert.doesNotMatch(changelog, /^### (?:Added|Changed|Fixed|Removed|Security)$/m)
 assert.match(license, /Copyright \(c\) 2026 阳熙来/)
-assert.match(readme, /\[发布指南\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/RELEASING\.md\)/)
-assert.match(englishReadme, /\[English release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/RELEASING\.en\.md\)/)
+assert.match(readme, /\[发布指南\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.md\)/)
+assert.match(englishReadme, /\[English release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.en\.md\)/)
 assert.match(notices, /`fxemoji`[^\n]+CC-BY-4\.0/)
-for (const [documentName, content] of [['README.md', readme], ['README.en.md', englishReadme], ['CHANGELOG.md', changelog], ['CHANGELOG.en.md', englishChangelog]]) {
+for (const [documentName, content] of [['README.md', readme], ['docs/README.en.md', englishReadme], ['CHANGELOG.md', changelog], ['docs/CHANGELOG.en.md', englishChangelog]]) {
   const markdownImages = [...content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)]
   const htmlImages = [...content.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
   for (const target of [...markdownImages, ...htmlImages].map(match => match[1])) {
@@ -198,7 +204,8 @@ for (const [documentName, content] of [['README.md', readme], ['README.en.md', e
   }
 }
 for (const licenseFile of requiredLicenseFiles) {
-  assert.match(notices, new RegExp(licenseFile.replace(/\\/g, '/').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  const noticePath = `licenses/${path.basename(licenseFile)}`
+  assert.match(notices, new RegExp(noticePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 }
 
 const gitignore = read('.gitignore')
@@ -232,7 +239,7 @@ assert.match(marketplaceIdentityWorkflow, /@vscode\/vsce@3\.9\.2 verify-pat --az
 assert.match(marketplaceIdentityWorkflow, /VSCODE_MARKETPLACE_PUBLISHER/)
 assert.doesNotMatch(marketplaceIdentityWorkflow, /VSCE_PAT|secrets\.|--pat\b/)
 assert.match(
-  read(path.join('docs', 'RELEASING.md')),
+  read(path.join('docs', 'release', 'RELEASING.md')),
   /repo:realSilasYang@64590265\/CodeBookmark@1308408396:environment:marketplace-release/
 )
 assert.match(releaseWorkflow, /tags:[\s\S]*- v\*/)
@@ -256,7 +263,7 @@ assert.doesNotMatch(releaseWorkflow, /secrets\./)
 assert.doesNotMatch(releaseWorkflow, /--pat\b/)
 assert.match(releaseWorkflow, /_apis\/public\/gallery\/publishers/)
 assert.match(releaseWorkflow, /Get-FileHash -Algorithm SHA256/)
-assert.match(releaseWorkflow, /scripts\/build-release-notes\.js/)
+assert.match(releaseWorkflow, /scripts\/release\/build-release-notes\.js/)
 assert.match(releaseWorkflow, /CODEBOOKMARK_ALLOW_VSCODE_DOWNLOAD: 'true'/)
 assert.match(releaseWorkflow, /CODEBOOKMARK_VSCODE_TEST_VERSION: '1\.130\.0'/)
 assert.match(releaseWorkflow, /--notes-file/)

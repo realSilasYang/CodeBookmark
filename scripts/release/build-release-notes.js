@@ -8,11 +8,11 @@ function fail(message) {
 
 const [, , version, outputFile] = process.argv
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version || '')) {
-  fail('用法：node scripts/build-release-notes.js <版本号> <输出文件>')
+  fail('用法：node scripts/release/build-release-notes.js <版本号> <输出文件>')
 }
 if (!outputFile) fail('必须指定更新日志输出文件。')
 
-const root = path.resolve(__dirname, '..')
+const root = path.resolve(__dirname, '../..')
 const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8').replace(/\r\n/g, '\n')
 const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const versionPattern = new RegExp(
@@ -23,7 +23,7 @@ const match = changelog.match(versionPattern)
 if (!match) fail(`CHANGELOG.md 中缺少版本 ${version} 的规范更新日志。`)
 
 const changes = match[1].trim()
-const allowedCategories = new Set(['✨ 新增', '🚀 优化', '🐛 修复', '⚠️ 重要说明'])
+const allowedCategories = new Set(['⚠ 重要说明', '✨ 新增', '🚀 优化', '🐛 修复'])
 const categories = [...changes.matchAll(/^### (.+)$/gm)].map(category => category[1])
 if (categories.length === 0) {
   fail(`版本 ${version} 至少需要一个规范的中文更新分类。`)
@@ -34,6 +34,10 @@ if (unsupportedCategory) {
 }
 if (new Set(categories).size !== categories.length) {
   fail(`版本 ${version} 包含重复的更新分类。`)
+}
+const importantNotesIndex = categories.indexOf('⚠ 重要说明')
+if (importantNotesIndex > 0) {
+  fail(`版本 ${version} 的重要说明必须放在版本内容首位。`)
 }
 
 const releaseSections = changes.replace(/^### /gm, '## ')

@@ -2,9 +2,15 @@
 
 [简体中文](./CHANGELOG_TEMPLATE.md) · [English](./CHANGELOG_TEMPLATE.en.md)
 
-When adding a release, copy the block below after the introduction in `CHANGELOG.en.md`. Keep only categories that contain actual changes. Each entry uses "**Feature name:** user-facing change and benefit" rather than commit messages, internal class names, or unrelated implementation details.
+When adding a release, copy the block below after the introduction in `docs/CHANGELOG.en.md`. Keep only categories that contain actual changes. Each entry uses "**Feature name:** user-facing change and benefit" rather than commit messages, internal class names, or unrelated implementation details.
 
 ## 🎉 Version X.Y.Z - YYYY-MM-DD
+
+### ⚠ Important Notes
+
+- **Upgrade notice:** Keep this section only for configuration migration, incompatible behavior, or required user action, and state the exact procedure.
+
+---
 
 ### ✨ Added
 
@@ -22,17 +28,11 @@ When adding a release, copy the block below after the introduction in `CHANGELOG
 
 - **Issue name:** Explain the observable problem and the correct behavior after the fix.
 
----
-
-### ⚠️ Important Notes
-
-- **Upgrade notice:** Keep this section only for configuration migration, incompatible behavior, or required user action, and state the exact procedure.
-
 ## 📐 Writing Rules
 
 - Use `🎉 Version X.Y.Z - YYYY-MM-DD`; the version must match the extension manifest.
 - Standard categories are `✨ Added`, `🚀 Improvements`, and `🐛 Fixed`; delete empty categories.
-- Use `⚠️ Important Notes` only for upgrade actions, compatibility changes, or other information users must see in advance.
+- Use `⚠ Important Notes` only for upgrade actions, compatibility changes, or other information users must see in advance; when present, it must be the first section in the release.
 - Start each entry with a concise bold phrase, followed by one complete English sentence describing actual impact.
 - Combine fragmented commits for one feature. Avoid user-opaque descriptions such as "refactor a file" or "rename a variable."
-- Retain the matching emoji on the document title and section headings so GitHub Releases and `CHANGELOG.en.md` remain easy to scan.
+- Retain the matching emoji on the document title and section headings so GitHub Releases and `docs/CHANGELOG.en.md` remain easy to scan.

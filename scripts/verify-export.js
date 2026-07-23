@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]))
 const directCommands = [

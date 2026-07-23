@@ -31,9 +31,9 @@ Stage and commit only after reviewing the changes. Repository settings should co
 
 ## 2. Prepare a Version
 
-Change the version only in `src/util/constants/BasePackage.ts`, then run `npm run compile` to regenerate `package.json`. Add the corresponding version to both `CHANGELOG.md` and `CHANGELOG.en.md` using the structured [Chinese](CHANGELOG_TEMPLATE.md) and [English](CHANGELOG_TEMPLATE.en.md) templates, and confirm that both README files describe actual behavior.
+Change the version only in `src/util/constants/BasePackage.ts`, then run `npm run compile` to regenerate `package.json`. Add the corresponding version to `CHANGELOG.md` and `docs/CHANGELOG.en.md` using the structured [Chinese](CHANGELOG_TEMPLATE.md) and [English](CHANGELOG_TEMPLATE.en.md) templates, and confirm that `README.md` and `docs/README.en.md` describe actual behavior.
 
-Chinese headings use `🎉 版本 X.Y.Z - YYYY-MM-DD`; English headings use `🎉 Version X.Y.Z - YYYY-MM-DD`. Keep only applicable `✨ Added`, `🚀 Improvements`, `🐛 Fixed`, and optional `⚠️ Important Notes` sections.
+Chinese headings use `🎉 版本 X.Y.Z - YYYY-MM-DD`; English headings use `🎉 Version X.Y.Z - YYYY-MM-DD`. If `⚠ Important Notes` is present, place it first, followed by the applicable `✨ Added`, `🚀 Improvements`, and `🐛 Fixed` sections. Delete empty sections.
 
 The Marketplace identity is fixed as extension `codebookmark` under Publisher `realSilasYang`. Do not change `publisher`, `name`, or `displayName` in a routine release. Such changes affect extension identity and require a separate migration review.
 

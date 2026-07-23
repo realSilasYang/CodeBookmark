@@ -5,7 +5,7 @@ const ts = require('typescript')
 const projectRoot = path.resolve(__dirname, '..')
 const sourceRoot = path.join(projectRoot, 'src')
 const config = ts.getParsedCommandLineOfConfigFile(
-  path.join(projectRoot, 'tsconfig.json'),
+  path.join(projectRoot, 'config', 'tsconfig.json'),
   {},
   ts.sys,
 )

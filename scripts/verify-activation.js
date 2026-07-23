@@ -7,7 +7,7 @@ const iconPicker = fs.readFileSync('src/util/quick_pick_icon/IconPickerWebview.t
 const provider = fs.readFileSync('src/providers/CodeBookmarkViewProvider.ts', 'utf8')
 const launch = JSON.parse(fs.readFileSync('.vscode/launch.json', 'utf8'))
 const tasks = JSON.parse(fs.readFileSync('.vscode/tasks.json', 'utf8')).tasks
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const activityIcon = fs.readFileSync('resources/bookmark.svg', 'utf8')
 

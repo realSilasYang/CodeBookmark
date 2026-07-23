@@ -31,7 +31,7 @@ npm run check:release
 
 ## 2. 准备版本
 
-版本号只在 `src/util/constants/BasePackage.ts` 中修改，随后运行 `npm run compile` 生成 `package.json`。同时按照[中文更新日志模板](CHANGELOG_TEMPLATE.md)在 `CHANGELOG.md` 顶部增加对应版本，并确认 README 描述与实际功能一致。版本标题必须使用 `🎉 版本 X.Y.Z - YYYY-MM-DD`，正文按 `✨ 新增`、`🚀 优化`、`🐛 修复` 和按需保留的 `⚠️ 重要说明` 分类；没有内容的分类应直接删除。
+版本号只在 `src/util/constants/BasePackage.ts` 中修改，随后运行 `npm run compile` 生成 `package.json`。同时按照[中文更新日志模板](CHANGELOG_TEMPLATE.md)在 `CHANGELOG.md` 顶部增加对应版本，并确认 README 描述与实际功能一致。版本标题必须使用 `🎉 版本 X.Y.Z - YYYY-MM-DD`；如有 `⚠ 重要说明`，必须放在版本内容首位，其后再按 `✨ 新增`、`🚀 优化`、`🐛 修复` 分类；没有内容的分类应直接删除。
 
 Marketplace 上的扩展身份已经固定为 Publisher `realSilasYang` 下的 `codebookmark`。不要在普通版本中修改 `publisher`、`name` 或 `displayName`；这类修改会改变扩展身份，必须作为单独迁移评估。
 

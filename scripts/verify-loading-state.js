@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const provider = fs.readFileSync('src/providers/CodeBookmarkViewProvider.ts', 'utf8')
 const finalizer = fs.readFileSync('src/providers/ViewLoadFinalizer.ts', 'utf8')

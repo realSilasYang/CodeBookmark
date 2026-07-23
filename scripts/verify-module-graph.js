@@ -20,10 +20,10 @@ sourceFiles.sort()
 assert.ok(sourceFiles.length > 0, 'No production TypeScript modules were found')
 
 const sourceFileSet = new Set(sourceFiles)
-const configPath = path.join(projectRoot, 'tsconfig.json')
+const configPath = path.join(projectRoot, 'config', 'tsconfig.json')
 const configFile = ts.readConfigFile(configPath, ts.sys.readFile)
 assert.equal(configFile.error, undefined, 'tsconfig.json could not be read')
-const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, projectRoot)
+const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, path.dirname(configPath))
 assert.deepEqual(parsedConfig.errors, [], 'tsconfig.json could not be parsed')
 
 const allDependencies = new Map(sourceFiles.map(file => [file, new Set()]))

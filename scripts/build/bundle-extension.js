@@ -2,7 +2,7 @@ const path = require('node:path')
 const { build, formatMessages } = require('esbuild')
 
 async function main() {
-  const root = path.resolve(__dirname, '..')
+  const root = path.resolve(__dirname, '../..')
   const result = await build({
     absWorkingDir: root,
     entryPoints: ['src/extension.ts'],

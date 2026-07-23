@@ -2,7 +2,7 @@
 
 The custom bookmark icons are downloaded through the Iconify API from the
 collections below. The source repository keeps the exact download URLs in
-`scripts/icon_tools/curated_icons.json`. Packaged copies are renamed and
+`scripts/icons/curated_icons.json`. Packaged copies are renamed and
 sanitized to reject scripts, event handlers, and external references; no
 intentional graphical changes are made.
 
@@ -37,12 +37,12 @@ CC-BY-4.0 attribution:
 
 License copies distributed with this project:
 
-- Apache License 2.0（Noto Emoji and Fuse.js）: `THIRD_PARTY_LICENSES/Apache-2.0.txt`
-- CC BY 4.0（Firefox OS Emoji visual designs and Twitter Emoji）: `THIRD_PARTY_LICENSES/CC-BY-4.0.txt`
-- CC0 1.0（SVG Logos）: `THIRD_PARTY_LICENSES/CC0-1.0.txt`
-- Flat Color Icons MIT license: `THIRD_PARTY_LICENSES/Flat-Color-Icons-MIT.txt`
-- Fluent Emoji MIT license: `THIRD_PARTY_LICENSES/Fluent-Emoji-MIT.txt`
-- VSCode Icons MIT license: `THIRD_PARTY_LICENSES/VSCode-Icons-MIT.txt`
+- Apache License 2.0（Noto Emoji and Fuse.js）: `licenses/Apache-2.0.txt`
+- CC BY 4.0（Firefox OS Emoji visual designs and Twitter Emoji）: `licenses/CC-BY-4.0.txt`
+- CC0 1.0（SVG Logos）: `licenses/CC0-1.0.txt`
+- Flat Color Icons MIT license: `licenses/Flat-Color-Icons-MIT.txt`
+- Fluent Emoji MIT license: `licenses/Fluent-Emoji-MIT.txt`
+- VSCode Icons MIT license: `licenses/VSCode-Icons-MIT.txt`
 
 Names and logos can be trademarks of their respective owners. Their inclusion
 does not imply endorsement of this project.

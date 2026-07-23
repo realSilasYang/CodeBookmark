@@ -69,7 +69,7 @@ jobs:
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          node scripts/build-release-notes.js $version "$env:RUNNER_TEMP/release-notes.md"
+          node scripts/release/build-release-notes.js $version "$env:RUNNER_TEMP/release-notes.md"
       - name: Authenticate to Microsoft Entra ID
         uses: azure/login@v3
         with:

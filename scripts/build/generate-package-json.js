@@ -1,12 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const Commands_1 = require("./out/util/constants/Commands");
-const Colors_1 = require("./out/util/constants/Colors");
-const basePackageJsonFile = require("./out/util/constants/BasePackage");
-const { translateManifestText } = require('./scripts/manifest-localizations');
+const Commands_1 = require("../../out/util/constants/Commands");
+const Colors_1 = require("../../out/util/constants/Colors");
+const basePackageJsonFile = require("../../out/util/constants/BasePackage");
+const {
+  ENGLISH_MANIFEST_LOCALES,
+  MARKETPLACE_DEFAULT_KEYS,
+  translateManifestText,
+} = require('../lib/manifest-localizations');
 
-const customPackageJsonPath = path.join(__dirname, 'package.json');
+const root = path.resolve(__dirname, '../..');
+const customPackageJsonPath = path.join(root, 'package.json');
 
 const commands = Commands_1.Commands
 const colors = Colors_1.Colors
@@ -129,15 +134,29 @@ function localizeManifestValue(value, pathSegments = []) {
 
 const customPackageJson = localizeManifestValue(sourcePackageJson);
 
+const marketplaceDefaultMessages = { ...englishMessages };
+const englishMarketplaceOverrides = {};
+for (const key of MARKETPLACE_DEFAULT_KEYS) {
+  if (!(key in englishMessages) || !(key in chineseMessages)) {
+    throw new Error(`Missing Marketplace localization key: ${key}`);
+  }
+  marketplaceDefaultMessages[key] = chineseMessages[key];
+  englishMarketplaceOverrides[key] = englishMessages[key];
+}
+
 const temporaryPackageJsonPath = `${customPackageJsonPath}.${process.pid}.tmp`;
 const localizationFiles = [
-  ['package.nls.json', englishMessages],
+  ['package.nls.json', marketplaceDefaultMessages],
+  ['package.nls.en.json', englishMessages],
+  ...ENGLISH_MANIFEST_LOCALES
+    .filter(locale => locale !== 'en')
+    .map(locale => [`package.nls.${locale}.json`, englishMarketplaceOverrides]),
   ['package.nls.zh.json', chineseMessages],
   ['package.nls.zh-cn.json', chineseMessages],
   ['package.nls.zh-tw.json', chineseMessages],
 ];
 const temporaryLocalizationPaths = localizationFiles.map(([fileName]) =>
-  [path.join(__dirname, fileName), path.join(__dirname, `${fileName}.${process.pid}.tmp`)]
+  [path.join(root, fileName), path.join(root, `${fileName}.${process.pid}.tmp`)]
 );
 try {
   fs.writeFileSync(temporaryPackageJsonPath, JSON.stringify(customPackageJson, null, 2));
@@ -146,6 +165,12 @@ try {
   }
   fs.renameSync(temporaryPackageJsonPath, customPackageJsonPath);
   for (const [target, temporary] of temporaryLocalizationPaths) fs.renameSync(temporary, target);
+  const generatedFiles = new Set(localizationFiles.map(([fileName]) => fileName));
+  for (const fileName of fs.readdirSync(root)) {
+    if (/^package\.nls(?:\.[a-z]{2}(?:-[a-z]{2})?)?\.json$/i.test(fileName) && !generatedFiles.has(fileName)) {
+      fs.unlinkSync(path.join(root, fileName));
+    }
+  }
 } catch (error) {
   try { fs.unlinkSync(temporaryPackageJsonPath); } catch {}
   for (const [, temporary] of temporaryLocalizationPaths) {
@@ -154,4 +179,4 @@ try {
   throw error;
 }
 
-console.log(`Generated custom package.json and ${localizedKeys.size} localized manifest messages`);
+console.log(`Generated custom package.json, ${localizationFiles.length} NLS catalogs, and ${localizedKeys.size} localized manifest messages`);

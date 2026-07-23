@@ -278,7 +278,7 @@ assert.match(iconPickerSource, /command: 'restoreDefaultIcon'/)
 assert.match(iconPickerSource, /this\._onDidSelectIcon\(this\._defaultIcon, this\._bookmarkId\)/)
 assert.match(subscriberSource, /onDidOpenTextDocument/)
 
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const restoreMenu = manifest.contributes.menus['view/item/context']
   .find(item => item.command === 'codebookmark.editBookmark.restoreDefaultIcon')

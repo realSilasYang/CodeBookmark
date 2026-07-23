@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 
 const manifest = loadLocalizedManifest('zh-cn')
 const bundle = fs.readFileSync('out/extension.js', 'utf8')

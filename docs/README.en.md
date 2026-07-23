@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="./resources/bookmark_logo.png" width="112" height="112" alt="CodeBookmark Logo">
+  <img src="../resources/bookmark_logo.png" width="112" height="112" alt="CodeBookmark Logo">
 
-  <p><a href="./README.md">简体中文</a> · <strong>English</strong></p>
+  <p><a href="../README.md">简体中文</a> · <strong>English</strong></p>
 
-  <h1>Code Bookmarks - CodeBookmark</h1>
+  <h1>CodeBookmark</h1>
 
   <p><strong>A sticky engine keeps bookmarks bound to scripts and accurately follows code, with AI assistance, rich bookmark icons, and local storage</strong></p>
 
@@ -11,7 +11,7 @@
     <a href="https://github.com/realSilasYang/CodeBookmark/releases"><img src="https://img.shields.io/github/v/release/realSilasYang/CodeBookmark?style=flat-square&amp;label=version" alt="Latest release"></a>
     <a href="https://github.com/realSilasYang/CodeBookmark/releases"><img src="https://img.shields.io/github/downloads/realSilasYang/CodeBookmark/total?style=flat-square&amp;label=downloads" alt="GitHub downloads"></a>
     <a href="https://github.com/realSilasYang/CodeBookmark/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/realSilasYang/CodeBookmark/ci.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="CI status"></a>
-    <a href="./LICENSE"><img src="https://img.shields.io/github/license/realSilasYang/CodeBookmark?style=flat-square" alt="License"></a>
+    <a href="../LICENSE"><img src="https://img.shields.io/github/license/realSilasYang/CodeBookmark?style=flat-square" alt="License"></a>
     <a href="https://code.visualstudio.com/"><img src="https://img.shields.io/badge/VS%20Code-%E2%89%A51.125.0-007ACC?style=flat-square" alt="Required VS Code version"></a>
   </p>
 
@@ -50,19 +50,19 @@ The Code Bookmarks panel on the left shows bookmarks bound to scripts, their hie
 
 ### 🛍️ Install from VS Code Marketplace
 
-Search for `CodeBookmark` in the VS Code Extensions view, confirm that the publisher is `realSilasYang`, and select Install. The extension requires VS Code `1.125.0` or later.
+Open the [CodeBookmark page on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=realSilasYang.codebookmark) directly, select Install, and let VS Code complete the installation. The publisher should be `realSilasYang`. The extension requires VS Code `1.125.0` or later; update from the [official VS Code download page](https://code.visualstudio.com/download) if needed.
 
 ### 📦 Install from a VSIX
 
-Download the released `.vsix` from GitHub Releases and run "Extensions: Install from VSIX..." in VS Code, or use:
+Open the [latest CodeBookmark release](https://github.com/realSilasYang/CodeBookmark/releases/latest) and download `codebookmark-version.vsix` from Assets. Then run "Extensions: Install from VSIX..." in VS Code and select the downloaded file, or use:
 
 ```bash
-code --install-extension codebookmark-2.0.0.vsix
+code --install-extension "/path/to/codebookmark-version.vsix"
 ```
 
 ### 🧑‍💻 Run from source
 
-Install Node.js 24 and VS Code. In the project folder, run `npm ci` and `npm run compile`, then press `F5` to start an Extension Development Host. See the [Developer Guide](#developer-guide) for the complete build and test workflow.
+Install [Node.js 24](https://nodejs.org/en/download) and [VS Code](https://code.visualstudio.com/download), then obtain the source from the [CodeBookmark repository](https://github.com/realSilasYang/CodeBookmark). In the project folder, run `npm ci` and `npm run compile`, then press `F5` to start an Extension Development Host. See the [Developer Guide](#developer-guide) for the complete build and test workflow.
 
 ## 1. Getting Started
 
@@ -309,10 +309,24 @@ CodeBookmark/
 |  |- CONTRIBUTING.md / .en.md      Contribution workflow and verification requirements
 |  |- SECURITY.md / .en.md          Vulnerability reporting policy
 |  `- SUPPORT.md / .en.md           Support and issue routing
+|- config/
+|  |- eslint.config.mjs             Strict ESLint configuration
+|  `- tsconfig.json                 TypeScript compiler configuration
 |- docs/
+|  |- README.en.md                  English project documentation
+|  |- CHANGELOG.en.md               English release history
 |  |- images/                       README screenshots
-|  |- CHANGELOG_TEMPLATE*.md        Structured Chinese and English changelog templates
-|  `- RELEASING*.md                 Maintainer release guides
+|  |- legal/                        Third-party notices and full license texts
+|  `- release/                      Bilingual changelog templates and release guides
+|- resources/                       Extension assets, icon dictionary, Fuse, and custom SVGs
+|- scripts/
+|  |- build/                        Cleanup, manifest generation, and runtime bundling
+|  |- icons/                        Icon manifest, download, and dictionary generation
+|  |- integration/                  Extension Host integration-test launcher
+|  |- lib/                          Shared manifest-localization build and verification helpers
+|  |- release/                      GitHub Release-notes generation
+|  |- verify-*.js                   Module regression and architecture contracts
+|  `- verify-all.js                 Unified contract-test entry
 |- src/
 |  |- extension.ts                  Synchronous extension activation entry
 |  |- i18n/                         Runtime Chinese/English language selection
@@ -323,23 +337,15 @@ CodeBookmark/
 |  |- repository/                   Script configuration catalog, move recovery, deletion, and storage transfer
 |  |- subscriptions/                Editor, file-system, and configuration event adapters
 |  `- util/                         Identity, paths, fingerprints, AI, code markers, and icon tools
-|- scripts/
-|  |- build-release-notes.js        Build Chinese GitHub Release text from CHANGELOG
-|  |- manifest-localizations.js     English translations for generated package metadata
-|  |- verify-*.js                   Module regression and architecture contracts
-|  |- verify-all.js                 Unified contract-test entry
-|  `- icon_tools/                   Icon manifest, download, and dictionary generation
-|- integration-tests/               VS Code Extension Host integration tests
-|- resources/                       Extension assets, icon dictionary, Fuse, and custom SVGs
-|- THIRD_PARTY_LICENSES/            Full redistributed third-party licenses
-|- generate-package-json.js         Generate the extension manifest from compiled constants
+|- tests/integration/               VS Code Extension Host integration tests
+|- .vscode/settings.json            Project file-nesting rules
+|- README.md / CHANGELOG.md         Chinese project documentation and release history
+|- LICENSE                          Main project license
 |- package.json                     Generated output, not the sole command-manifest source
-|- package.nls*.json                Generated default English and Chinese manifest strings
-|- CHANGELOG.md / CHANGELOG.en.md   Chinese and English release history
-`- THIRD_PARTY_NOTICES.md           Icon and Fuse.js sources and attribution
+`- package-lock.json                Reproducible npm dependency lock
 ```
 
-`out/`, `.vscode-test/`, and `node_modules/` are generated or dependency folders and must not be edited manually. Extension metadata and npm scripts are defined in `src/util/constants/BasePackage.ts`; commands, menus, keybindings, settings, and submenus in `src/util/constants/Commands.ts`; and colors in `Colors.ts`. `npm run compile` cleans `out/`, compiles TypeScript, regenerates `package.json`, and writes the three `package.nls*.json` catalogs. Runtime strings use `src/i18n/Localization.ts`: all `zh*` VS Code locales use Chinese, and every other locale uses English.
+`out/`, `.vscode-test/`, `node_modules/`, and root-level `package.nls*.json` files are generated or dependency content and must not be edited manually. Compilation creates the NLS catalogs next to `package.json` for VS Code and VSIX packaging, but source control ignores them and Explorer nests them under `package.json`. Extension metadata and npm scripts are defined in `src/util/constants/BasePackage.ts`; commands, menus, keybindings, settings, and submenus in `src/util/constants/Commands.ts`; and colors in `Colors.ts`. `npm run compile` cleans `out/`, compiles TypeScript, and regenerates `package.json` plus every `package.nls*.json` catalog. Marketplace does not switch discovery metadata by client locale, so its default title and description are Chinese; after installation, Chinese locales use the Chinese manifest and every officially supported non-Chinese VS Code locale uses the English manifest. Runtime strings use `src/i18n/Localization.ts` with the same Chinese-versus-English rule.
 
 ## 2. Activation and View State
 
@@ -447,11 +453,11 @@ Background workspace scanning discovers at most 2,000 files, skips unopened file
 
 ## 11. Icon System and Webviews
 
-`scripts/icon_tools/build-curated-list.js` builds the download manifest from explicit Iconify collections and semantic concepts. Output names include source suffixes such as `_fluent`, `_twitter`, `_google_noto`, `_mozilla`, and `_vscode`. `download-extra-icons.js` accepts HTTPS only, limits redirects and response size, and rejects scripts, external references, and event handlers. `generate-icon-dictionary.js` combines on-disk SVGs with English and Chinese semantic terms and requires sufficient Chinese keywords for every icon.
+`scripts/icons/build-curated-list.js` builds the download manifest from explicit Iconify collections and semantic concepts. Output names include source suffixes such as `_fluent`, `_twitter`, `_google_noto`, `_mozilla`, and `_vscode`. `download-extra-icons.js` accepts HTTPS only, limits redirects and response size, and rejects scripts, external references, and event handlers. `generate-icon-dictionary.js` combines on-disk SVGs with English and Chinese semantic terms and requires sufficient Chinese keywords for every icon.
 
 The Icon Picker Webview allowlists dictionary fields and icon names, uses CSP with a random nonce, and emits no inline event attributes. The dictionary is cached asynchronously. Each category renders 160 items per page and continues on scroll; search returns at most 200 results, avoiding creation of roughly 1,500 DOM items at once. Both the Icon Picker and Configuration Manager receive a read-only localized text table from the extension host, while stable IDs, filter values, and message commands continue to drive behavior.
 
-Third-party icon collections, authors, and licenses are listed in `THIRD_PARTY_NOTICES.md`. Regenerating or downloading icons must be followed by dictionary generation and icon verification.
+Third-party icon collections, authors, and licenses are listed in `docs/legal/THIRD_PARTY_NOTICES.md`. Regenerating or downloading icons must be followed by dictionary generation and icon verification.
 
 ## 12. Build, Test, and Release
 
@@ -469,7 +475,7 @@ npm run package:vsix
 - `npm run lint`: check `src/**/*.ts`, the manifest generator, and every `scripts/**/*.js`.
 - `npm run verify`: compile, lint, then run every `verify-*.js` contract.
 - `npm run test:integration`: compile, automatically find and reuse an installed VS Code, then start the Extension Host with isolated user data to verify real activation, command registration, configuration, and file opening in Chinese and English locales. It fails clearly when no installed VS Code is available and never downloads another test runtime.
-- To select another VS Code, run `node scripts/run-integration-tests.js "--vscode-executable=<path-to-Code.exe>"` or set `CODEBOOKMARK_VSCODE_EXECUTABLE_PATH`; an explicit path wins over auto-detection.
+- To select another VS Code, run `node scripts/integration/run-integration-tests.js "--vscode-executable=<path-to-Code.exe>"` or set `CODEBOOKMARK_VSCODE_EXECUTABLE_PATH`; an explicit path wins over auto-detection.
 - `npm run verify:icons`: verify SVG file names, safe content, and one-to-one dictionary coverage.
 - `npm run package:list`: use the pinned official VS Code packaging tool to preview VSIX contents.
 - `npm run package:vsix`: compile and create an installable VSIX; add `-- --out <file>` to select the output path.
@@ -480,13 +486,13 @@ Current contracts cover activation order, complete runtime and manifest localiza
 Icon maintenance:
 
 ```bash
-node scripts/icon_tools/build-curated-list.js
-node scripts/icon_tools/download-extra-icons.js
-node scripts/icon_tools/generate-icon-dictionary.js
+node scripts/icons/build-curated-list.js
+node scripts/icons/download-extra-icons.js
+node scripts/icons/generate-icon-dictionary.js
 npm run verify:icons
 ```
 
-Run `npm run check:release` before publication. The VSIX contains only `out`, `resources`, `package.nls*.json`, `README.md`, `README.en.md`, `CHANGELOG.md`, `CHANGELOG.en.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `THIRD_PARTY_LICENSES`. After a version tag is pushed, the Release workflow obtains a short-lived token through GitHub OIDC and Microsoft Entra ID, publishes the same VSIX to Marketplace, and creates or updates the GitHub Release without storing a long-lived publishing credential. Identity setup, retry behavior, and the full procedure are in the [English release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/RELEASING.en.md). The Marketplace Publisher ID is fixed as `realSilasYang` and enforced by the workflow. Source is MIT licensed; third-party icons and Fuse.js retain their respective licenses.
+Run `npm run check:release` before publication. The VSIX contains only `out`, `resources`, `package.nls*.json`, the root Chinese `README` and `CHANGELOG`, their English versions under `docs`, `LICENSE`, and the third-party notices and licenses under `docs/legal`. After a version tag is pushed, the Release workflow obtains a short-lived token through GitHub OIDC and Microsoft Entra ID, publishes the same VSIX to Marketplace, and creates or updates the GitHub Release without storing a long-lived publishing credential. Identity setup, retry behavior, and the full procedure are in the [English release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md). The Marketplace Publisher ID is fixed as `realSilasYang` and enforced by the workflow. Source is MIT licensed; third-party icons and Fuse.js retain their respective licenses.
 
 # Star History
 

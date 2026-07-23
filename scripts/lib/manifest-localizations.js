@@ -3,11 +3,36 @@ const {
   DEFAULT_AI_GENERATION_PROMPT_EN,
   DEFAULT_AI_OPTIMIZATION_PROMPT,
   DEFAULT_AI_OPTIMIZATION_PROMPT_EN,
-} = require('../out/util/constants/AIPrompts')
-const { UNDO_ACTION_LABELS, UNDO_ACTION_LABELS_EN } = require('../out/util/UndoActions')
+} = require('../../out/util/constants/AIPrompts')
+const { UNDO_ACTION_LABELS, UNDO_ACTION_LABELS_EN } = require('../../out/util/UndoActions')
+
+const MARKETPLACE_DEFAULT_KEYS = Object.freeze([
+  'codebookmark.displayName',
+  'codebookmark.description',
+])
+
+// VS Code's official and long-standing non-Chinese display-language locales.
+// Marketplace ignores the client locale, so package.nls.json supplies Chinese
+// discovery metadata while these catalogs keep installed manifests in English.
+const ENGLISH_MANIFEST_LOCALES = Object.freeze([
+  'en',
+  'bg',
+  'cs',
+  'de',
+  'es',
+  'fr',
+  'hu',
+  'it',
+  'ja',
+  'ko',
+  'pl',
+  'pt-br',
+  'ru',
+  'tr',
+])
 
 const englishByChineseText = new Map([
-  ['代码书签 - CodeBookmark', 'Code Bookmarks - CodeBookmark'],
+  ['代码书签 - CodeBookmark', 'CodeBookmark'],
   ['面向代码阅读与导航的智能书签。粘性引擎让书签持续绑定脚本，随代码编辑、文件改名和目录移动自动追随，无需反复校准；配置本地保存，AI 辅助生成书签、优化标签并匹配丰富图标，让关键逻辑一眼可见、随时直达。', 'Smart bookmarks for reading and navigating code. The sticky engine keeps bookmarks bound to scripts and automatically follows code edits, file renames, and folder moves—no manual recalibration required. Configurations stay local, while AI generates bookmarks, improves labels, and matches rich icons so important logic is easy to spot and instantly accessible.'],
   ['代码书签', 'Code Bookmarks'],
   ['暂无书签，按下 Ctrl+B 即刻添加！\n\n[导入书签配置文件](command:codebookmark.importBookmarkConfig)\n\n[查看使用说明](command:codebookmark.openHelp)', 'No bookmarks yet. Press Ctrl+B to add one instantly!\n\n[Import Bookmark Configuration](command:codebookmark.importBookmarkConfig)\n\n[View Documentation](command:codebookmark.openHelp)'],
@@ -94,4 +119,8 @@ function translateManifestText(chinese) {
   return `${history[1] === '撤销' ? 'Undo' : 'Redo'}: ${action}`
 }
 
-module.exports = { translateManifestText }
+module.exports = {
+  ENGLISH_MANIFEST_LOCALES,
+  MARKETPLACE_DEFAULT_KEYS,
+  translateManifestText,
+}

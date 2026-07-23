@@ -1,7 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const root = path.resolve(__dirname, '..')
+const root = path.resolve(__dirname, '../..')
 
 function isChineseLanguage(language) {
   return language === undefined || language === '' || /^zh(?:[-_]|$)/i.test(language)
@@ -22,10 +22,25 @@ function resolveLocalizedValue(value, messages) {
   return value
 }
 
+function localizationFile(language) {
+  const normalized = String(language ?? '').trim().toLowerCase().replaceAll('_', '-')
+  const candidates = []
+  if (normalized) {
+    candidates.push(`package.nls.${normalized}.json`)
+    const separator = normalized.lastIndexOf('-')
+    if (separator > 0) candidates.push(`package.nls.${normalized.slice(0, separator)}.json`)
+  }
+  return candidates.find(fileName => fs.existsSync(path.join(root, fileName)))
+}
+
 function loadLocalizedManifest(language = 'zh-cn') {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
-  const localizationFile = isChineseLanguage(language) ? 'package.nls.zh-cn.json' : 'package.nls.json'
-  const messages = JSON.parse(fs.readFileSync(path.join(root, localizationFile), 'utf8'))
+  const defaultMessages = JSON.parse(fs.readFileSync(path.join(root, 'package.nls.json'), 'utf8'))
+  const localizedFile = localizationFile(language)
+  const localizedMessages = localizedFile
+    ? JSON.parse(fs.readFileSync(path.join(root, localizedFile), 'utf8'))
+    : {}
+  const messages = { ...defaultMessages, ...localizedMessages }
   return resolveLocalizedValue(manifest, messages)
 }
 

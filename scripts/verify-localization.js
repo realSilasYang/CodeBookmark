@@ -18,11 +18,17 @@ function collectStrings(value, currentPath = [], output = []) {
 }
 
 const manifest = readJson('package.json')
-const englishMessages = readJson('package.nls.json')
+const marketplaceDefaultMessages = readJson('package.nls.json')
+const englishMessages = readJson('package.nls.en.json')
 const genericChineseMessages = readJson('package.nls.zh.json')
 const chineseMessages = readJson('package.nls.zh-cn.json')
 const traditionalLocaleMessages = readJson('package.nls.zh-tw.json')
 const englishKeys = Object.keys(englishMessages).sort()
+const {
+  ENGLISH_MANIFEST_LOCALES,
+  MARKETPLACE_DEFAULT_KEYS,
+} = require('./lib/manifest-localizations')
+assert.deepEqual(Object.keys(marketplaceDefaultMessages).sort(), englishKeys, 'Marketplace default and English NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(genericChineseMessages).sort(), englishKeys, 'Generic Chinese and English NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(chineseMessages).sort(), englishKeys, 'English and Chinese NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(traditionalLocaleMessages).sort(), englishKeys, 'Every zh locale catalog must have identical keys')
@@ -32,7 +38,17 @@ assert.ok(englishKeys.length > 100, 'Manifest localization must cover the comple
 for (const key of englishKeys) {
   assert.equal(typeof englishMessages[key], 'string')
   assert.equal(typeof chineseMessages[key], 'string')
-  assert.doesNotMatch(englishMessages[key], cjk, `Default English NLS value contains Chinese text: ${key}`)
+  assert.doesNotMatch(englishMessages[key], cjk, `English NLS value contains Chinese text: ${key}`)
+  assert.equal(
+    marketplaceDefaultMessages[key],
+    MARKETPLACE_DEFAULT_KEYS.includes(key) ? chineseMessages[key] : englishMessages[key],
+    `Marketplace default has an unexpected value for ${key}`,
+  )
+}
+for (const locale of ENGLISH_MANIFEST_LOCALES.filter(locale => locale !== 'en')) {
+  const overrides = readJson(`package.nls.${locale}.json`)
+  assert.deepEqual(Object.keys(overrides).sort(), [...MARKETPLACE_DEFAULT_KEYS].sort(), `${locale} must override only Marketplace discovery metadata`)
+  for (const key of MARKETPLACE_DEFAULT_KEYS) assert.equal(overrides[key], englishMessages[key])
 }
 
 const placeholderKeys = collectStrings(manifest)
@@ -41,18 +57,26 @@ const placeholderKeys = collectStrings(manifest)
   .sort()
 assert.deepEqual(placeholderKeys, englishKeys, 'Every generated NLS message must be referenced exactly once by package.json')
 
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const chineseManifest = loadLocalizedManifest('zh-cn')
 const englishManifest = loadLocalizedManifest('en-US')
 assert.equal(chineseManifest.displayName, '代码书签 - CodeBookmark')
-assert.equal(englishManifest.displayName, 'Code Bookmarks - CodeBookmark')
+assert.equal(englishManifest.displayName, 'CodeBookmark')
 assert.match(chineseManifest.description, /粘性引擎/)
 assert.match(englishManifest.description, /sticky engine/i)
+for (const locale of ENGLISH_MANIFEST_LOCALES) {
+  const localizedManifest = loadLocalizedManifest(locale)
+  assert.equal(localizedManifest.displayName, 'CodeBookmark', `${locale} must use the concise English title`)
+  for (const entry of collectStrings(localizedManifest)) {
+    if (entry.path[0] === 'author' || entry.path[0] === 'keywords') continue
+    assert.doesNotMatch(entry.value, cjk, `${locale} manifest contains Chinese text at ${entry.path.join('.')}`)
+  }
+}
 for (const entry of collectStrings(englishManifest)) {
   if (entry.path[0] === 'author' || entry.path[0] === 'keywords') continue
   assert.doesNotMatch(entry.value, cjk, `Localized English manifest contains Chinese text at ${entry.path.join('.')}`)
 }
-for (const requiredFile of ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md']) {
+for (const requiredFile of ['README.md', 'docs/README.en.md', 'CHANGELOG.md', 'docs/CHANGELOG.en.md']) {
   assert.ok(englishManifest.files.includes(requiredFile), `${requiredFile} must be included in the VSIX`)
 }
 
@@ -344,10 +368,10 @@ assert.doesNotMatch(icons.AI_ICON_SELECTION_PROMPT_EN, cjk)
 assert.match(icons.AI_ICON_SELECTION_PROMPT, cjk)
 
 const documentPairs = [
-  ['README.md', 'README.en.md'],
-  ['CHANGELOG.md', 'CHANGELOG.en.md'],
-  ['docs/RELEASING.md', 'docs/RELEASING.en.md'],
-  ['docs/CHANGELOG_TEMPLATE.md', 'docs/CHANGELOG_TEMPLATE.en.md'],
+  ['README.md', 'docs/README.en.md'],
+  ['CHANGELOG.md', 'docs/CHANGELOG.en.md'],
+  ['docs/release/RELEASING.md', 'docs/release/RELEASING.en.md'],
+  ['docs/release/CHANGELOG_TEMPLATE.md', 'docs/release/CHANGELOG_TEMPLATE.en.md'],
   ['.github/CONTRIBUTING.md', '.github/CONTRIBUTING.en.md'],
   ['.github/SECURITY.md', '.github/SECURITY.en.md'],
   ['.github/SUPPORT.md', '.github/SUPPORT.en.md'],
@@ -370,11 +394,11 @@ for (const [chineseTemplate, englishTemplate] of [
 assert.match(read('.github/ISSUE_TEMPLATE/config.yml'), /私密报告安全漏洞/)
 assert.match(read('.github/ISSUE_TEMPLATE/config.yml'), /Report a security vulnerability privately/)
 const chineseVersions = [...read('CHANGELOG.md').matchAll(/^## 🎉 版本 (\S+) - \d{4}-\d{2}-\d{2}$/gm)].map(match => match[1])
-const englishVersions = [...read('CHANGELOG.en.md').matchAll(/^## 🎉 Version (\S+) - \d{4}-\d{2}-\d{2}$/gm)].map(match => match[1])
+const englishVersions = [...read('docs/CHANGELOG.en.md').matchAll(/^## 🎉 Version (\S+) - \d{4}-\d{2}-\d{2}$/gm)].map(match => match[1])
 assert.deepEqual(englishVersions, chineseVersions, 'Chinese and English changelogs must cover the same versions')
-assert.match(read('README.en.md'), /^# User Guide$/m)
-assert.match(read('README.en.md'), /^# Developer Guide$/m)
-assert.match(read('README.en.md'), /Runtime Chinese\/English language selection/)
+assert.match(read('docs/README.en.md'), /^# User Guide$/m)
+assert.match(read('docs/README.en.md'), /^# Developer Guide$/m)
+assert.match(read('docs/README.en.md'), /Runtime Chinese\/English language selection/)
 
 localization.initializeLocalization('zh-cn')
 console.log('Complete Chinese/English localization contract verified.')

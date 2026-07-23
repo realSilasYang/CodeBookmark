@@ -1,10 +1,32 @@
 # 📋 更新日志
 
-[简体中文](./CHANGELOG.md) · [English](./CHANGELOG.en.md)
+[简体中文](./CHANGELOG.md) · [English](./docs/CHANGELOG.en.md)
 
-本项目的显著变化记录在此文件中，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。新增版本时请使用[中文更新日志模板](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG_TEMPLATE.md)，从用户视角说明实际变化，并删除没有内容的分类。
+本项目的显著变化记录在此文件中，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。新增版本时请使用[中文更新日志模板](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/CHANGELOG_TEMPLATE.md)，从用户视角说明实际变化，并删除没有内容的分类。
+
+## 🎉 版本 2.0.1 - 2026-07-23
+
+### 🚀 优化
+
+- **项目结构**：构建配置、双语文档、第三方许可、脚本工具和集成测试按职责归档，根目录只保留必要入口文件，降低后续维护和查找成本。
+- **构建与打包边界**：清单生成、运行时打包、集成测试和 Release 工作流全面适配新路径；本地化清单改为编译时生成，并继续完整包含在 VSIX 中。
+- **文档入口**：安装指南直接提供 Marketplace、GitHub Release、Node.js、VS Code 和源码仓库链接，中英文文档、更新日志及发布指南跳转同步修正。
+- **结构回归保障**：新增项目结构专项验证和共享 VS Code 文件嵌套规则，防止旧路径、机器专用设置或散乱根目录文件重新出现。
+
+---
+
+### 🐛 修复
+
+- **配置路径解析**：修复 TypeScript 配置移动后源码输入和模块图验证可能按错误基准解析相对路径的问题，保证本地、CI 与发布构建使用同一输入范围。
+- **更新日志显示**：将 2.0.0 的重要说明移到版本内容首位，并统一警告符号的文本呈现，改善标题与正文的视觉对齐。
 
 ## 🎉 版本 2.0.0 - 2026-07-23
+
+### ⚠ 重要说明
+
+- **AI 配置键升级**：2.0.0 不再读取旧键 `codebookmark.AI.endpoint` 和 `codebookmark.AI.apiKey`。升级后请在设置中重新填写 `codebookmark.AI.address` 与 `codebookmark.AI.APIKey`；API Key 仍以明文保存在所选 VS Code 设置层级中。
+
+---
 
 ### ✨ 新增
 
@@ -32,12 +54,6 @@
 - **AI 图标误配**：修复仅凭宽泛关键词强行选择无关图标的问题；同优先级语义冲突或证据不足时稳定回退默认图标。
 - **扩展停用持久化**：修复停用阶段重复写入未变化的撤销状态，并避免 VS Code 已关闭输出通道时产生二次异常。
 - **本地化行为边界**：命令 ID、设置键、持久化字段、Webview 消息和 AI 协议保持语言无关，防止翻译文本改变功能分支或数据兼容性。
-
----
-
-### ⚠️ 重要说明
-
-- **AI 配置键升级**：2.0.0 不再读取旧键 `codebookmark.AI.endpoint` 和 `codebookmark.AI.apiKey`。升级后请在设置中重新填写 `codebookmark.AI.address` 与 `codebookmark.AI.APIKey`；API Key 仍以明文保存在所选 VS Code 设置层级中。
 
 ## 🎉 版本 1.1.1 - 2026-07-23
 

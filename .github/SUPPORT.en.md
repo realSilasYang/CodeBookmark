@@ -4,7 +4,7 @@
 
 ## Usage Questions
 
-Read the [README user guide](../README.en.md#user-guide) first, especially initial setup, bookmark storage, move recovery, import/export, and AI configuration.
+Read the [README user guide](../docs/README.en.md#user-guide) first, especially initial setup, bookmark storage, move recovery, import/export, and AI configuration.
 
 If the issue remains, open an ordinary issue with the CodeBookmark version, VS Code version, operating system, shortest reproduction, and sanitized logs. Do not submit real API keys, complete bookmark configurations, private source code, or personally identifiable local paths.
 

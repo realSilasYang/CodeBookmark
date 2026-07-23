@@ -25,7 +25,7 @@ assert.equal(isTreeExpandedToLevel(incompleteSibling, 3, EXPANDED), false)
 assert.equal(isTreeExpandedToLevel(completeTree, 0, EXPANDED), false)
 assert.equal(isTreeExpandedToLevel([node(0, EXPANDED)], 3, EXPANDED), false)
 
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]))
 const aiAnalysisCommands = [

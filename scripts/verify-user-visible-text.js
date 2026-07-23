@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
 
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 
 function visibleText(value) {

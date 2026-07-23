@@ -34,9 +34,9 @@ npm audit --audit-level=low
 - Run `npm run compile` after changing those files so generated `package.json` and `package.nls*.json` stay aligned.
 - Every user-visible runtime string requires both Chinese and English text. All `zh*` VS Code locales use Chinese; every other locale uses English. Keep stable command IDs, protocol values, persistence fields, and decision logic independent of translated labels.
 - Add new behavior to the relevant `scripts/verify-*.js`; add integration coverage when VS Code lifecycle behavior is involved.
-- Verify redistribution permission before adding a third-party asset and update `THIRD_PARTY_NOTICES.md`.
+- Verify redistribution permission before adding a third-party asset and update `docs/legal/THIRD_PARTY_NOTICES.md`.
 - Never commit API keys, user paths, bookmark data, build output, or local tool configuration.
-- See the [release guide](../docs/RELEASING.en.md) for version maintenance. An ordinary pull request must not create release tags or edit an already published version.
+- See the [release guide](../docs/release/RELEASING.en.md) for version maintenance. An ordinary pull request must not create release tags or edit an already published version.
 
 ## Commits and Pull Requests
 

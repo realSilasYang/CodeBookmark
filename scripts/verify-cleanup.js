@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
-const { loadLocalizedManifest } = require('./localized-manifest')
+const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const { Commands } = require(path.join(root, 'out', 'util', 'constants', 'Commands'))
 
@@ -14,26 +14,26 @@ assert.deepEqual(manifest.files, [
   'resources',
   'package.nls*.json',
   'README.md',
-  'README.en.md',
+  'docs/README.en.md',
   'CHANGELOG.md',
-  'CHANGELOG.en.md',
+  'docs/CHANGELOG.en.md',
   'LICENSE',
-  'THIRD_PARTY_NOTICES.md',
-  'THIRD_PARTY_LICENSES',
+  'docs/legal/THIRD_PARTY_NOTICES.md',
+  'docs/legal/licenses',
 ])
 for (const releaseDocument of [
   'README.md',
-  'README.en.md',
+  'docs/README.en.md',
   'CHANGELOG.md',
-  'CHANGELOG.en.md',
+  'docs/CHANGELOG.en.md',
   'LICENSE',
-  'THIRD_PARTY_NOTICES.md',
-  path.join('THIRD_PARTY_LICENSES', 'Apache-2.0.txt'),
-  path.join('THIRD_PARTY_LICENSES', 'CC-BY-4.0.txt'),
-  path.join('THIRD_PARTY_LICENSES', 'CC0-1.0.txt'),
-  path.join('THIRD_PARTY_LICENSES', 'Flat-Color-Icons-MIT.txt'),
-  path.join('THIRD_PARTY_LICENSES', 'Fluent-Emoji-MIT.txt'),
-  path.join('THIRD_PARTY_LICENSES', 'VSCode-Icons-MIT.txt'),
+  'docs/legal/THIRD_PARTY_NOTICES.md',
+  path.join('docs', 'legal', 'licenses', 'Apache-2.0.txt'),
+  path.join('docs', 'legal', 'licenses', 'CC-BY-4.0.txt'),
+  path.join('docs', 'legal', 'licenses', 'CC0-1.0.txt'),
+  path.join('docs', 'legal', 'licenses', 'Flat-Color-Icons-MIT.txt'),
+  path.join('docs', 'legal', 'licenses', 'Fluent-Emoji-MIT.txt'),
+  path.join('docs', 'legal', 'licenses', 'VSCode-Icons-MIT.txt'),
 ]) {
   assert.equal(fs.existsSync(path.join(root, releaseDocument)), true, `${releaseDocument} must exist`)
 }

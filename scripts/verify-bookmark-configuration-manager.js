@@ -170,7 +170,7 @@ async function main() {
     assert.equal(metadataOnlyEntries.length, 1)
     assert.equal(metadataOnlyEntries[0].kind, 'transferJournal')
 
-    const { loadLocalizedManifest } = require('./localized-manifest')
+    const { loadLocalizedManifest } = require('./lib/localized-manifest')
     const manifest = loadLocalizedManifest('zh-cn')
     const englishManifest = loadLocalizedManifest('en')
     const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]))

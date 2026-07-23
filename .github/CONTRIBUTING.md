@@ -33,9 +33,9 @@ npm audit --audit-level=low
 - 命令、菜单、快捷键和设置以 `src/util/constants/Commands.ts` 为事实源。
 - 修改上述文件后运行 `npm run compile`，让 `package.json` 与源码保持一致。
 - 新增行为应补充对应的 `scripts/verify-*.js`；涉及 VS Code 生命周期时再补集成测试。
-- 新增第三方资源前必须核对再分发许可，并更新 `THIRD_PARTY_NOTICES.md`。
+- 新增第三方资源前必须核对再分发许可，并更新 `docs/legal/THIRD_PARTY_NOTICES.md`。
 - 不要提交 API Key、用户路径、书签数据、构建产物或本地工具配置。
-- 发布与版本维护流程见 [发布指南](../docs/RELEASING.md)；普通 Pull Request 不应创建版本标签或修改已发布版本。
+- 发布与版本维护流程见 [发布指南](../docs/release/RELEASING.md)；普通 Pull Request 不应创建版本标签或修改已发布版本。
 
 ## 提交与 Pull Request
 
