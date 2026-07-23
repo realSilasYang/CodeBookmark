@@ -6,7 +6,7 @@ const { spawnSync } = require('node:child_process')
 const crypto = require('node:crypto')
 const { Writable } = require('node:stream')
 const { pathToFileURL } = require('node:url')
-const { downloadAndUnzipVSCode, runTests } = require('@vscode/test-electron')
+const { downloadAndUnzipVSCode, runTests, runVSCodeCommand } = require('@vscode/test-electron')
 
 const knownExternalDiagnosticPatterns = [
   /^(?:Warning: 'cached-data' is not in the list of known options, but still passed to Electron\/Chromium\.|警告: "cached-data"不在已知选项列表中，但仍传递给 Electron\/Chromium。)\r?\n?/gmu,
@@ -232,24 +232,19 @@ async function writeDownloadedLanguagePacksFile(extensionsPath, userDataPath) {
   throw new Error('远端集成测试未找到已安装的 VS Code 简体中文语言包。')
 }
 
-async function prepareDownloadedLanguagePack(vscodeExecutablePath, extensionsPath, userDataPath) {
-  const env = { ...process.env }
-  delete env.ELECTRON_RUN_AS_NODE
-  const result = spawnSync(vscodeExecutablePath, [
-    '--install-extension',
-    'MS-CEINTL.vscode-language-pack-zh-hans',
-    '--force',
-    `--user-data-dir=${userDataPath}`,
-    `--extensions-dir=${extensionsPath}`,
-  ], {
-    encoding: 'utf8',
-    env,
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  if (result.error || result.status !== 0) {
-    const details = [result.stdout, result.stderr].filter(Boolean).join('\n').trim()
-    throw new Error(`安装 VS Code 简体中文语言包失败：${result.error?.message || details || `退出码 ${result.status}`}`)
+async function prepareDownloadedLanguagePack(version, extensionsPath, userDataPath) {
+  const inheritedNoDeprecation = process.noDeprecation
+  process.noDeprecation = true
+  try {
+    await runVSCodeCommand([
+      '--install-extension',
+      'MS-CEINTL.vscode-language-pack-zh-hans',
+      '--force',
+      `--user-data-dir=${userDataPath}`,
+      `--extensions-dir=${extensionsPath}`,
+    ], { version })
+  } finally {
+    process.noDeprecation = inheritedNoDeprecation
   }
   await writeDownloadedLanguagePacksFile(extensionsPath, userDataPath)
 }
@@ -299,7 +294,7 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
   if (extensionsPath) {
     await fs.mkdir(extensionsPath, { recursive: true })
     console.log('正在为远端中文集成测试准备 VS Code 简体中文语言包。')
-    await prepareDownloadedLanguagePack(vscodeExecutablePath, extensionsPath, userDataPath)
+    await prepareDownloadedLanguagePack(downloadedVSCodeVersion, extensionsPath, userDataPath)
   } else if (locale === 'zh-cn' && languagePacksFile) {
     await fs.copyFile(languagePacksFile, path.join(userDataPath, 'languagepacks.json'))
   }
