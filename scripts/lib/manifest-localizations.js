@@ -6,14 +6,10 @@ const {
 } = require('../../out/util/constants/AIPrompts')
 const { UNDO_ACTION_LABELS, UNDO_ACTION_LABELS_EN } = require('../../out/util/UndoActions')
 
-const MARKETPLACE_DEFAULT_KEYS = Object.freeze([
-  'codebookmark.displayName',
-  'codebookmark.description',
-])
-
 // VS Code's official and long-standing non-Chinese display-language locales.
-// Marketplace ignores the client locale, so package.nls.json supplies Chinese
-// discovery metadata while these catalogs keep installed manifests in English.
+// package.nls.json is the complete Chinese fallback. Every locale below receives
+// a complete English catalog so a missing key can never fall back to Chinese in
+// an otherwise English VS Code window.
 const ENGLISH_MANIFEST_LOCALES = Object.freeze([
   'en',
   'bg',
@@ -123,6 +119,5 @@ function translateManifestText(chinese) {
 
 module.exports = {
   ENGLISH_MANIFEST_LOCALES,
-  MARKETPLACE_DEFAULT_KEYS,
   translateManifestText,
 }

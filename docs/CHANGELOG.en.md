@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.0.1 - 2026-07-23
+
+### 🚀 Improvements
+
+- **Localization regression protection:** Real Chinese and English VS Code Extension Host tests now assert the loaded view title, command title, and setting description, while complete-catalog consistency checks prevent localization fallback errors from returning.
+- **Release asset guidance:** GitHub Release notes now automatically list the VSIX, software bill of materials, and SHA-256 checksum file with a concise explanation of each asset.
+
+---
+
+### 🐛 Fixed
+
+- **Chinese interface fallback:** Fixed an issue that could display extension views, commands, and settings entirely in English in a Chinese VS Code environment. The default localization catalog is now complete Chinese, while non-Chinese locale catalogs are complete English.
+
 ## 🎉 Version 3.0.0 - 2026-07-23
 
 ### ⚠️ Important Notes

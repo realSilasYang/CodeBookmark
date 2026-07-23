@@ -4,7 +4,7 @@ export const basePackage = {
 	"name": "codebookmark",
 	"displayName": "代码书签 - CodeBookmark",
 	"description": "为代码智能导航而生，符合你的直觉。粘性引擎让书签持续绑定脚本，随代码编辑、文件改名和目录移动自动追随，无需反复校准；配置本地保存，AI 辅助生成书签、优化标签并匹配丰富图标，让关键逻辑一眼可见、随时直达。",
-	"version": "3.0.0",
+	"version": "3.0.1",
 	"publisher": "realSilasYang",
 	"author": "阳熙来",
 	"private": true,

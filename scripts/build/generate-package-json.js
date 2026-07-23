@@ -6,7 +6,6 @@ const Colors_1 = require("../../out/util/constants/Colors");
 const basePackageJsonFile = require("../../out/util/constants/BasePackage");
 const {
   ENGLISH_MANIFEST_LOCALES,
-  MARKETPLACE_DEFAULT_KEYS,
   translateManifestText,
 } = require('../lib/manifest-localizations');
 
@@ -134,23 +133,13 @@ function localizeManifestValue(value, pathSegments = []) {
 
 const customPackageJson = localizeManifestValue(sourcePackageJson);
 
-const marketplaceDefaultMessages = { ...englishMessages };
-const englishMarketplaceOverrides = {};
-for (const key of MARKETPLACE_DEFAULT_KEYS) {
-  if (!(key in englishMessages) || !(key in chineseMessages)) {
-    throw new Error(`Missing Marketplace localization key: ${key}`);
-  }
-  marketplaceDefaultMessages[key] = chineseMessages[key];
-  englishMarketplaceOverrides[key] = englishMessages[key];
-}
-
 const temporaryPackageJsonPath = `${customPackageJsonPath}.${process.pid}.tmp`;
 const localizationFiles = [
-  ['package.nls.json', marketplaceDefaultMessages],
+  ['package.nls.json', chineseMessages],
   ['package.nls.en.json', englishMessages],
   ...ENGLISH_MANIFEST_LOCALES
     .filter(locale => locale !== 'en')
-    .map(locale => [`package.nls.${locale}.json`, englishMarketplaceOverrides]),
+    .map(locale => [`package.nls.${locale}.json`, englishMessages]),
   ['package.nls.zh.json', chineseMessages],
   ['package.nls.zh-cn.json', chineseMessages],
   ['package.nls.zh-tw.json', chineseMessages],

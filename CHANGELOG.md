@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 版本 3.0.1 - 2026-07-23
+
+### 🚀 优化
+
+- **本地化回归保护**：真实中英文 VS Code Extension Host 测试直接核对视图标题、命令标题和设置说明，并增加完整语言目录一致性契约，防止本地化回退错误再次出现。
+- **发布文件说明**：GitHub Release 更新日志会自动列出 VSIX、软件物料清单和 SHA-256 校验文件，说明每个附件的用途。
+
+---
+
+### 🐛 修复
+
+- **中文界面回退**：修复中文 VS Code 环境可能将扩展视图、命令和设置整体显示为英文的问题；默认本地化目录现在始终提供完整中文，非中文语言目录提供完整英文。
+
 ## 🎉 版本 3.0.0 - 2026-07-23
 
 ### ⚠️ 重要说明

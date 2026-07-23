@@ -37,6 +37,14 @@ try {
     const releaseNotes = fs.readFileSync(outputFile, 'utf8')
     assert.match(releaseNotes, new RegExp(`^# 🎉 CodeBookmark v${version.replace(/\./g, '\\.')} 更新日志$`, 'm'))
     assert.match(releaseNotes, /^## (?:⚠️ 重要说明|✨ 新增|🚀 优化|🐛 修复)$/m)
+    assert.match(releaseNotes, /^## 📦 发布文件说明$/m)
+    assert.ok(releaseNotes.includes(`\`codebookmark-${version}.vsix\``))
+    assert.ok(releaseNotes.includes(`\`codebookmark-${version}.sbom.cdx.json\``))
+    assert.ok(releaseNotes.includes('`SHA256SUMS`'))
+    assert.ok(
+      releaseNotes.indexOf('## 📦 发布文件说明') > releaseNotes.search(/^## (?:⚠️ 重要说明|✨ 新增|🚀 优化|🐛 修复)$/m),
+      `版本 ${version} 的发布文件说明必须放在更新分类之后`,
+    )
     const importantNotesIndex = releaseNotes.indexOf('## ⚠️ 重要说明')
     if (importantNotesIndex >= 0) {
       const firstCategoryIndex = releaseNotes.search(/^## /m)

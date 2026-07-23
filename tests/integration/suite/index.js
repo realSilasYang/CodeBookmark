@@ -17,6 +17,11 @@ async function waitFor(assertion, message, timeoutMs = 10_000) {
   throw new Error(`${message}: ${lastError instanceof Error ? lastError.message : String(lastError)}`)
 }
 
+function localizedValue(value) {
+  if (typeof value === 'string') return value
+  return value?.value
+}
+
 async function run() {
   const expectedLocale = process.env.CODEBOOKMARK_TEST_LOCALE
   assert.ok(expectedLocale === 'zh-cn' || expectedLocale === 'en', 'Integration-test locale must be explicit')
@@ -27,6 +32,26 @@ async function run() {
   )
   const extension = vscode.extensions.all.find(candidate => candidate.packageJSON?.name === 'codebookmark')
   assert.ok(extension, 'CodeBookmark extension is not installed in the test host')
+  const expectedManifestText = expectedLocale === 'zh-cn'
+    ? {
+        view: '代码书签',
+        toggle: '添加/删除书签',
+        storage: '书签配置目录的绝对路径（必填，支持 ~ 和 %ENV%）',
+      }
+    : {
+        view: 'Code Bookmarks',
+        toggle: 'Add/Remove Bookmark',
+        storage: 'Absolute path to the bookmark configuration directory (required; supports ~ and %ENV%).',
+      }
+  assert.equal(localizedValue(extension.packageJSON.contributes.views.codebookmark[0].name), expectedManifestText.view)
+  assert.equal(
+    localizedValue(extension.packageJSON.contributes.commands.find(command => command.command === 'codebookmark.toggleBookmark')?.title),
+    expectedManifestText.toggle,
+  )
+  const storageSetting = extension.packageJSON.contributes.configuration
+    .flatMap(group => Object.entries(group.properties))
+    .find(([key]) => key === 'codebookmark.globalStoragePath')?.[1]
+  assert.equal(localizedValue(storageSetting?.description), expectedManifestText.storage)
   const storageRoot = process.env.CODEBOOKMARK_TEST_STORAGE_ROOT
   assert.ok(storageRoot, 'Integration-test storage root must be explicit')
   const configurationBeforeActivation = vscode.workspace.getConfiguration('codebookmark')

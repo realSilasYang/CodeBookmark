@@ -18,37 +18,29 @@ function collectStrings(value, currentPath = [], output = []) {
 }
 
 const manifest = readJson('package.json')
-const marketplaceDefaultMessages = readJson('package.nls.json')
+const defaultChineseMessages = readJson('package.nls.json')
 const englishMessages = readJson('package.nls.en.json')
 const genericChineseMessages = readJson('package.nls.zh.json')
 const chineseMessages = readJson('package.nls.zh-cn.json')
 const traditionalLocaleMessages = readJson('package.nls.zh-tw.json')
 const englishKeys = Object.keys(englishMessages).sort()
-const {
-  ENGLISH_MANIFEST_LOCALES,
-  MARKETPLACE_DEFAULT_KEYS,
-} = require('./lib/manifest-localizations')
-assert.deepEqual(Object.keys(marketplaceDefaultMessages).sort(), englishKeys, 'Marketplace default and English NLS catalogs must have identical keys')
+const { ENGLISH_MANIFEST_LOCALES } = require('./lib/manifest-localizations')
+assert.deepEqual(Object.keys(defaultChineseMessages).sort(), englishKeys, 'Default Chinese and English NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(genericChineseMessages).sort(), englishKeys, 'Generic Chinese and English NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(chineseMessages).sort(), englishKeys, 'English and Chinese NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(traditionalLocaleMessages).sort(), englishKeys, 'Every zh locale catalog must have identical keys')
 assert.deepEqual(genericChineseMessages, chineseMessages, 'Generic zh localization must use the same default Chinese copy')
 assert.deepEqual(traditionalLocaleMessages, chineseMessages, 'All zh locales currently use the same default Chinese copy')
+assert.deepEqual(defaultChineseMessages, chineseMessages, 'The fallback manifest catalog must be complete Chinese')
 assert.ok(englishKeys.length > 100, 'Manifest localization must cover the complete contributed surface')
 for (const key of englishKeys) {
   assert.equal(typeof englishMessages[key], 'string')
   assert.equal(typeof chineseMessages[key], 'string')
   assert.doesNotMatch(englishMessages[key], cjk, `English NLS value contains Chinese text: ${key}`)
-  assert.equal(
-    marketplaceDefaultMessages[key],
-    MARKETPLACE_DEFAULT_KEYS.includes(key) ? chineseMessages[key] : englishMessages[key],
-    `Marketplace default has an unexpected value for ${key}`,
-  )
 }
 for (const locale of ENGLISH_MANIFEST_LOCALES.filter(locale => locale !== 'en')) {
-  const overrides = readJson(`package.nls.${locale}.json`)
-  assert.deepEqual(Object.keys(overrides).sort(), [...MARKETPLACE_DEFAULT_KEYS].sort(), `${locale} must override only Marketplace discovery metadata`)
-  for (const key of MARKETPLACE_DEFAULT_KEYS) assert.equal(overrides[key], englishMessages[key])
+  const localizedMessages = readJson(`package.nls.${locale}.json`)
+  assert.deepEqual(localizedMessages, englishMessages, `${locale} must provide a complete English manifest catalog`)
 }
 
 const placeholderKeys = collectStrings(manifest)
