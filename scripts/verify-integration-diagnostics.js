@@ -92,8 +92,33 @@ assert.deepEqual(findProjectDiagnosticsInLog(
   root,
   'exthost.log',
 ), [])
+const downloadedJsonExtensionStack = path.join(
+  root,
+  '.vscode-test',
+  'vscode-win32-x64-archive-1.130.0',
+  'resources',
+  'app',
+  'extensions',
+  'json-language-features',
+  'client',
+  'dist',
+  'node',
+  'jsonClientMain.js',
+)
+assert.deepEqual(findProjectDiagnosticsInLog(
+  '2026-07-23 13:00:00.000 [error] PendingMigrationError: navigator is now a global in nodejs\n'
+    + `  at initialize (${downloadedJsonExtensionStack}:37:13533)`,
+  root,
+  'exthost.log',
+), [])
 assert.equal(findProjectDiagnosticsInLog(
   '2026-07-23 13:00:00.000 [error] ProxyResolver#resolveProxy undefined Canceled: Canceled\n'
+    + `  at extension (${path.join(root, 'out', 'extension.js')}:10:2)`,
+  root,
+  'exthost.log',
+).length, 1)
+assert.equal(findProjectDiagnosticsInLog(
+  '2026-07-23 13:00:00.000 [error] PendingMigrationError: navigator is now a global in nodejs\n'
     + `  at extension (${path.join(root, 'out', 'extension.js')}:10:2)`,
   root,
   'exthost.log',

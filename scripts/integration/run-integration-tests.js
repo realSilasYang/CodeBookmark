@@ -65,11 +65,15 @@ function assertNoUnexpectedExtensionHostDiagnostics(stdout, stderr) {
 
 function isKnownExternalProjectLogDiagnostic(entry, normalizedRoot) {
   const normalizedEntry = entry.replaceAll('\\', '/').toLowerCase()
-  return /\[error\]\s+proxyresolver#resolveproxy undefined canceled: canceled\b/iu.test(entry)
-    && normalizedEntry.includes(`${normalizedRoot}/.vscode-test/`)
-    && normalizedEntry.includes('/resources/app/out/vs/workbench/api/node/extensionhostprocess.js')
+  const belongsToDownloadedHost = normalizedEntry.includes(`${normalizedRoot}/.vscode-test/`)
     && !normalizedEntry.includes(`${normalizedRoot}/out/extension.js`)
     && !normalizedEntry.includes('realsilasyang.codebookmark')
+  if (!belongsToDownloadedHost) return false
+  const canceledProxyResolution = /\[error\]\s+proxyresolver#resolveproxy undefined canceled: canceled\b/iu.test(entry)
+    && normalizedEntry.includes('/resources/app/out/vs/workbench/api/node/extensionhostprocess.js')
+  const builtInJsonNavigatorMigration = /\[error\]\s+pendingmigrationerror: navigator is now a global in nodejs\b/iu.test(entry)
+    && normalizedEntry.includes('/resources/app/extensions/json-language-features/')
+  return canceledProxyResolution || builtInJsonNavigatorMigration
 }
 
 function findProjectDiagnosticsInLog(logContent, root, logFile = '<log>') {
@@ -334,7 +338,6 @@ async function runLocale(
   await fs.mkdir(fixturePath, { recursive: true })
   await fs.mkdir(bookmarkStoragePath, { recursive: true })
   await fs.mkdir(path.join(userDataPath, 'User'), { recursive: true })
-  await fs.mkdir(extensionsPath, { recursive: true })
   // 内置 Git 扩展会为 askpass 创建仅向其沙箱 SID 授权的目录，测试进程随后
   // 无权删除整个隔离用户目录。测试不依赖 Git，预先关闭它可保持清理权限完整。
   await fs.writeFile(path.join(userDataPath, 'User', 'settings.json'), JSON.stringify({
@@ -342,6 +345,7 @@ async function runLocale(
   }, null, 2), 'utf8')
   const languagePacksFile = findInstalledLanguagePacksFile()
   if (downloadedVSCodeVersion && locale !== 'en') {
+    await fs.mkdir(extensionsPath, { recursive: true })
     console.log(`正在为远端 ${locale} 集成测试准备可复用的 VS Code 语言包。`)
     await prepareDownloadedLanguagePack(downloadedVSCodeVersion, extensionsPath, userDataPath)
     if (locale !== 'zh-cn') {
