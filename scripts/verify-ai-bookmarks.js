@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-ai-bookmarks`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-ai-bookmarks` 对应契约。
- * 核心边界：通过断言锁定“verify-ai-bookmarks”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查 AI 生成、优化命令及其菜单条件，保证配置、作用域和书签存在状态对应正确入口。
+ * 脚本直接调用编译后的书签协议、语言目录和请求策略，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -15,10 +12,9 @@ const {
   normalizeAIOptimizedBookmarks,
   resolveAIBookmarkLine,
 } = require('../out/util/AIBookmarkSchema')
-const {
-  DEFAULT_AI_GENERATION_PROMPT,
-  DEFAULT_AI_OPTIMIZATION_PROMPT,
-} = require('../out/util/constants/AIPrompts')
+const runtimeChineseMessages = require('../out/i18n/catalogs/zh-cn').messages
+const DEFAULT_AI_GENERATION_PROMPT = runtimeChineseMessages['ai.prompt.generation']
+const DEFAULT_AI_OPTIMIZATION_PROMPT = runtimeChineseMessages['ai.prompt.optimization']
 const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const {
@@ -173,7 +169,7 @@ assert.equal(settings['codebookmark.AI.timeoutS'].default, 60)
 assert.equal(settings['codebookmark.AI.timeoutS'].minimum, 1)
 assert.equal(settings['codebookmark.AI.timeoutS'].maximum, 600)
 assert.deepEqual(Object.keys(settings), [
-  'codebookmark.globalStoragePath',
+	'codebookmark.globalStoragePath',
   'codebookmark.defaultExpandLevel',
   'codebookmark.autoSpace',
   'codebookmark.inlineLabel',
@@ -182,8 +178,8 @@ assert.deepEqual(Object.keys(settings), [
   'codebookmark.AI.model',
   'codebookmark.AI.assignIcons',
   'codebookmark.AI.timeoutS',
-  'codebookmark.AI.prompt',
-  'codebookmark.AI.optimizePrompt',
+	'codebookmark.AI.prompt',
+	'codebookmark.AI.optimizePrompt',
 ])
 assert.deepEqual(Object.values(settings).map(setting => setting.order), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
@@ -673,9 +669,9 @@ assert.ok((aiWorkflowSource.match(/[Ww]orkflowGuard\.captureBookmarkInput\(/g) |
 assert.doesNotMatch(providerSource, /private assertAIBookmarkInputSnapshot|private assertStorageScope/)
 assert.match(providerSource, /return runGenerateBookmarksForFile\(editor, mode, this\.aiSingleFileWorkflowPort\(\)\)/)
 assert.match(providerSource, /return runOptimizeBookmarksForFile\(editor, this\.aiSingleFileWorkflowPort\(\)\)/)
-assert.doesNotMatch(providerSource, /AI 智能代码书签提取运行中|AI 书签优化运行中/)
-assert.match(singleFileRunnerSource, /AI 智能代码书签提取运行中/)
-assert.match(singleFileRunnerSource, /AI 书签优化运行中/)
+assert.doesNotMatch(providerSource, /providers\.AISingleFileWorkflowRunner\.aiIs(?:GeneratingCodeBookmarks|ImprovingBookmarks)/)
+assert.match(singleFileRunnerSource, /providers\.AISingleFileWorkflowRunner\.aiIsGeneratingCodeBookmarks/)
+assert.match(singleFileRunnerSource, /providers\.AISingleFileWorkflowRunner\.aiIsImprovingBookmarks/)
 assert.match(singleFileRunnerSource, /saveUndoState\('generateAIBookmarks'\)/)
 assert.match(singleFileRunnerSource, /saveUndoState\('optimizeAIBookmarks'\)/)
 assert.match(providerSource, /return this\.aiWorkflowController\.generateFolder\(mode\)/)
@@ -686,14 +682,14 @@ assert.match(workflowControllerSource, /const editor = vscode\.window\.activeTex
 assert.match(workflowControllerSource, /await this\.port\.refreshScope\(storageScope\)/)
 assert.match(workflowControllerSource, /folderWorkflowPort\(\): AIFolderWorkflowPort/)
 assert.equal((workflowControllerSource.match(/this\.port\.folderWorkflowPort\(\)/g) || []).length, 2)
-assert.doesNotMatch(providerSource, /AI 批量智能提取书签运行中|AI 正在扫描文件夹中的书签/)
-assert.match(folderRunnerSource, /AI 批量智能提取书签运行中/)
-assert.match(folderRunnerSource, /AI 正在扫描文件夹中的书签/)
+assert.doesNotMatch(providerSource, /providers\.AIFolderWorkflowRunner\.aiIs(?:GeneratingBookmarksForTheFolder|ScanningBookmarksInTheFolder)/)
+assert.match(folderRunnerSource, /providers\.AIFolderWorkflowRunner\.aiIsGeneratingBookmarksForTheFolder/)
+assert.match(folderRunnerSource, /providers\.AIFolderWorkflowRunner\.aiIsScanningBookmarksInTheFolder/)
 assert.match(folderRunnerSource, /saveUndoState\('generateAIBookmarks'\)/)
 assert.match(folderRunnerSource, /saveUndoState\('optimizeAIBookmarks'\)/)
 assert.match(providerSource, /return runOptimizeSelectedBookmarks\(/)
-assert.doesNotMatch(providerSource, /AI 正在优化 .*个书签/)
-assert.match(selectedRunnerSource, /AI 正在优化 .*个书签/)
+assert.doesNotMatch(providerSource, /providers\.AISelectedBookmarksWorkflowRunner\.aiIsImprovingBookmarksIn/)
+assert.match(selectedRunnerSource, /providers\.AISelectedBookmarksWorkflowRunner\.aiIsImprovingBookmarksIn/)
 assert.match(selectedRunnerSource, /saveUndoState\('optimizeAIBookmarks'\)/)
 assert.doesNotMatch(providerSource, /AIService|readAISourceSnapshot|assertAISourceSnapshot|resolveAIOptimizationChanges|applyAIOptimizationChanges/)
 assert.ok((aiRunnerSource.match(/saveBookmarks\(\[filePath\]\)/g) || []).length >= 3)
@@ -728,8 +724,8 @@ assert.match(folderScannerSource, /maxDepth: 64/)
 assert.match(folderScannerSource, /SOURCE_SCAN_EXCLUDED_DIRECTORIES/)
 assert.match(folderPresenceSource, /sourceGeneration === sourceGeneration/)
 assert.match(folderPresenceSource, /expiresAt > this\.now\(\)/)
-assert.match(workflowGuardSource, /书签已被修改，已停止应用过期结果/)
-assert.match(workflowGuardSource, /书签作用域已切换，已停止应用 AI 结果/)
+assert.match(workflowGuardSource, /providers\.AIWorkflowGuard\.bookmarksChangedWhileTheAiRequestWasRunningSo/)
+assert.match(workflowGuardSource, /providers\.AIWorkflowGuard\.theBookmarkScopeChangedSoTheAiResultWas/)
 assert.match(serviceSource, /confirmSourceSize/)
 assert.match(serviceSource, /resolveAIRequestTargets/)
 assert.match(serviceSource, /return \{ content, address: target\.url\.toString\(\) \}/)
@@ -754,4 +750,4 @@ assert.match(bookmarkCommandsSource, /aiGenerateOverwriteFolderDirect\.command,[
 assert.match(bookmarkCommandsSource, /aiOptimizeFolder\.command,[\s\S]*?withAIConfiguration/)
 assert.doesNotMatch(bookmarkCommandsSource, /aiUnavailable|ai\.unavailable/)
 assert.match(serviceSource, /start \+= MAX_AI_OPTIMIZATION_BATCH/)
-assert.match(httpTransportSource, /AI 请求总时长超过/)
+assert.match(httpTransportSource, /util\.AIHttpTransport\.theAiRequestExceededSecondsInTotal/)

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `BookmarkConfigurationImportScanner`。
- *
- * 实现要点：按受控规则扫描输入并生成结构化结果，同时限制范围、容量和误匹配。
- * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
- * 主要入口：`BookmarkConfigurationImportCandidate`、`collectBookmarkConfigurationImportCandidates`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 递归扫描用户选择的配置文件或目录，识别当前格式的脚本配置与工作区顺序候选。
+ * 候选阶段只读取和校验，不修改目标存储；重复项与无效文件会带原因返回给导入流程。
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -34,19 +30,13 @@ export async function collectBookmarkConfigurationImportCandidates(
 
 	const visit = async (currentPath: string, depth: number): Promise<void> => {
 		if (depth > MAX_IMPORT_CONFIGURATION_DEPTH) {
-			throw new Error(localize(
-				`书签配置目录层级超过 ${MAX_IMPORT_CONFIGURATION_DEPTH} 层，请缩小导入目录。`,
-				`The bookmark configuration folder is deeper than ${MAX_IMPORT_CONFIGURATION_DEPTH} levels. Choose a smaller import folder.`,
-			))
+			throw new Error(localize("repository.BookmarkConfigurationImportScanner.theBookmarkConfigurationFolderIsDeeperThanLevelsChoose", { MAX_IMPORT_CONFIGURATION_DEPTH }))
 		}
 		const entries = await fs.promises.readdir(currentPath, { withFileTypes: true })
 		entries.sort((left, right) => left.name.localeCompare(right.name))
 		scannedEntries += entries.length
 		if (scannedEntries > MAX_IMPORT_CONFIGURATION_ENTRIES) {
-			throw new Error(localize(
-				`书签配置目录项超过 ${MAX_IMPORT_CONFIGURATION_ENTRIES} 个，请缩小导入目录。`,
-				`The bookmark configuration folder contains more than ${MAX_IMPORT_CONFIGURATION_ENTRIES} entries. Choose a smaller import folder.`,
-			))
+			throw new Error(localize("repository.BookmarkConfigurationImportScanner.theBookmarkConfigurationFolderContainsMoreThanEntriesChoose", { MAX_IMPORT_CONFIGURATION_ENTRIES }))
 		}
 		for (const entry of entries) {
 			const entryPath = path.join(currentPath, entry.name)
@@ -79,4 +69,23 @@ export async function collectBookmarkConfigurationImportCandidates(
 	const unique = new Map<string, BookmarkConfigurationImportCandidate>()
 	for (const candidate of candidates) unique.set(absolutePathKey(candidate.targetAbsolutePath), candidate)
 	return [...unique.values()]
+}
+
+export async function findWorkspaceLayoutConfiguration(configFolderPath: string): Promise<string | undefined> {
+	const root = normalizedAbsolutePath(configFolderPath)
+	const matches: string[] = []
+	let scannedEntries = 0
+	const visit = async (folder: string, depth: number): Promise<void> => {
+		if (depth > MAX_IMPORT_CONFIGURATION_DEPTH || matches.length > 1) return
+		const entries = await fs.promises.readdir(folder, { withFileTypes: true })
+		scannedEntries += entries.length
+		if (scannedEntries > MAX_IMPORT_CONFIGURATION_ENTRIES) return
+		for (const entry of entries) {
+			const entryPath = path.join(folder, entry.name)
+			if (entry.isDirectory()) await visit(entryPath, depth + 1)
+			else if (entry.isFile() && entry.name === '_workspace_layout.json') matches.push(entryPath)
+		}
+	}
+	await visit(root, 0)
+	return matches.length === 1 ? matches[0] : undefined
 }

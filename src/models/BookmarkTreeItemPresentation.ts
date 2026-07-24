@@ -1,16 +1,14 @@
 /**
- * 模块说明：本文件负责书签领域模型与展示投影，具体对象为 `BookmarkTreeItemPresentation`。
- *
- * 实现要点：定义书签领域数据、父子关系和展示投影，并在对象内部维护不变量。
- * 核心边界：领域对象负责维持自身不变量；序列化字段、父子关系和展示状态不得被调用方绕过。
- * 主要入口：`refreshBookmarkTreeItem`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把书签领域状态投影成 VS Code TreeItem 的图标、标签、描述、提示和上下文值。
+ * 展示刷新不执行文件访问，也不改变书签层级，因此可在频繁的树重绘中安全调用。
  */
 import * as os from 'os'
 import * as path from 'path'
 import * as vscode from 'vscode'
 
+import { localize } from '../i18n/Localization'
 import { bookmarkIcon } from '../util/BookmarkIcon'
+import { bookmarkPathKey } from '../util/BookmarkPath'
 import { ContextBookmark } from '../util/ContextValue'
 import type { CodeMarkerMetadata } from '../util/CodeMarkerScanner'
 import { bookmarkLabelText } from './BookmarkLabel'
@@ -36,6 +34,7 @@ interface BookmarkTreeItemModel {
 	content?: string
 	level: number
 	isFile: boolean
+	parent?: BookmarkTreeItemModel
 }
 
 function tooltipUri(uri: vscode.Uri): string {
@@ -46,7 +45,19 @@ function tooltipUri(uri: vscode.Uri): string {
 	return uri.fsPath
 }
 
-function updateTooltip(item: BookmarkTreeItemModel): void {
+function crossFileSourcePath(item: BookmarkTreeItemModel): string | undefined {
+	if (item.isFile || !item.path) return undefined
+	let rootFile: BookmarkTreeItemModel | undefined
+	let ancestor = item.parent
+	while (ancestor) {
+		if (ancestor.isFile) rootFile = ancestor
+		ancestor = ancestor.parent
+	}
+	if (!rootFile) return item.path
+	return bookmarkPathKey(rootFile.path) === bookmarkPathKey(item.path) ? undefined : item.path
+}
+
+function updateTooltip(item: BookmarkTreeItemModel, sourcePath: string | undefined): void {
 	if (item.isFile) {
 		if (item.resourceUri) item.tooltip = tooltipUri(item.resourceUri)
 		return
@@ -56,6 +67,11 @@ function updateTooltip(item: BookmarkTreeItemModel): void {
 	tooltipContent.appendMarkdown('#### $(tag) ')
 	tooltipContent.appendText(bookmarkLabelText(item.label))
 	tooltipContent.appendMarkdown(` &nbsp;&nbsp; $(debug-line-by-line) ${item.start.line + 1}\n`)
+	if (sourcePath) {
+		tooltipContent.appendMarkdown(`$(file-code) **${localize("models.BookmarkTreeItemPresentation.source")}** `)
+		tooltipContent.appendText(sourcePath)
+		tooltipContent.appendMarkdown('\n')
+	}
 	if (item.subs.size > 0) tooltipContent.appendMarkdown(`$(type-hierarchy-sub) **${item.subs.size}**\n`)
 	tooltipContent.appendCodeblock(item.content ?? '', path.extname(item.path).split('.').pop())
 	item.tooltip = tooltipContent
@@ -67,6 +83,7 @@ export function refreshBookmarkTreeItem(
 ): string {
 	const labelText = bookmarkLabelText(item.label)
 	const level = item.level
+	const sourcePath = crossFileSourcePath(item)
 	const signature = [
 		labelText,
 		item.path,
@@ -83,6 +100,7 @@ export function refreshBookmarkTreeItem(
 		item.content ?? '',
 		level,
 		item.resourceUri?.fsPath ?? '',
+		sourcePath ?? '',
 	].join('\0')
 	if (signature === previousSignature) return signature
 
@@ -96,24 +114,33 @@ export function refreshBookmarkTreeItem(
 			item.contextValue = item.isPinned ? ContextBookmark.BookmarkPinned : ContextBookmark.Bookmark
 		}
 	}
-
-	if (!item.isFile) {
-		item.description = ''
-		item.resourceUri = undefined
-		if (item.subs.size === 0) item.collapsibleState = vscode.TreeItemCollapsibleState.None
-		else if (item.isPinned) item.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
-		else if (item.collapsibleState === vscode.TreeItemCollapsibleState.None) {
-			item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed
-		}
+	if (item.isFile) {
+		item.contextValue = item.isPinned
+			? item.icon ? ContextBookmark.FilePinnedCustom : ContextBookmark.FilePinned
+			: item.icon ? ContextBookmark.FileCustom : ContextBookmark.File
 	}
 
-	updateTooltip(item)
+	if (!item.isFile) {
+		item.description = sourcePath
+			? localize("models.BookmarkTreeItemPresentation.from", { fileName: path.basename(sourcePath) })
+			: ''
+		item.resourceUri = undefined
+	}
+	if (item.subs.size === 0) item.collapsibleState = vscode.TreeItemCollapsibleState.None
+	else if (item.isPinned) item.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+	else if (item.collapsibleState === vscode.TreeItemCollapsibleState.None) {
+		item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed
+	}
+
+	updateTooltip(item, sourcePath)
 	if (item.isBookmarkInvalid) {
 		item.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'))
 		return signature
 	}
-	if (item.contextValue === ContextBookmark.File) {
-		item.iconPath = new vscode.ThemeIcon('file')
+	if (item.isFile) {
+		if (item.icon) item.iconPath = bookmarkIcon.getCustomIcon(item.icon)
+		else if (item.isPinned) item.iconPath = new vscode.ThemeIcon('folder-opened', new vscode.ThemeColor('charts.green'))
+		else item.iconPath = new vscode.ThemeIcon('file')
 		return signature
 	}
 

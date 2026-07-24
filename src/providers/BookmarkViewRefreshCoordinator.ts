@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkViewRefreshCoordinator`。
- *
- * 实现要点：协调多个端口、状态与异步阶段，明确事件顺序、取消点和最终提交时机。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkViewRefreshPort`、`BookmarkViewRefreshCoordinator`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 串行协调视图刷新请求，选择增量更新或完整加载，并合并刷新期间的新请求。
+ * 每次刷新绑定独立会话和取消信号，防止慢磁盘结果跨越后来的编辑器切换。
  */
 import type * as vscode from 'vscode'
 

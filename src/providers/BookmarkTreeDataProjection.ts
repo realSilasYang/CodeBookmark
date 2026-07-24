@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkTreeDataProjection`。
- *
- * 实现要点：通过小型端口连接纯逻辑与 VS Code API，使状态变化顺序可独立验证。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkTreeDataProjectionPort`、`BookmarkTreeDataProjection`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把当前 BookmarkSet 投影为树视图根节点与子节点，并按活动排序模式生成稳定顺序。
+ * 投影过程不访问磁盘；展开状态和 TreeItem 外观由相邻的视图组件处理。
  */
 import { bookmarkPathKey } from '../util/BookmarkPath'
 
@@ -21,6 +17,7 @@ export interface BookmarkTreeDataProjectionPort<Item, ResourceUri> {
 	absoluteBookmarkPath(bookmarkPath: string): string
 	relativeBookmarkPath(absolutePath: string): string
 	isWorkspaceScope(): boolean
+	workspaceLayoutActive(): boolean
 	currentScopeFilePath(): string | undefined
 	workspaceOrder(): string[] | null
 	setWorkspaceOrder(order: string[]): void
@@ -42,10 +39,14 @@ export class BookmarkTreeDataProjection<Item extends object, ResourceUri> {
 		port: BookmarkTreeDataProjectionPort<Item, ResourceUri>,
 	): void {
 		this.fileNodesByPath.clear()
-		for (const item of items) {
-			const itemPath = port.itemPath(item)
-			if (port.isFile(item) && itemPath) this.fileNodesByPath.set(bookmarkPathKey(itemPath), item)
+		const visit = (values: readonly Item[]): void => {
+			for (const item of values) {
+				const itemPath = port.itemPath(item)
+				if (port.isFile(item) && itemPath) this.fileNodesByPath.set(bookmarkPathKey(itemPath), item)
+				visit(port.childrenOf(item))
+			}
 		}
+		visit(items)
 	}
 
 	hasFileNode(bookmarkPath: string): boolean {
@@ -84,6 +85,12 @@ export class BookmarkTreeDataProjection<Item extends object, ResourceUri> {
 			return currentElement ? port.sortItems([...port.childrenOf(currentElement)]) : []
 		}
 		if (!port.isWorkspaceScope()) return port.sortItems(this.standaloneRoots(port))
+		if (port.workspaceLayoutActive()) {
+			this.rebuildFileNodeCache(port.rootItems(), port)
+			const roots = [...port.rootItems()]
+			for (const item of roots) this.ensureResourceUri(item, port)
+			return port.sortItems(roots)
+		}
 
 		const pathsByKey = new Map<string, string>()
 		const fileNodesByPath = new Map<string, Item>()

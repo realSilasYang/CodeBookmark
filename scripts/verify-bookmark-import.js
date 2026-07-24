@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-import`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-import` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-import”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`main`、`worker`、`main`、`worker`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 核对可导入 JSON 的格式识别、旧格式拒绝、路径改写和工作区顺序合并。
+ * 为核对可导入 JSON 的格式识别、旧格式拒绝、路径改写和工作区顺序合并，脚本在临时目录中调用编译后的 `BookmarkRepository` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
@@ -118,6 +114,7 @@ const vscodeMock = {
 installModuleMocks({ vscode: vscodeMock })
 
 const { bookmarkRepository } = require('../out/repository/BookmarkRepository')
+const { workspaceLayoutPersistence } = require('../out/models/WorkspaceLayout')
 
 function sourceFingerprint(content) {
   return {
@@ -216,18 +213,49 @@ async function main() {
   fs.mkdirSync(path.join(exportedFolder, 'src', 'nested'), { recursive: true })
   const rootConfig = path.join(exportedFolder, 'src', 'main.ts.codebookmark.json')
   const nestedConfig = path.join(exportedFolder, 'src', 'nested', 'worker.js.codebookmark.json')
-	fs.writeFileSync(rootConfig, JSON.stringify(envelope(
-		'10000000-0000-9000-1000-000000000043',
-		path.join(sandbox, 'old-workspace', 'src', 'main.ts'),
-		'export const main = true\n',
-		'folder-main',
-	)))
+  const importedRootScriptId = sharedId
+  const importedWorkerScriptId = '10000000-0000-9000-1000-000000000044'
+  const importedRootBookmarkId = '20000000-0000-9000-1000-000000000051'
+  const importedChildBookmarkId = '20000000-0000-9000-1000-000000000052'
+  const importedWorkerBookmarkId = '20000000-0000-9000-1000-000000000053'
+  const oldRootSource = path.join(sandbox, 'old-workspace', 'src', 'main.ts')
+  const oldWorkerSource = path.join(sandbox, 'old-workspace', 'src', 'nested', 'worker.js')
+  const rootEnvelope = envelope(importedRootScriptId, oldRootSource, 'export const main = true\n', importedRootBookmarkId)
+  rootEnvelope.bookmarks[0].subs.push({
+    ...rootEnvelope.bookmarks[0],
+    id: importedChildBookmarkId,
+    label: 'Imported child bookmark',
+    subs: [],
+  })
+  fs.writeFileSync(rootConfig, JSON.stringify(rootEnvelope))
   fs.writeFileSync(nestedConfig, JSON.stringify(envelope(
-    '10000000-0000-9000-1000-000000000044',
-    path.join(sandbox, 'old-workspace', 'src', 'nested', 'worker.js'),
+    importedWorkerScriptId,
+    oldWorkerSource,
     'export const worker = true\n',
-    'folder-worker',
+    importedWorkerBookmarkId,
   )))
+  const importedRootFile = { kind: 'script', scriptId: importedRootScriptId }
+  const importedWorkerFile = { kind: 'script', scriptId: importedWorkerScriptId }
+  const importedRootBookmark = {
+    kind: 'bookmark', scriptId: importedRootScriptId, bookmarkId: importedRootBookmarkId,
+  }
+  const importedChildBookmark = {
+    kind: 'bookmark', scriptId: importedRootScriptId, bookmarkId: importedChildBookmarkId,
+  }
+  const importedWorkerBookmark = {
+    kind: 'bookmark', scriptId: importedWorkerScriptId, bookmarkId: importedWorkerBookmarkId,
+  }
+  fs.writeFileSync(path.join(exportedFolder, '_workspace_layout.json'), JSON.stringify(workspaceLayoutPersistence([
+    { node: importedRootFile, parent: null },
+    { node: importedRootBookmark, parent: importedRootFile },
+    { node: importedWorkerFile, parent: importedRootBookmark },
+    { node: importedChildBookmark, parent: importedWorkerFile },
+    { node: importedWorkerBookmark, parent: importedChildBookmark },
+  ], [importedWorkerScriptId], importedRootBookmark, 1, [
+    { node: importedRootFile, expanded: false },
+    { node: importedRootBookmark, expanded: true },
+    { node: importedWorkerFile, expanded: false },
+  ])))
   fs.writeFileSync(path.join(exportedFolder, 'README.json'), '{}')
 
 	const folderResult = await bookmarkRepository.importBookmarkConfigurationsFromFolder(exportedFolder, workspaceRoot)
@@ -237,7 +265,7 @@ async function main() {
 		skipped: 0,
 		failed: 0,
 		cancelled: false,
-		bookmarkSummary: { total: 2, levelCounts: [2] },
+		bookmarkSummary: { total: 3, levelCounts: [2, 1] },
 	})
   const storedEnvelopes = fs.readdirSync(scriptFolder)
     .filter(file => file.endsWith('.json'))
@@ -245,6 +273,15 @@ async function main() {
   const importedPaths = new Set(storedEnvelopes.map(value => path.resolve(value.script.path)))
   assert.equal(importedPaths.has(path.resolve(rootSource)), true)
   assert.equal(importedPaths.has(path.resolve(nestedSource)), true)
+  const importedRootEnvelope = storedEnvelopes.find(value => path.resolve(value.script.path) === path.resolve(rootSource))
+  const importedWorkerEnvelope = storedEnvelopes.find(value => path.resolve(value.script.path) === path.resolve(nestedSource))
+  assert.ok(importedRootEnvelope)
+  assert.ok(importedWorkerEnvelope)
+  assert.notEqual(importedRootEnvelope.script.id, importedRootScriptId)
+  assert.equal(importedWorkerEnvelope.script.id, importedWorkerScriptId)
+  assert.notEqual(importedRootEnvelope.bookmarks[0].id, importedRootBookmarkId)
+  assert.notEqual(importedRootEnvelope.bookmarks[0].subs[0].id, importedChildBookmarkId)
+  assert.equal(importedWorkerEnvelope.bookmarks[0].id, importedWorkerBookmarkId)
   const scopeFiles = []
   const walkScopes = directory => {
     if (!fs.existsSync(directory)) return
@@ -256,6 +293,49 @@ async function main() {
   }
   walkScopes(path.join(storageRoot, 'scopes'))
   assert.equal(scopeFiles.length, 1)
+  const layoutFiles = []
+  const walkLayouts = directory => {
+    if (!fs.existsSync(directory)) return
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = path.join(directory, entry.name)
+      if (entry.isDirectory()) walkLayouts(fullPath)
+      else if (entry.name === '_workspace_layout.json') layoutFiles.push(fullPath)
+    }
+  }
+  walkLayouts(path.join(storageRoot, 'scopes'))
+  assert.equal(layoutFiles.length, 1)
+  const importedLayout = JSON.parse(fs.readFileSync(layoutFiles[0], 'utf8'))
+  const rootFileReference = { kind: 'script', scriptId: importedRootEnvelope.script.id }
+  const rootBookmarkReference = {
+    kind: 'bookmark',
+    scriptId: importedRootEnvelope.script.id,
+    bookmarkId: importedRootEnvelope.bookmarks[0].id,
+  }
+  const childBookmarkReference = {
+    kind: 'bookmark',
+    scriptId: importedRootEnvelope.script.id,
+    bookmarkId: importedRootEnvelope.bookmarks[0].subs[0].id,
+  }
+  const workerFileReference = { kind: 'script', scriptId: importedWorkerEnvelope.script.id }
+  const workerBookmarkReference = {
+    kind: 'bookmark',
+    scriptId: importedWorkerEnvelope.script.id,
+    bookmarkId: importedWorkerEnvelope.bookmarks[0].id,
+  }
+  assert.deepEqual(importedLayout.entries, [
+    { node: rootFileReference, parent: null },
+    { node: rootBookmarkReference, parent: rootFileReference },
+    { node: workerFileReference, parent: rootBookmarkReference },
+    { node: childBookmarkReference, parent: workerFileReference },
+    { node: workerBookmarkReference, parent: childBookmarkReference },
+  ])
+  assert.deepEqual(importedLayout.hiddenFiles, [importedWorkerEnvelope.script.id])
+  assert.deepEqual(importedLayout.pinnedContainer, rootBookmarkReference)
+  assert.deepEqual(importedLayout.expansionStates, [
+    { node: rootFileReference, expanded: false },
+    { node: rootBookmarkReference, expanded: true },
+    { node: workerFileReference, expanded: false },
+  ])
 
   const rawScriptsFolder = path.join(sandbox, 'raw-scripts')
   fs.mkdirSync(rawScriptsFolder, { recursive: true })
@@ -268,7 +348,7 @@ async function main() {
   const rawFolderResult = await bookmarkRepository.importBookmarkConfigurationsFromFolder(rawScriptsFolder, workspaceRoot)
   assert.equal(rawFolderResult.imported, 1)
   assert.equal(rawFolderResult.total, 1)
-  assert.deepEqual(rawFolderResult.bookmarkSummary, { total: 2, levelCounts: [2] })
+	assert.deepEqual(rawFolderResult.bookmarkSummary, { total: 3, levelCounts: [2, 1] })
 
   const relocatedTarget = path.join(workspaceRoot, 'src', 'relocated.ts')
   const relocatedConfig = path.join(sandbox, 'relocated-import.json')

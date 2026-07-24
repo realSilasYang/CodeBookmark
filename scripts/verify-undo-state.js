@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-undo-state`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-undo-state` 对应契约。
- * 核心边界：通过断言锁定“verify-undo-state”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`verifySessionPersistence`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖撤销管理器的分支截断、作用域隔离、快照身份和中英文动作标题。
+ * 为核对撤销管理器的分支截断、作用域隔离、快照身份和中英文动作标题，脚本直接调用编译后的 `Bookmark`、`BookmarkSet`、`ContextValue`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { installModuleMocks } = require('./test-support/module-mocks')
@@ -53,6 +49,7 @@ const { Bookmark, CursorIndex } = require('../out/models/Bookmark')
 const { BookmarkSet } = require('../out/models/BookmarkSet')
 const { ContextBookmark } = require('../out/util/ContextValue')
 const { UndoManager } = require('../out/providers/UndoManager')
+const { captureWorkspaceLayout } = require('../out/models/BookmarkOwnership')
 const { isScriptId } = require('../out/util/ScriptIdentity')
 const localization = require('../out/i18n/Localization')
 
@@ -77,11 +74,11 @@ const manager = new UndoManager()
 manager.saveState(bookmarks)
 bookmarks.clear()
 
-assert.deepEqual(manager.undo(bookmarks), { action: 'modifyBookmarks', workspaceOrder: null })
+assert.deepEqual(manager.undo(bookmarks), { action: 'modifyBookmarks', workspaceOrder: null, workspaceLayout: null })
 assert.equal(bookmarks.size, 1)
 assert.equal(bookmarks.values[0].contextValue, ContextBookmark.File)
 assert.equal(bookmarks.values[0].subs.values[0].parent, bookmarks.values[0])
-assert.deepEqual(manager.redo(bookmarks), { action: 'modifyBookmarks', workspaceOrder: null })
+assert.deepEqual(manager.redo(bookmarks), { action: 'modifyBookmarks', workspaceOrder: null, workspaceLayout: null })
 assert.equal(bookmarks.size, 0)
 manager.clear()
 assert.equal(manager.canUndo(), false)
@@ -146,7 +143,7 @@ assert.equal(generatedRoot.collapsibleState, vscodeMock.TreeItemCollapsibleState
 assert.equal(Bookmark.fromJSON(generatedRoot.toJSON()).collapsibleState, vscodeMock.TreeItemCollapsibleState.Expanded)
 
 const otherFileBookmark = new Bookmark({ id: 'other-file', label: 'Other', path: 'src\\nested\\..\\other.ts' })
-assert.equal(pinnedTree.addNewBookmark(otherFileBookmark), undefined)
+assert.equal(pinnedTree.addNewBookmark(otherFileBookmark), pinnedContainer)
 const otherFileNode = pinnedTree.values.find(item => item.path === 'src/other.ts')
 assert.ok(otherFileNode)
 assert.equal(otherFileNode.isFile, true)
@@ -154,11 +151,12 @@ assert.equal(otherFileNode.id, `file_${otherFileNode.scriptId}`)
 assert.equal(isScriptId(otherFileNode.scriptId), true)
 assert.equal(otherFileNode.label, 'other.ts')
 assert.equal(otherFileNode.createdAt, otherFileBookmark.createdAt)
-assert.equal(otherFileNode.collapsibleState, vscodeMock.TreeItemCollapsibleState.Expanded)
-assert.deepEqual(otherFileNode.subs.values, [otherFileBookmark])
+assert.equal(otherFileNode.collapsibleState, vscodeMock.TreeItemCollapsibleState.None)
+assert.deepEqual(otherFileNode.subs.values, [])
 assert.equal(otherFileBookmark.path, 'src/other.ts')
-assert.equal(otherFileBookmark.parent, otherFileNode)
-assert.equal(pinnedContainer.subs.has(otherFileBookmark), false)
+assert.equal(otherFileBookmark.parent, pinnedContainer)
+assert.equal(otherFileBookmark.ownerScriptId, otherFileNode.scriptId)
+assert.equal(pinnedContainer.subs.has(otherFileBookmark), true)
 
 const first = new Bookmark({ id: 'move-first', label: 'First', path: 'src/move.ts' })
 const second = new Bookmark({ id: 'move-second', label: 'Second', path: 'src/move.ts' })
@@ -186,6 +184,7 @@ scopedManager.setActiveScope(scopeA)
 scopedManager.saveState(treeA, 'deleteBookmarks', scopeA)
 treeA.clear()
 assert.equal(scopedManager.undoAction(scopeA), 'deleteBookmarks')
+assert.deepEqual(scopedManager.historyScopes(), [scopeA])
 
 scopedManager.setActiveScope(scopeB)
 assert.equal(scopedManager.canUndo(), false)
@@ -194,23 +193,64 @@ const treeB = new BookmarkSet([pinnedFile])
 scopedManager.saveState(treeB, 'changeBookmarkIcons', scopeB)
 treeB.clear()
 assert.equal(scopedManager.undoAction(scopeB), 'changeBookmarkIcons')
+assert.deepEqual(new Set(scopedManager.historyScopes()), new Set([scopeA, scopeB]))
 
 scopedManager.setActiveScope(scopeA)
-assert.deepEqual(scopedManager.undo(treeA, scopeA), { action: 'deleteBookmarks', workspaceOrder: null })
+assert.deepEqual(scopedManager.undo(treeA, scopeA), { action: 'deleteBookmarks', workspaceOrder: null, workspaceLayout: null })
 assert.equal(treeA.size, 1)
 assert.equal(scopedManager.canUndo(scopeB), true)
 scopedManager.setActiveScope(scopeB)
-assert.deepEqual(scopedManager.undo(treeB, scopeB), { action: 'changeBookmarkIcons', workspaceOrder: null })
+assert.deepEqual(scopedManager.undo(treeB, scopeB), { action: 'changeBookmarkIcons', workspaceOrder: null, workspaceLayout: null })
 assert.equal(treeB.size, 1)
+assert.deepEqual(new Set(scopedManager.historyScopes()), new Set([scopeA, scopeB]), 'redo-only scopes still retain folders')
 
 const orderManager = new UndoManager()
 const orderScope = 'workspace:/example'
 orderManager.setActiveScope(orderScope)
 orderManager.saveState(moveTree, 'reorderFiles', orderScope, ['src/a.ts', 'src/b.ts'])
 const undoOrder = orderManager.undo(moveTree, orderScope, ['src/b.ts', 'src/a.ts'])
-assert.deepEqual(undoOrder, { action: 'reorderFiles', workspaceOrder: ['src/a.ts', 'src/b.ts'] })
+assert.deepEqual(undoOrder, { action: 'reorderFiles', workspaceOrder: ['src/a.ts', 'src/b.ts'], workspaceLayout: null })
 const redoOrder = orderManager.redo(moveTree, orderScope, ['src/a.ts', 'src/b.ts'])
-assert.deepEqual(redoOrder, { action: 'reorderFiles', workspaceOrder: ['src/b.ts', 'src/a.ts'] })
+assert.deepEqual(redoOrder, { action: 'reorderFiles', workspaceOrder: ['src/b.ts', 'src/a.ts'], workspaceLayout: null })
+
+const layoutScriptA = '10000000-0000-9000-1000-000000000081'
+const layoutScriptB = '10000000-0000-9000-1000-000000000082'
+const layoutMarkA = new Bookmark({
+  id: '20000000-0000-9000-1000-000000000081', path: 'src/layout-a.ts', label: 'Layout A', ownerScriptId: layoutScriptA,
+})
+const layoutMarkB = new Bookmark({
+  id: '20000000-0000-9000-1000-000000000082', path: 'src/layout-b.ts', label: 'Layout B', ownerScriptId: layoutScriptB,
+})
+const layoutFileA = new Bookmark({
+  id: `file_${layoutScriptA}`, path: 'src/layout-a.ts', contextValue: ContextBookmark.File,
+  scriptId: layoutScriptA, subs: new BookmarkSet([layoutMarkA]),
+})
+const layoutFileB = new Bookmark({
+  id: `file_${layoutScriptB}`, path: 'src/layout-b.ts', contextValue: ContextBookmark.File,
+  scriptId: layoutScriptB, subs: new BookmarkSet([layoutMarkB]),
+})
+layoutMarkA.parent = layoutFileA
+layoutMarkB.parent = layoutFileB
+const layoutTree = new BookmarkSet([layoutFileA, layoutFileB])
+const originalLayout = captureWorkspaceLayout(layoutTree)
+const layoutManager = new UndoManager()
+const layoutScope = 'workspace:/layout-round-trip'
+layoutManager.saveState(layoutTree, 'moveBookmarks', layoutScope, null, originalLayout)
+assert.equal(layoutTree.moveGroupToNode(new BookmarkSet([layoutMarkB]), layoutFileA), true)
+const movedLayout = captureWorkspaceLayout(layoutTree)
+assert.deepEqual(
+  movedLayout.entries.find(entry => entry.node.kind === 'bookmark' && entry.node.bookmarkId === layoutMarkB.id).parent,
+  { kind: 'script', scriptId: layoutScriptA },
+)
+const undoLayout = layoutManager.undo(layoutTree, layoutScope, null, movedLayout)
+assert.equal(undoLayout.action, 'moveBookmarks')
+assert.deepEqual(undoLayout.workspaceLayout.entries, originalLayout.entries)
+assert.equal(layoutTree.values[1].subs.values[0].id, layoutMarkB.id)
+assert.equal(layoutTree.values[1].subs.values[0].ownerScriptId, layoutScriptB)
+const redoLayout = layoutManager.redo(layoutTree, layoutScope, null, undoLayout.workspaceLayout)
+assert.equal(redoLayout.action, 'moveBookmarks')
+assert.deepEqual(redoLayout.workspaceLayout.entries, movedLayout.entries)
+assert.equal(layoutTree.values[0].subs.values.some(item => item.id === layoutMarkB.id), true)
 
 const oldAbsolutePath = path.resolve('renamed-before.ts')
 const newAbsolutePath = path.resolve('renamed-after.ts')

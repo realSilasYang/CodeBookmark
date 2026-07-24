@@ -2,6 +2,33 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.1.0 - 2026-07-24
+
+### ✨ Added
+
+- **Cross-file bookmark layouts:** File nodes and ordinary bookmarks can now be reordered, nested across files, and used as bookmark containers within a workspace. File nodes also support renaming, custom icons, restoring the default icon, and deletion. Cross-file relationships, hidden state, containers, and expansion state are stored only in the workspace `_workspace_layout.json`; each script's bookmark content remains in its own independent configuration file.
+- **Multilingual interface:** The extension now fully supports Simplified Chinese, Hong Kong Traditional Chinese, Taiwan Traditional Chinese, English, Japanese, Vietnamese, Korean, Spanish, French, Portuguese, Russian, German, and Italian, following the VS Code display language. `zh-Hans` and `zh-Hant` provide Simplified and Traditional Chinese fallbacks, while other unsupported non-Chinese locales fall back to English.
+- **Multilingual Marketplace discovery:** The Marketplace description now uses Chinese-first multilingual content, and 30 curated keywords cover the core “code bookmark” search terms across every supported language while installed extensions retain complete native manifests.
+
+---
+
+### 🚀 Improved
+
+- **Cross-file navigation:** Newly generated AI bookmarks are expanded by default, and bookmarks nested beneath another file node display their source context. Navigation switches to an already open target file when possible; otherwise it opens a non-preview tab instead of replacing the current tab.
+- **Configuration management:** The management view now describes script configurations, workspace layouts, legacy order records, storage-transfer journals, conflict copies, and temporary artifacts. Script, workspace, and record fields expose their complete details on hover, and recognized files can be removed through a controlled allowlist.
+- **Localization architecture:** Runtime text and extension manifests now use stable-key catalogs. Command IDs, menu conditions, Webview messages, setting keys, and persistence fields remain independent of translations, while validation covers catalog completeness, placeholders, technical tokens, language identity, and user-visible literals for all 13 languages.
+- **Extension Host test isolation:** Integration tests reuse the locally installed VS Code executable while giving every locale an isolated user-data directory and empty extension directory, disabling unrelated Git behavior, and retrying cleanup after all hosts exit so user extensions, automatic updates, and Windows permission artifacts cannot distort the result.
+- **Developer documentation and comments:** The developer guide now reflects the current dependency direction, and maintained script comments have been rewritten as natural Chinese explanations of their actual responsibilities, boundaries, and maintenance constraints.
+
+---
+
+### 🐛 Fixed
+
+- **Workspace-layout classification:** Fixed current `_workspace_layout.json` files being misclassified as historical metadata, the configuration manager remaining indefinitely in its loading state, and confusion between current layouts and legacy order records.
+- **Deletion and persistence semantics:** Deleting a file node never deletes a source file. After confirmation, ordinary bookmarks in the visible subtree are removed from their owning per-script configurations rather than merely disappearing from the layout. Cross-file dragging, undo, redo, import, and workspace relocation preserve node ownership and per-script storage boundaries.
+- **Scope-folder cleanup:** When bookmark configurations and workspace records are gone, an empty scope folder is removed automatically once undo or redo history no longer protects it, preventing meaningless empty directories under `scopes`.
+- **Batch-rename artifacts:** Confirmed batch renames are applied directly instead of retaining unnecessary label drafts indefinitely, and existing temporary artifacts can be recognized and cleaned from the configuration manager.
+
 ## 🎉 Version 3.0.2 - 2026-07-23
 
 ### 🚀 Improvements

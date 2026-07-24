@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-release-readiness`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-release-readiness` 对应契约。
- * 核心边界：通过断言锁定“verify-release-readiness”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 综合核对版本一致性、发布脚本、文档、OIDC 变量、工作流顺序和 Marketplace 身份。
+ * 脚本读取仓库真实文件，围绕“综合核对版本一致性、发布脚本、文档、OIDC 变量、工作流顺序和 Marketplace 身份”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -31,15 +28,61 @@ assert.equal(manifest.bugs?.url, 'https://github.com/realSilasYang/CodeBookmark/
 assert.equal(manifest.icon, 'resources/bookmark_logo.png')
 assert.deepEqual(manifest.galleryBanner, { color: '#252526', theme: 'dark' })
 assert.equal(manifest.pricing, 'Free')
-assert.ok(manifest.keywords.length <= 30)
+const expectedMarketplaceKeywords = [
+  'bookmark',
+  'code bookmark',
+  'code navigation',
+  'sticky bookmark',
+  'bookmark manager',
+  'bookmark icons',
+  'ai bookmarks',
+  '书签',
+  '代码书签',
+  '标签',
+  '代码标签',
+  '代码导航',
+  '代碼書籤',
+  '程式碼書籤',
+  'ブックマーク',
+  'コードブックマーク',
+  '북마크',
+  '코드 북마크',
+  'dấu trang',
+  'dấu trang mã nguồn',
+  'marcador',
+  'marcadores de código',
+  'signet',
+  'signets de code',
+  'закладка',
+  'закладки кода',
+  'lesezeichen',
+  'code-lesezeichen',
+  'segnalibro',
+  'segnalibri codice',
+]
+assert.deepEqual(manifest.keywords, expectedMarketplaceKeywords)
 assert.ok(manifest.keywords.every(keyword => typeof keyword === 'string' && keyword === keyword.trim() && keyword.length > 0))
 assert.equal(
   new Set(manifest.keywords.map(keyword => keyword.toLocaleLowerCase())).size,
   manifest.keywords.length,
   'Marketplace keywords must be unique'
 )
-for (const keyword of ['bookmark', 'bookmarks', 'code bookmark', '书签', '代码书签', '标签', '代码标签']) {
-  assert.ok(manifest.keywords.includes(keyword), `Marketplace keyword '${keyword}' is required for discoverability`)
+assert.ok([...manifest.description].length <= 500, 'Marketplace description must remain concise')
+for (const discoveryText of [
+  '为代码智能导航而生',
+  'sticky tracking',
+  '代碼書籤',
+  '程式碼書籤',
+  'コードブックマーク',
+  '코드 북마크',
+  'Dấu trang mã nguồn',
+  'Marcadores de código',
+  'Signets de code',
+  'Закладки кода',
+  'Code-Lesezeichen',
+  'Segnalibri per codice',
+]) {
+  assert.ok(manifest.description.includes(discoveryText), `Marketplace description is missing '${discoveryText}'`)
 }
 assert.deepEqual(manifest.dependencies, {})
 assert.equal(lockfile.version, manifest.version)
@@ -217,7 +260,7 @@ assert.doesNotMatch(changelog, /^### ⚠(?!️)/m)
 assert.doesNotMatch(englishChangelog, /^### ⚠(?!️)/m)
 assert.match(license, /Copyright \(c\) 2026 阳熙来/)
 assert.match(readme, /\[发布指南\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.md\)/)
-assert.match(englishReadme, /\[English release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.en\.md\)/)
+assert.match(englishReadme, /\[release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.en\.md\)/i)
 assert.match(notices, /`fxemoji`[^\n]+CC-BY-4\.0/)
 for (const [documentName, content] of [['README.md', readme], ['docs/README.en.md', englishReadme], ['CHANGELOG.md', changelog], ['docs/CHANGELOG.en.md', englishChangelog]]) {
   const markdownImages = [...content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)]

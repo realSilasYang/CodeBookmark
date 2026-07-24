@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkStoragePathWorkflowRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkStoragePathWorkflowPort`、`BookmarkStoragePathWorkflowRunner`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 处理书签存储目录的选择、迁移、恢复默认值与当前根目录激活。
+ * 迁移前后协调保存、监听器和视图重载，确保旧目录数据转移完成后再切换配置。
  */
 import * as vscode from 'vscode'
 import type { Bookmark } from '../models/Bookmark'
@@ -80,10 +76,15 @@ export class BookmarkStoragePathWorkflowRunner {
 			await port.reloadActiveTab(true)
 			const summary = summarizeBookmarkTrees(port.bookmarks())
 			const formattedSummary = formatBookmarkLevelSummary(summary)
-			void vscode.window.showInformationMessage(localize(
-				`书签存储目录转移完成：复制 ${result.copiedFiles} 个文件，合并 ${result.mergedFiles} 个文件${result.conflictFiles > 0 ? `，保留 ${result.conflictFiles} 个冲突副本` : ''}；当前结果：${formattedSummary}。原目录中的书签配置已删除。`,
-				`Bookmark storage transfer completed: copied ${result.copiedFiles} files, merged ${result.mergedFiles} files${result.conflictFiles > 0 ? `, and retained ${result.conflictFiles} conflict copies` : ''}. Current result: ${formattedSummary}. Bookmark configuration was removed from the original directory.`,
-			))
+			const conflictSummary = result.conflictFiles > 0
+				? localize('providers.BookmarkStoragePathWorkflowRunner.retainedConflictCopies', { count: result.conflictFiles })
+				: ''
+			void vscode.window.showInformationMessage(localize("providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferCompletedCopiedFilesMergedFilesCurrent", {
+				copiedFiles: result.copiedFiles,
+				mergedFiles: result.mergedFiles,
+				conflictSummary,
+				formattedSummary,
+			}))
 		} catch (error) {
 			port.activateRoot(transferCompleted ? targetRoot : sourceRoot)
 			port.cancelStorageTransition()
@@ -91,14 +92,8 @@ export class BookmarkStoragePathWorkflowRunner {
 			await port.flushPendingSaves()
 			await port.setupConfigWatcher()
 			const message = transferCompleted
-				? localize(
-					`书签存储目录已转移且原目录已清理，但完成切换时发生错误，已继续使用新目录：${errorMessage(error)}`,
-					`Bookmark storage was transferred and the original directory was cleaned, but finalizing the switch failed. The new directory remains active: ${errorMessage(error)}`,
-				)
-				: localize(
-					`书签存储目录转移失败，仍继续使用来源目录：${errorMessage(error)}`,
-					`Bookmark storage transfer failed. The original directory remains active: ${errorMessage(error)}`,
-				)
+				? localize("providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas", { errorMessage: errorMessage(error) })
+				: localize("providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive", { errorMessage: errorMessage(error) })
 			void vscode.window.showErrorMessage(message)
 		}
 	}

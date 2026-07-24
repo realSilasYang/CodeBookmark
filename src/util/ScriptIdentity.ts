@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `ScriptIdentity`。
- *
- * 实现要点：生成、解析和比较稳定身份，使路径或设备变化不会破坏对象绑定。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`SourceFingerprint`、`createScriptId`、`createBookmarkId`、`createOperationId`、`isScriptId`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 生成脚本、书签和操作的稳定随机身份，并计算用于跨路径恢复的源文件指纹。
+ * 指纹组合内容与可选文件证据，但脚本身份本身不依赖设备路径或文件大小永久不变。
  */
 import * as crypto from 'crypto'
 import * as fs from 'fs'

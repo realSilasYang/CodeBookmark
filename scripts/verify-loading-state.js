@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-loading-state`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-loading-state` 对应契约。
- * 核心边界：通过断言锁定“verify-loading-state”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查扩展激活与视图刷新期间加载上下文键的生命周期，过期 finally 不能关闭新请求状态。
+ * 脚本读取仓库真实文件，围绕“检查扩展激活与视图刷新期间加载上下文键的生命周期”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -64,7 +61,7 @@ assert.match(watcherLifecycle, /async replace\(/)
 assert.match(watcherCoordinator, /closeWatchers\(\): void/)
 
 const refreshStart = provider.indexOf('public async refresh(')
-const refreshEnd = provider.indexOf('\n\t// 处理树节点行内操作按钮触发的重命名命令。', refreshStart)
+const refreshEnd = provider.indexOf('\n\tasync onRenameBookmark(', refreshStart)
 const refreshBody = provider.slice(refreshStart, refreshEnd)
 assert.ok(refreshStart >= 0 && refreshEnd > refreshStart)
 assert.doesNotMatch(refreshBody, /setContextValue\(Commands\.varBookmarkLoaded, false\)/)

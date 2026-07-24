@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责VS Code 事件订阅与生命周期清理，具体对象为 `fileEditorSubscriber`。
- *
- * 实现要点：订阅编辑器与文件系统事件，把事件转换为可取消的提供器操作并统一登记释放。
- * 核心边界：每个监听器都必须随扩展上下文释放，事件回调不得阻塞 Extension Host。
- * 主要入口：`fileEditorSubscriber`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 登记编辑器、文档和文件系统事件，把切换、编辑、保存、创建、删除与重命名传给提供器。
+ * 非 file 编辑器不会改变当前书签作用域；所有订阅都加入扩展上下文以便停用时统一释放。
  */
 import * as vscode from 'vscode'
 import * as path from 'path'
@@ -43,7 +39,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 		sourceAppearanceTimer = setTimeout(() => {
 			sourceAppearanceTimer = undefined
 			void reconcileSourceAppearances().catch(error =>
-				logger.error(localize(`源码出现后的批量重新绑定失败：${error}`, `Source file appearance batch rebind failed: ${error}`)))
+				logger.error(localize("subscriptions.fileEditorSubscriber.sourceFileAppearanceBatchRebindFailed", { error })))
 		}, 150)
 	}
 	const disposeSourceFileWatchers = (): void => {
@@ -70,7 +66,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 					watcher,
 				)
 			} catch (error) {
-				logger.error(localize(`无法监听工作区源码文件：${error}`, `Unable to watch workspace source files: ${error}`))
+				logger.error(localize("subscriptions.fileEditorSubscriber.unableToWatchWorkspaceSourceFiles", { error }))
 			}
 		}
 	}
@@ -83,12 +79,10 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 	const focusEditor = vscode.window.onDidChangeActiveTextEditor(editor => {
 		if (editor) {
 			const scheme = editor.document.uri.scheme;
-			// 非文件编辑器不能切换或覆盖当前工作区的书签作用域。
+			// 设置页、欢迎页和虚拟文档没有可绑定的磁盘脚本。遇到它们时保留工作区作用域，
+			// 不能把一次非文件编辑器切换误解成“离开当前书签目录”。
 			if (scheme !== 'file') return
-			void bookmarkProvider.reloadActiveTab().catch(error => logger.error(localize(
-				`切换文件后加载书签失败: ${error}`,
-				`Failed to load bookmarks after switching files: ${error}`,
-			)))
+			void bookmarkProvider.reloadActiveTab().catch(error => logger.error(localize("subscriptions.fileEditorSubscriber.failedToLoadBookmarksAfterSwitchingFiles", { error })))
 		}
 	})
 
@@ -97,10 +91,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 			scheduleSourceAppearance(document.uri.fsPath)
 		}
 		void bookmarkProvider.syncCodeMarkersInDocument(document)
-			.catch(error => logger.error(localize(
-				`打开脚本后同步 TODO/FIXME/BUG 失败（${document.uri.fsPath}）: ${error}`,
-				`Failed to synchronize TODO/FIXME/BUG bookmarks after opening ${document.uri.fsPath}: ${error}`,
-			)))
+			.catch(error => logger.error(localize("subscriptions.fileEditorSubscriber.failedToSynchronizeTodoFixmeBugBookmarksAfterOpening", { fsPath: document.uri.fsPath, error })))
 	})
 
 	const createFiles = vscode.workspace.onDidCreateFiles(event => {
@@ -119,25 +110,16 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 				try {
 					await bookmarkRepository.handleFileRename(file.oldUri.fsPath, file.newUri.fsPath)
 				} catch (error) {
-					logger.error(localize(
-						`转移重命名文件的书签配置失败（${file.oldUri.fsPath}）: ${error}`,
-						`Failed to transfer bookmark configuration for renamed file ${file.oldUri.fsPath}: ${error}`,
-					))
+					logger.error(localize("subscriptions.fileEditorSubscriber.failedToTransferBookmarkConfigurationForRenamedFile", { fsPath: file.oldUri.fsPath, error }))
 				}
 				try {
 					await bookmarkProvider.onRenameDirectory(file.oldUri.fsPath, file.newUri.fsPath)
 				} catch (error) {
-					logger.error(localize(
-						`更新重命名文件的内存书签失败（${file.oldUri.fsPath}）: ${error}`,
-						`Failed to update in-memory bookmarks for renamed file ${file.oldUri.fsPath}: ${error}`,
-					))
+					logger.error(localize("subscriptions.fileEditorSubscriber.failedToUpdateInMemoryBookmarksForRenamedFile", { fsPath: file.oldUri.fsPath, error }))
 				}
 			}
 			bookmarkProvider.onSourceFilesChanged()
-		})().catch(error => logger.error(localize(
-			`处理文件重命名事件失败: ${error}`,
-			`Failed to process file rename event: ${error}`,
-		)))
+		})().catch(error => logger.error(localize("subscriptions.fileEditorSubscriber.failedToProcessFileRenameEvent", { error })))
 	})
 
 	const deleteFiles = vscode.workspace.onDidDeleteFiles(event => {
@@ -146,25 +128,16 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 				try {
 					await bookmarkRepository.handleFileDelete(file.fsPath)
 				} catch (error) {
-					logger.error(localize(
-						`删除文件的书签配置失败（${file.fsPath}）: ${error}`,
-						`Failed to remove bookmark configuration for deleted file ${file.fsPath}: ${error}`,
-					))
+					logger.error(localize("subscriptions.fileEditorSubscriber.failedToRemoveBookmarkConfigurationForDeletedFile", { fsPath: file.fsPath, error }))
 				}
 				try {
 					bookmarkProvider.onDeleteDirectory(file.fsPath)
 				} catch (error) {
-					logger.error(localize(
-						`更新已删除文件的内存书签失败（${file.fsPath}）: ${error}`,
-						`Failed to update in-memory bookmarks for deleted file ${file.fsPath}: ${error}`,
-					))
+					logger.error(localize("subscriptions.fileEditorSubscriber.failedToUpdateInMemoryBookmarksForDeletedFile", { fsPath: file.fsPath, error }))
 				}
 			}
 			bookmarkProvider.onSourceFilesChanged()
-		})().catch(error => logger.error(localize(
-			`处理文件删除事件失败: ${error}`,
-			`Failed to process file deletion event: ${error}`,
-		)))
+		})().catch(error => logger.error(localize("subscriptions.fileEditorSubscriber.failedToProcessFileDeletionEvent", { error })))
 	})
 
 	const configurationChanges = vscode.workspace.onDidChangeConfiguration(event => {
@@ -173,10 +146,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 			bookmarkProvider.refreshExpandCollapseContext()
 		}
 		if (event.affectsConfiguration('codebookmark.globalStoragePath')) {
-			void bookmarkProvider.onStoragePathChanged().catch(error => logger.error(localize(
-				`切换书签存储路径失败: ${error}`,
-				`Failed to switch the bookmark storage path: ${error}`,
-			)))
+			void bookmarkProvider.onStoragePathChanged().catch(error => logger.error(localize("subscriptions.fileEditorSubscriber.failedToSwitchTheBookmarkStoragePath", { error })))
 		} else if (event.affectsConfiguration('codebookmark.inlineLabel')) {
 			bookmarkProvider.onDisplayConfigurationChanged()
 		}
@@ -184,10 +154,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 
 	const workspaceFolderChanges = vscode.workspace.onDidChangeWorkspaceFolders(() => {
 		setupSourceFileWatchers()
-		void bookmarkProvider.onWorkspaceFoldersChanged().catch(error => logger.error(localize(
-			`工作区文件夹变更后加载书签失败: ${error}`,
-			`Failed to load bookmarks after workspace folders changed: ${error}`,
-		)))
+		void bookmarkProvider.onWorkspaceFoldersChanged().catch(error => logger.error(localize("subscriptions.fileEditorSubscriber.failedToLoadBookmarksAfterWorkspaceFoldersChanged", { error })))
 	})
 
 	context.subscriptions.push(

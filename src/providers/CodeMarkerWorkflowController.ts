@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `CodeMarkerWorkflowController`。
- *
- * 实现要点：把上层意图编排为多个纯工作流，并在单一边界适配 VS Code 与持久化依赖。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`CodeMarkerWorkflowController`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 装配自动标记读取、扫描、对账与生命周期模块，对外提供文档和工作区同步入口。
+ * 控制器只协调依赖与结果提示，不重新实现注释语法或书签持久化规则。
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -12,6 +8,7 @@ import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
 import type { Bookmark } from '../models/Bookmark'
 import type { BookmarkSet } from '../models/BookmarkSet'
+import { allBookmarks } from '../models/BookmarkOwnership'
 import { fileUtils } from '../util/FileUtils'
 import { LanguageCommentProfileRegistry } from '../util/LanguageCommentProfiles'
 import { logger } from '../util/Logger'
@@ -152,18 +149,9 @@ export class CodeMarkerWorkflowController {
 		relativeBookmarkPath: absolutePath => fileUtils.absoluteToRelative(absolutePath),
 		bookmarks: () => this.port.bookmarks(),
 		profileFor: (languageId, filePath) => this.profiles.profileFor(languageId, filePath),
-		warnFileTruncated: (filePath, limit) => logger.showWarningMessage(localize(
-			`脚本 ${path.basename(filePath)} 中的 TODO/FIXME/BUG 超过 ${limit} 个，仅同步前 ${limit} 个以避免书签配置异常膨胀。`,
-			`${path.basename(filePath)} contains more than ${limit} TODO/FIXME/BUG markers. Only the first ${limit} were synchronized to prevent excessive bookmark configuration growth.`,
-		)),
-		warnFileCapacityLimited: filePath => logger.showWarningMessage(localize(
-			`脚本 ${path.basename(filePath)} 的手动书签与自动标记已达到 10000 个节点上限；为保证配置可读取，未继续生成其余 TODO/FIXME/BUG 书签。`,
-			`Manual bookmarks and automatic markers in ${path.basename(filePath)} have reached the 10,000-node limit. Remaining TODO/FIXME/BUG bookmarks were not generated so the configuration stays readable.`,
-		)),
-		warnWorkspaceDiscoveryTruncated: (_scope, maxFiles) => logger.showWarningMessage(localize(
-			`当前工作区脚本超过 ${maxFiles} 个；后台仅扫描前 ${maxFiles} 个，其他脚本会在打开或编辑时自动同步 TODO/FIXME/BUG。`,
-			`The current workspace contains more than ${maxFiles} scripts. The background scan covers the first ${maxFiles}; TODO/FIXME/BUG markers in other scripts will synchronize when those files are opened or edited.`,
-		)),
+		warnFileTruncated: (filePath, limit) => logger.showWarningMessage(localize("providers.CodeMarkerWorkflowController.containsMoreThanTodoFixmeBugMarkersOnlyThe", { fileName: path.basename(filePath), limit })),
+		warnFileCapacityLimited: filePath => logger.showWarningMessage(localize("providers.CodeMarkerWorkflowController.manualBookmarksAndAutomaticMarkersInHaveReachedThe", { fileName: path.basename(filePath) })),
+		warnWorkspaceDiscoveryTruncated: (_scope, maxFiles) => logger.showWarningMessage(localize("providers.CodeMarkerWorkflowController.theCurrentWorkspaceContainsMoreThanScriptsTheBackground", { maxFiles })),
 		invalidatePathIndex: () => this.port.invalidatePathIndex(),
 		saveBookmarks: absolutePaths => this.port.saveBookmarks(absolutePaths),
 		refreshDecorations: () => this.port.refreshDecorations(),
@@ -250,10 +238,7 @@ export class CodeMarkerWorkflowController {
 			removeMarkers: uri => this.removeMarkers(uri),
 			persistRemovedMarkers: uri => this.persistChanges([uri.fsPath]),
 			synchronizeUris: uris => this.syncUris(uris),
-			reportFileSyncFailure: (uri, error) => logger.error(localize(
-				`同步脚本 TODO/FIXME/BUG 失败（${uri.fsPath}）: ${errorMessage(error)}`,
-				`Failed to synchronize TODO/FIXME/BUG markers in the script (${uri.fsPath}): ${errorMessage(error)}`,
-			)),
+			reportFileSyncFailure: (uri, error) => logger.error(localize("providers.CodeMarkerWorkflowController.failedToSynchronizeTodoFixmeBugMarkersInThe", { fsPath: uri.fsPath, errorMessage: errorMessage(error) })),
 			canWatchFiles: () => typeof vscode.workspace.createFileSystemWatcher === 'function',
 			discoveryGlobs: () => this.profiles.discoveryGlobs(),
 			watchFilePattern: (glob, onCreate, onChange, onDelete) => {
@@ -265,17 +250,11 @@ export class CodeMarkerWorkflowController {
 					watcher,
 				]
 			},
-			reportWatcherFailure: (glob, error) => logger.error(localize(
-				`无法监听语言文件模式 ${glob}: ${errorMessage(error)}`,
-				`Unable to watch language file pattern ${glob}: ${errorMessage(error)}`,
-			)),
+			reportWatcherFailure: (glob, error) => logger.error(localize("providers.CodeMarkerWorkflowController.unableToWatchLanguageFilePattern", { glob, errorMessage: errorMessage(error) })),
 			loadingViewGeneration: () => this.port.loadingViewGeneration(),
 			currentStorageScope: () => this.port.currentStorageScope(),
 			runWorkspaceScan: (scope, generation) => this.scanWorkspace(scope, generation),
-			reportWorkspaceScanFailure: error => logger.error(localize(
-				`后台扫描 TODO/FIXME/BUG 失败: ${errorMessage(error)}`,
-				`Background TODO/FIXME/BUG scan failed: ${errorMessage(error)}`,
-			)),
+			reportWorkspaceScanFailure: error => logger.error(localize("providers.CodeMarkerWorkflowController.backgroundTodoFixmeBugScanFailed", { errorMessage: errorMessage(error) })),
 		}
 	}
 
@@ -310,7 +289,7 @@ export class CodeMarkerWorkflowController {
 				MAX_BACKGROUND_CODE_MARKER_FILES,
 				this.snapshotPort(),
 			),
-			existingMarkerCandidates: () => this.port.bookmarks().values
+			existingMarkerCandidates: () => allBookmarks(this.port.bookmarks())
 				.filter(fileNode => fileNode.isFile && this.fileNodeHasMarkers(fileNode))
 				.map(fileNode => ({
 					uri: vscode.Uri.file(this.port.absoluteBookmarkPath(fileNode.path)),
@@ -328,10 +307,7 @@ export class CodeMarkerWorkflowController {
 				files,
 				changedFiles,
 			}),
-			reportDiscoveryFailure: (glob, error) => logger.error(localize(
-				`无法按语言文件模式扫描 ${glob}: ${errorMessage(error)}`,
-				`Unable to scan language file pattern ${glob}: ${errorMessage(error)}`,
-			)),
+			reportDiscoveryFailure: (glob, error) => logger.error(localize("providers.CodeMarkerWorkflowController.unableToScanLanguageFilePattern", { glob, errorMessage: errorMessage(error) })),
 		})
 	}
 }

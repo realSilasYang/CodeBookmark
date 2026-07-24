@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIResponseCodec`。
- *
- * 实现要点：解析并校验外部或持久化数据，只向调用方返回满足当前格式契约的结构。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`aiResponseContent`、`aiErrorPreview`、`stripMarkdownCodeFence`、`repairJsonStringEscapes`、`parseAIJsonReply`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 从不同协议响应中提取模型文本，清理 Markdown 围栏并修复可安全判断的 JSON 转义错误。
+ * 修复只覆盖常见字符串转义，不尝试猜测缺字段或结构错误，最终仍由 schema 严格校验。
  */
 import { isJsonRecord } from './JsonRecord'
 import { localize } from '../i18n/Localization'
@@ -90,7 +86,7 @@ export function repairJsonStringEscapes(value: string): string {
 
 export function parseAIJsonReply(content: unknown, expectedOpening: '{' | '['): unknown {
 	const text = stripMarkdownCodeFence(aiResponseContent(content)).replace(/^\uFEFF/, '')
-	if (!text) throw new Error(localize('AI 响应内容为空。', 'AI response content is empty.'))
+	if (!text) throw new Error(localize("util.AIResponseCodec.aiResponseContentIsEmpty"))
 	const candidates = [text]
 	const start = text.indexOf(expectedOpening)
 	const closing = expectedOpening === '{' ? '}' : ']'
@@ -115,5 +111,5 @@ export function parseAIJsonReply(content: unknown, expectedOpening: '{' | '['): 
 	}
 	throw lastError instanceof Error
 		? lastError
-		: new Error(localize('AI 响应不是有效的 JSON。', 'AI response is not valid JSON.'))
+		: new Error(localize("util.AIResponseCodec.aiResponseIsNotValidJson"))
 }

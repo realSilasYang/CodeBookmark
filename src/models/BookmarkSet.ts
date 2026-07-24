@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责书签领域模型与展示投影，具体对象为 `BookmarkSet`。
- *
- * 实现要点：定义书签领域数据、父子关系和展示投影，并在对象内部维护不变量。
- * 核心边界：领域对象负责维持自身不变量；序列化字段、父子关系和展示状态不得被调用方绕过。
- * 主要入口：`BookmarkSet`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 维护当前作用域的书签根节点集合，封装查找、插入、删除、排序和路径更新。
+ * 集合负责保持父子引用与树顺序一致，调用方不需要直接拼接可变数组。
  */
 import { logger } from '../util/Logger';
 import { localize } from '../i18n/Localization'
@@ -95,12 +91,6 @@ export class BookmarkSet {
 			}
 			if (this.values[i].subs.size > 0) {
 				this.values[i].subs.deleteBookmark(id)
-				if (this.values[i].isFile) {
-					if (this.values[i].subs.size == 0) {
-						this.delete(i)
-						return
-					}
-				}
 				this.values[i].refreshDisplayProps()
 			}
 		}
@@ -141,7 +131,7 @@ export class BookmarkSet {
 	moveGroupToNode(group: BookmarkSet, target: Bookmark | undefined): boolean {
 		const isChild = target?.isChildOf(group)
 		if (isChild) {
-			logger.showWarningMessage(localize('不能把父书签移动到它的子书签中。', 'A parent bookmark cannot be moved into one of its children.'))
+			logger.showWarningMessage(localize("models.BookmarkSet.aParentBookmarkCannotBeMovedIntoOneOf"))
 			return false
 		}
 		const items = [...group]
@@ -159,7 +149,6 @@ export class BookmarkSet {
 
 		for (const parent of previousParents) {
 			parent.refreshDisplayProps()
-			if (parent.isFile && parent !== target && parent.subs.size === 0) this.fastDelete(parent)
 		}
 		target?.refreshDisplayProps()
 		return before !== this.orderSignature()
@@ -168,7 +157,7 @@ export class BookmarkSet {
 	changeIndexNode(group: BookmarkSet, target: Bookmark | undefined): boolean {
 		const isChild = target?.isChildOf(group)
 		if (isChild) {
-			logger.showWarningMessage(localize('不能把父书签移动到它的子书签之前。', 'A parent bookmark cannot be moved before one of its children.'))
+			logger.showWarningMessage(localize("models.BookmarkSet.aParentBookmarkCannotBeMovedBeforeOneOf"))
 			return false
 		}
 		if (!target) return false
@@ -218,7 +207,7 @@ export class BookmarkSet {
 				const fsPath = renamedBookmarkPath(vi.path, oldPath, newPath)
 				vi.path = fsPath
 				if (vi.isFile) {
-					vi.label = path.basename(fsPath)
+					if (!vi.fileLabelCustomized) vi.label = path.basename(fsPath)
 					vi.resourceUri = undefined
 				}
 			}
@@ -266,22 +255,29 @@ export class BookmarkSet {
 
 
 	deleteWithPath(pathDeleted: string): boolean {
-		let hasDelete = false
-		for (let i = 0; i < this.values.length;) {
-			if (isSameOrDescendantBookmarkPath(this.values[i].path, pathDeleted)) {
-				this.delete(i)
-				hasDelete = true
-				continue
+		const matches: Bookmark[] = []
+		const visit = (items: BookmarkSet): void => {
+			for (const bookmark of items) {
+				if (isSameOrDescendantBookmarkPath(bookmark.path, pathDeleted)) matches.push(bookmark)
+				visit(bookmark.subs)
 			}
-			if (this.values[i].subs.size > 0) {
-				const de = this.values[i].subs.deleteWithPath(pathDeleted)
-				if (hasDelete === false) {
-					hasDelete = de
-				}
-			}
-			i++
 		}
-		return hasDelete
+		visit(this)
+		matches.sort((left, right) => right.treeDepth - left.treeDepth)
+		for (const bookmark of matches) {
+			const container = bookmark.parent?.subs ?? this
+			const index = container.indexOf(bookmark)
+			if (index < 0) continue
+			container.delete(index)
+			const children = [...bookmark.subs.values]
+			bookmark.subs.clear()
+			for (let offset = 0; offset < children.length; offset++) {
+				children[offset].parent = bookmark.parent
+				container.insert(index + offset, children[offset])
+			}
+			bookmark.parent = undefined
+		}
+		return matches.length > 0
 	}
 
 	pinBookmark(bookmark: Bookmark): Bookmark[] {
@@ -292,7 +288,7 @@ export class BookmarkSet {
 				vi.isPinned = !vi.isPinned
 				changed = true;
 			} else {
-				if (vi.isPinned && !vi.isFile) {
+				if (vi.isPinned) {
 					vi.isPinned = false
 					changed = true;
 				}
@@ -316,7 +312,7 @@ export class BookmarkSet {
 
 	addNewBookmarkToPin(bookmark: Bookmark): Bookmark | undefined {
 		for (const vi of this.values) {
-			if (vi.isPinned && !vi.isFile && bookmarkPathKey(vi.path) === bookmarkPathKey(bookmark.path)) {
+			if (vi.isPinned) {
 				bookmark.parent = vi
 				vi.subs.add(bookmark)
 				const refreshSubtree = (node: Bookmark) => {
@@ -337,19 +333,25 @@ export class BookmarkSet {
 	}
 
 	addNewBookmark(bookmark: Bookmark): Bookmark | undefined {
+		const findFileNode = (items: BookmarkSet): Bookmark | undefined => {
+			for (const item of items) {
+				if (item.isFile && bookmarkPathKey(item.path) === bookmarkPathKey(bookmark.path)) return item
+				const nested = findFileNode(item.subs)
+				if (nested) return nested
+			}
+		}
+		let fileNode = findFileNode(this)
+		if (!fileNode) {
+			fileNode = bookmark.createContainingFileNode()
+			this.add(fileNode)
+		} else if (fileNode.scriptId) {
+			bookmark.ownerScriptId = fileNode.scriptId
+		}
 		const pin = this.addNewBookmarkToPin(bookmark)
 		if (!pin) {
-			let fileNode = this.values.find(v => v.isFile && bookmarkPathKey(v.path) === bookmarkPathKey(bookmark.path));
-			if (fileNode) {
-				bookmark.parent = fileNode;
-				fileNode.subs.add(bookmark);
-				fileNode.createdAt = Math.min(fileNode.createdAt, bookmark.createdAt)
-			} else {
-				fileNode = bookmark.createContainingFileNode()
-				bookmark.parent = fileNode;
-				fileNode.subs.add(bookmark);
-				this.add(fileNode);
-			}
+			bookmark.parent = fileNode
+			fileNode.subs.add(bookmark)
+			fileNode.createdAt = Math.min(fileNode.createdAt, bookmark.createdAt)
 		}
 		return pin
 	}

@@ -1,15 +1,12 @@
 /**
- * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `BookmarkFileNodeCodec`。
- *
- * 实现要点：解析并校验外部或持久化数据，只向调用方返回满足当前格式契约的结构。
- * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
- * 主要入口：`updateBookmarkFileNodePath`、`createBookmarkFileNode`、`absoluteBookmarkFileNodePath`、`createBookmarkFileEnvelope`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 在文件容器 Bookmark 与持久化脚本信封之间转换，统一处理绝对路径和脚本身份。
+ * 容器节点不参与普通书签内容指纹，更新路径时会同步其展示路径但保留稳定 scriptId。
  */
 import * as path from 'path'
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
 import { Bookmark } from '../models/Bookmark'
+import { assignFileNodeOwnership, type OwnedBookmarkProjection } from '../models/BookmarkOwnership'
 import { setSerializedBookmarkPaths } from '../models/SerializedBookmarkTree'
 import { absolutePathKey, normalizedAbsolutePath } from '../util/AbsolutePath'
 import { canonicalBookmarkPath } from '../util/BookmarkPath'
@@ -36,7 +33,7 @@ function serializedPathsMatchScript(values: unknown[], scriptPath: string): bool
 
 export function updateBookmarkFileNodePath(fileNode: Bookmark, nextPath: string): void {
 	fileNode.path = canonicalBookmarkPath(nextPath)
-	fileNode.label = path.basename(fileNode.path)
+	if (!fileNode.fileLabelCustomized) fileNode.label = path.basename(fileNode.path)
 	const update = (bookmarks: Bookmark[]): void => {
 		for (const bookmark of bookmarks) {
 			bookmark.path = fileNode.path
@@ -53,18 +50,18 @@ export function createBookmarkFileNode(
 ): Bookmark | undefined {
 	const items = bookmarkItems(data)
 	const metadata = scriptMetadata(data)
-	if (!items || items.length === 0 || !metadata) return undefined
+	if (!items || !metadata) return undefined
 	if (!serializedPathsMatchScript(items, metadata.path)) {
-		if (strict) throw new Error(localize(
-			'配置内书签路径与脚本绝对路径不一致',
-			'The bookmark paths in the configuration do not match the script absolute path.',
-		))
+		if (strict) throw new Error(localize("repository.BookmarkFileNodeCodec.theBookmarkPathsInTheConfigurationDoNotMatch"))
 		return undefined
 	}
 
 	const fileNode = new Bookmark({
 		id: `file_${metadata.id}`,
 		path: metadata.path,
+		label: metadata.presentation?.label,
+		icon: metadata.presentation?.icon,
+		fileLabelCustomized: metadata.presentation?.label !== undefined,
 		scriptId: metadata.id,
 		contextValue: ContextBookmark.File,
 		collapsible: vscode.TreeItemCollapsibleState.Expanded,
@@ -76,24 +73,21 @@ export function createBookmarkFileNode(
 			bookmarks.push(Bookmark.fromJSON(item, 0, parseState))
 		} catch (error) {
 			if (strict) throw error
-			logger.error(localize(`已跳过损坏的书签记录: ${error}`, `Skipped a damaged bookmark record: ${error}`))
+			logger.error(localize("repository.BookmarkFileNodeCodec.skippedADamagedBookmarkRecord", { error }))
 			if (String(error).includes('nodes')) break
 		}
 	}
-	if (bookmarks.length === 0) return undefined
-	fileNode.createdAt = Math.min(...bookmarks.map(bookmark => bookmark.createdAt))
+	if (bookmarks.length > 0) fileNode.createdAt = Math.min(...bookmarks.map(bookmark => bookmark.createdAt))
 	for (const bookmark of bookmarks) bookmark.parent = fileNode
 	fileNode.subs.addAll(bookmarks)
+	assignFileNodeOwnership(fileNode)
 	updateBookmarkFileNodePath(fileNode, displayPath ?? metadata.path)
 	return fileNode
 }
 
 export function absoluteBookmarkFileNodePath(fileNode: Bookmark, workspaceRoot?: string): string {
 	if (path.isAbsolute(fileNode.path)) return normalizedAbsolutePath(fileNode.path)
-	if (!workspaceRoot) throw new Error(localize(
-		`无法将书签相对路径解析为绝对路径: ${fileNode.path}`,
-		`Unable to resolve the bookmark relative path to an absolute path: ${fileNode.path}`,
-	))
+	if (!workspaceRoot) throw new Error(localize("repository.BookmarkFileNodeCodec.unableToResolveTheBookmarkRelativePathToAn", { path: fileNode.path }))
 	return normalizedAbsolutePath(path.resolve(workspaceRoot, fileNode.path))
 }
 
@@ -114,5 +108,29 @@ export async function createBookmarkFileEnvelope(
 		lastSeenAt: Date.now(),
 		missingSince: fingerprint ? undefined : previousMetadata?.missingSince ?? Date.now(),
 		orderIndex: fingerprint ? undefined : previousMetadata?.orderIndex,
+	}, bookmarks)
+}
+
+export async function createBookmarkFileEnvelopeFromProjection(
+	projection: OwnedBookmarkProjection,
+	absolutePathInput: string,
+	previousMetadata?: ScriptMetadata,
+): Promise<BookmarkFileEnvelope> {
+	const absolutePath = normalizedAbsolutePath(absolutePathInput)
+	const bookmarks = structuredClone(projection.bookmarks)
+	setSerializedBookmarkPaths(bookmarks, absolutePath)
+	const fingerprint = await fingerprintSourceFile(absolutePath)
+	const label = projection.fileNode?.fileLabelCustomized ? `${projection.fileNode.label}` : undefined
+	const icon = projection.fileNode?.icon || undefined
+	return createScriptEnvelope({
+		id: projection.scriptId,
+		path: absolutePath,
+		fingerprint: fingerprint ?? previousMetadata?.fingerprint,
+		lastSeenAt: Date.now(),
+		missingSince: fingerprint ? undefined : previousMetadata?.missingSince ?? Date.now(),
+		orderIndex: fingerprint ? undefined : previousMetadata?.orderIndex,
+		presentation: projection.fileNode
+			? label || icon ? { label, icon } : undefined
+			: previousMetadata?.presentation,
 	}, bookmarks)
 }

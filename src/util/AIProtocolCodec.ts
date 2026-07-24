@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIProtocolCodec`。
- *
- * 实现要点：解析并校验外部或持久化数据，只向调用方返回满足当前格式契约的结构。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`AIMessage`、`encodeAIProtocolRequest`、`decodeAIProtocolResponse`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把统一消息编码成 OpenAI Responses、Chat Completions、Anthropic、Gemini 或 Ollama 请求。
+ * 响应解码也在此还原为纯文本，让 AIService 的重试与 JSON 解析不依赖供应商字段。
  */
 import { isAzureAIHostname } from './AIAddressClassifier'
 import { type AIProtocol, type AIRequestTarget } from './AIEndpointResolver'

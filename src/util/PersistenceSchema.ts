@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `PersistenceSchema`。
- *
- * 实现要点：定义并校验结构化数据边界，拒绝缺失、越界或不受支持的字段组合。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`PersistenceFormats`、`PersistenceHeader`、`persistenceHeader`、`decodePersistenceRecord`、`versionPersistenceList`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 定义各类持久化文件的格式名称和 schemaVersion，并校验对象或列表的版本头。
+ * 只允许完整的当前身份或完全无版本的旧数据进入迁移，部分头、异类格式和未来版本均被拒绝。
  */
 import { isJsonRecord, type JsonRecord } from './JsonRecord'
 
@@ -13,6 +9,7 @@ const PERSISTENCE_SCHEMA_VERSION = 1 as const
 export const PersistenceFormats = Object.freeze({
 	script: 'codebookmark.script',
 	workspaceOrder: 'codebookmark.workspace-order',
+	workspaceLayout: 'codebookmark.workspace-layout',
 	scriptRelocation: 'codebookmark.script-relocation',
 	storageTransfer: 'codebookmark.storage-transfer',
 	undoSession: 'codebookmark.undo-session',

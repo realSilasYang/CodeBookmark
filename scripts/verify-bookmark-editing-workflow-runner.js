@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-editing-workflow-runner`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-editing-workflow-runner` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-editing-workflow-runner”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`bookmark`、`waitFor`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖重命名、移动、图标、默认图标和置顶操作的节点校验、撤销与精确保存范围。
+ * 脚本在临时目录中调用编译后的 `Bookmark`、`CodeMarkerScanner`、`BookmarkEditingWorkflowRunner` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -139,6 +135,7 @@ async function main() {
     saveUndoState: action => events.push(`undo:${action}`),
     saveBookmarks: paths => events.push(`save:${paths.join('|')}`),
     refreshDecoration: () => events.push('refresh'),
+    commitTopology: async () => { events.push('commit') },
   }
 
   const single = bookmark('single', 'old')
@@ -274,25 +271,25 @@ async function main() {
     return [target, previouslyPinned]
   }
   events.length = 0
-  runTogglePinnedBookmark(pinned, port)
+  await runTogglePinnedBookmark(pinned, port)
   assert.equal(pinned.isPinned, true)
   assert.equal(previouslyPinned.isPinned, false)
   assert.deepEqual(events, [
     'undo:setBookmarkContainer',
     'tree:pinned',
     'tree:previously-pinned',
-    'save:C:\\workspace\\src\\pinned.ts|C:\\workspace\\src\\previous.ts',
+    'commit',
     'refresh',
     'reveal:pinned',
   ])
 
   events.length = 0
-  runTogglePinnedBookmark(pinned, port)
+  await runTogglePinnedBookmark(pinned, port)
   assert.equal(pinned.isPinned, false)
   assert.deepEqual(events, [
     'undo:unsetBookmarkContainer',
     'tree:pinned',
-    'save:C:\\workspace\\src\\pinned.ts',
+    'commit',
     'refresh',
   ])
 }

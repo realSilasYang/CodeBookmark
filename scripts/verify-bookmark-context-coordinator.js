@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-context-coordinator`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-context-coordinator` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-context-coordinator”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`fileUri`、`createHarness`、`flushAsyncWork`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查菜单上下文键在单文件、文件夹、空编辑器和书签分布变化下的组合，并拒绝迟到扫描结果。
+ * 脚本直接调用编译后的 `Commands`、`BookmarkContextCoordinator`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { Commands } = require('../out/util/constants/Commands')

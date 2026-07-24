@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkEditingWorkflowRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkEditingWorkflowPort`、`runRenameBookmark`、`runUpdateBookmarkPosition`、`runUpdateBookmarkPositionAndRename`、`runChangeBookmarkIcons`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 实现重命名、移动、换图标、恢复默认图标和置顶等书签编辑操作。
+ * 每次操作先验证节点仍属于当前树，再生成撤销记录并只保存实际受影响的脚本。
  */
 import fs = require('fs')
 import * as path from 'path'
@@ -44,6 +40,7 @@ export interface BookmarkEditingWorkflowPort {
 	saveUndoState(action: BookmarkEditingUndoAction): void
 	saveBookmarks(filePaths: string[]): void
 	refreshDecoration(): void
+	commitTopology(): Promise<void>
 }
 
 function errorMessage(error: unknown): string {
@@ -72,12 +69,12 @@ function bookmarkDepth(bookmark: Bookmark): number {
 
 async function promptForLabel(bookmark: Bookmark): Promise<string | undefined> {
 	const newLabel = await vscode.window.showInputBox({
-		prompt: localize('编辑书签标签', 'Edit bookmark label'),
+		prompt: localize("providers.BookmarkEditingWorkflowRunner.editBookmarkLabel"),
 		value: `${bookmark.label}`,
 	})
 	if (newLabel === undefined) return undefined
 	if (newLabel.trim() === '') {
-		logger.showWarningMessage(localize('标签不能为空', 'The label cannot be empty.'))
+		logger.showWarningMessage(localize("providers.BookmarkEditingWorkflowRunner.theLabelCannotBeEmpty"))
 		return undefined
 	}
 	return Helper.formatLabelSpacing(newLabel)
@@ -88,6 +85,7 @@ async function editLabel(bookmark: Bookmark, port: BookmarkEditingWorkflowPort):
 	if (newLabel === undefined || newLabel === `${bookmark.label}`) return false
 	port.saveUndoState('renameBookmarks')
 	bookmark.label = newLabel
+	if (bookmark.isFile) bookmark.fileLabelCustomized = true
 	bookmark.refreshDisplayProps()
 	port.saveBookmarks([port.absoluteBookmarkPath(bookmark.path)])
 	port.refreshDecoration()
@@ -102,10 +100,7 @@ function replaceBookmark(
 	const editor = vscode.window.activeTextEditor
 	if (!editor) return
 	if (!port.canUpdateBookmarkInEditor(bookmark, editor)) {
-		logger.showWarningMessage(localize(
-			'只能在书签所属文件中更新位置；跨文件移动会破坏文件级存储边界。',
-			'A bookmark position can only be updated within its own file; moving it across files would break file-level storage boundaries.',
-		))
+		logger.showWarningMessage(localize("providers.BookmarkEditingWorkflowRunner.aBookmarkPositionCanOnlyBeUpdatedWithinIts"))
 		return
 	}
 	if (!skipSaveState) port.saveUndoState('updateBookmarkPosition')
@@ -138,6 +133,7 @@ export async function runRenameBookmark(
 
 	const temporaryFolder = port.temporaryFolder()
 	if (!temporaryFolder) return
+	await fs.promises.mkdir(temporaryFolder, { recursive: true })
 	const temporaryUri = vscode.Uri.file(path.join(temporaryFolder, `batch-rename-${Date.now()}.txt`))
 	const content = resolvedTargets
 		.map(target => '\t'.repeat(bookmarkDepth(target)) + target.label)
@@ -146,17 +142,11 @@ export async function runRenameBookmark(
 
 	const document = await vscode.workspace.openTextDocument(temporaryUri)
 	await vscode.window.showTextDocument(document, { preview: false })
-	void vscode.window.showInformationMessage(localize(
-		'提示：按 Tab 键体现的层级仅供参考，请直接修改行内文字，修改完成后直接关闭该面板即可自动生效。',
-		'Tip: Tab indentation only represents hierarchy. Edit the text directly, then close the editor to apply the changes automatically.',
-	))
+	void vscode.window.showInformationMessage(localize("providers.BookmarkEditingWorkflowRunner.tipTabIndentationOnlyRepresentsHierarchyEditTheText"))
 
 	const changeDisposable = vscode.workspace.onDidChangeTextDocument(event => {
 		if (event.document === document && document.isDirty) {
-			void document.save().then(undefined, error => logger.error(localize(
-				`保存批量重命名临时文件失败: ${errorMessage(error)}`,
-				`Failed to save the temporary batch-rename file: ${errorMessage(error)}`,
-			)))
+			void document.save().then(undefined, error => logger.error(localize("providers.BookmarkEditingWorkflowRunner.failedToSaveTheTemporaryBatchRenameFile", { errorMessage: errorMessage(error) })))
 		}
 	})
 	const closeDisposable = vscode.workspace.onDidCloseTextDocument(closedDocument => {
@@ -179,26 +169,18 @@ export async function runRenameBookmark(
 				const changedPaths = new Set<string>()
 				for (const change of changes) {
 					change.bookmark.label = change.label
+					if (change.bookmark.isFile) change.bookmark.fileLabelCustomized = true
 					change.bookmark.refreshDisplayProps()
 					changedPaths.add(port.absoluteBookmarkPath(change.bookmark.path))
 				}
 				port.refreshDecoration()
 				port.saveBookmarks(Array.from(changedPaths))
 				const summary = formatBookmarkLevelSummary(summarizeBookmarks(changes.map(change => change.bookmark)))
-				logger.showMessage(localize(
-					`批量重命名完成，更新结果：${summary}。`,
-					`Batch rename completed. Updated: ${summary}.`,
-				))
+				logger.showMessage(localize("providers.BookmarkEditingWorkflowRunner.batchRenameCompletedUpdated", { summary }))
 			}
-		})().catch(error => logger.error(localize(
-			`应用批量重命名失败: ${errorMessage(error)}`,
-			`Failed to apply batch rename: ${errorMessage(error)}`,
-		))).finally(() => {
+		})().catch(error => logger.error(localize("providers.BookmarkEditingWorkflowRunner.failedToApplyBatchRename", { errorMessage: errorMessage(error) }))).finally(() => {
 			void fs.promises.unlink(temporaryUri.fsPath)
-				.catch(error => logger.error(localize(
-					`清理批量重命名临时文件失败: ${errorMessage(error)}`,
-					`Failed to clean up the temporary batch-rename file: ${errorMessage(error)}`,
-				)))
+				.catch(error => logger.error(localize("providers.BookmarkEditingWorkflowRunner.failedToCleanUpTheTemporaryBatchRenameFile", { errorMessage: errorMessage(error) })))
 		})
 	})
 	port.registerDisposables(changeDisposable, closeDisposable)
@@ -222,17 +204,11 @@ export async function runUpdateBookmarkPositionAndRename(
 	const editor = vscode.window.activeTextEditor
 	if (!editor) return
 	if (!port.canUpdateBookmarkInEditor(current, editor)) {
-		logger.showWarningMessage(localize(
-			'只能在书签所属文件中更新位置；跨文件移动会破坏文件级存储边界。',
-			'A bookmark position can only be updated within its own file; moving it across files would break file-level storage boundaries.',
-		))
+		logger.showWarningMessage(localize("providers.BookmarkEditingWorkflowRunner.aBookmarkPositionCanOnlyBeUpdatedWithinIts"))
 		return
 	}
 	if (editor.document.lineAt(editor.selection.start.line).text === '') {
-		void vscode.window.showWarningMessage(localize(
-			'当前光标行为空，无法重命名书签！',
-			'The current line is empty, so the bookmark cannot be renamed.',
-		))
+		void vscode.window.showWarningMessage(localize("providers.BookmarkEditingWorkflowRunner.theCurrentLineIsEmptySoTheBookmarkCannot"))
 		return
 	}
 	const newLabel = await promptForLabel(current)
@@ -302,16 +278,16 @@ export async function runRestoreDefaultBookmarkIcons(
 	port.refreshDecoration()
 }
 
-export function runTogglePinnedBookmark(
+export async function runTogglePinnedBookmark(
 	bookmark: Bookmark,
 	port: BookmarkEditingWorkflowPort,
-): void {
+): Promise<void> {
 	const current = port.findBookmark(bookmark)
-	if (!current || current.isFile || current.isBookmarkInvalid) return
+	if (!current || current.isBookmarkInvalid) return
 	port.saveUndoState(current.isPinned ? 'unsetBookmarkContainer' : 'setBookmarkContainer')
 	const modified = port.pinBookmark(current)
 	for (const changedBookmark of modified) port.publishTreeChange(changedBookmark)
-	port.saveBookmarks(Array.from(new Set(modified.map(item => port.absoluteBookmarkPath(item.path)))))
+	await port.commitTopology()
 	port.refreshDecoration()
 	if (current.isPinned) port.revealPinnedBookmarkLater(current)
 }

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-tree-interaction-runner`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-tree-interaction-runner` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-tree-interaction-runner”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`fileNode`、`bookmark`、`addChild`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖拖放、展开收起、搜索和排序选择的合法路径及所有拒绝边界。
+ * 脚本直接调用编译后的 `Bookmark`、`BookmarkSet`、`ViewMode`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { createVscodeFake } = require('./test-support/vscode-fake')
@@ -73,6 +69,7 @@ function fileNode(id, bookmarkPath) {
   return new Bookmark({
     id,
     path: bookmarkPath,
+    scriptId: `script-${id}`,
     contextValue: ContextBookmark.File,
     collapsible: vscode.TreeItemCollapsibleState.Collapsed,
   })
@@ -84,6 +81,7 @@ function bookmark(id, label, bookmarkPath, line = 0, parent) {
     label,
     path: bookmarkPath,
     parent,
+    ownerScriptId: parent?.scriptId,
     start: new CursorIndex(line, 0),
     end: new CursorIndex(line, 0),
   })
@@ -120,7 +118,7 @@ async function main() {
       events.push(`commit:${action}`)
       return true
     },
-    saveBookmarks: paths => events.push(`save:${paths.join('|')}`),
+    commitTopology: async () => { events.push('topology') },
     refreshDecoration: () => events.push('refresh'),
     fireTreeChanged: () => events.push('tree'),
     expansionRoots: () => expansionRoots,
@@ -153,23 +151,26 @@ async function main() {
   await runBookmarkTreeDrop(fileA, fileTransfer, port)
   assert.equal(SortModeBookmark.mode, SortModeBookmark.Custom)
   assert.equal(informationMessages.at(-1), '检测到拖拽操作，已自动切换回“自定义排序”模式。')
-  assert.deepEqual(workspaceOrder, ['src/c.ts', 'src/a.ts', 'src/b.ts'])
+  assert.deepEqual(tree.values.map(item => item.id), ['file-c', 'file-a', 'file-b'])
   assert.deepEqual(events, [
-    'capture:src/a.ts|src/b.ts|src/c.ts',
-    'persist:src/c.ts|src/a.ts|src/b.ts',
+    'capture:tree',
     'commit:reorderFiles',
-    'tree',
+    'topology',
+    'refresh',
   ])
 
+  const mixed = bookmark('mixed', 'Mixed', 'src/a.ts', 0, fileA)
+  addChild(fileA, mixed)
   const mixedTransfer = new DataTransfer()
   mixedTransfer.set(BOOKMARK_TREE_MIME_TYPE, new DataTransferItem([
-    fileA,
-    bookmark('mixed', 'Mixed', 'src/a.ts'),
+    fileB,
+    mixed,
   ]))
   events.length = 0
   await runBookmarkTreeDrop(undefined, mixedTransfer, port)
-  assert.deepEqual(events, [])
-  assert.equal(warningMessages.at(-1), '不能同时拖动文件节点和书签节点。')
+  assert.deepEqual(tree.values.slice(-2).map(item => item.id), ['file-b', 'mixed'])
+  assert.equal(mixed.ownerScriptId, fileA.scriptId)
+  assert.deepEqual(events, ['capture:tree', 'commit:moveBookmarks', 'topology', 'refresh'])
 
   tree = new BookmarkSet()
   const sourceFile = fileNode('source-file', 'src/source.ts')
@@ -186,8 +187,7 @@ async function main() {
   assert.deepEqual(events, [
     'capture:tree',
     'commit:moveBookmarks',
-    'save:C:\\workspace\\src\\source.ts',
-    'reveal:first:true:true',
+    'topology',
     'refresh',
   ])
 
@@ -197,8 +197,25 @@ async function main() {
   tree.add(otherFile)
   events.length = 0
   await runBookmarkTreeDrop(otherBookmark, bookmarkTransfer, port)
-  assert.deepEqual(events, [])
-  assert.equal(warningMessages.at(-1), '暂不支持跨文件移动书签。')
+  assert.deepEqual(otherFile.subs.values.map(item => item.id), ['second', 'other'])
+  assert.equal(second.ownerScriptId, sourceFile.scriptId)
+  assert.deepEqual(events, ['capture:tree', 'commit:moveBookmarks', 'topology', 'refresh'])
+
+  sourceFile.isPinned = true
+  const nestedFileTransfer = new DataTransfer()
+  runBookmarkTreeDrag([otherFile], nestedFileTransfer)
+  events.length = 0
+  await runBookmarkTreeDrop(sourceFile, nestedFileTransfer, port)
+  assert.equal(otherFile.parent, sourceFile)
+  assert.equal(otherFile.scriptId, 'script-other-file')
+  assert.deepEqual(events.slice(0, 3), ['capture:tree', 'commit:moveBookmarks', 'topology'])
+
+  const cyclicTransfer = new DataTransfer()
+  runBookmarkTreeDrag([sourceFile], cyclicTransfer)
+  events.length = 0
+  await runBookmarkTreeDrop(second, cyclicTransfer, port)
+  assert.deepEqual(events, ['capture:tree'])
+  assert.equal(warningMessages.at(-1), '不能把父书签移动到它的子书签之前。')
 
   const marker = bookmark('marker', 'TODO', 'src/z.ts', 9)
   marker.codeMarker = {}

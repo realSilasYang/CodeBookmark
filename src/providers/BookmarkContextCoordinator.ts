@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkContextCoordinator`。
- *
- * 实现要点：协调多个端口、状态与异步阶段，明确事件顺序、取消点和最终提交时机。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkContextFailureKind`、`BookmarkContextPort`、`BookmarkContextCoordinator`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 根据当前编辑器、工作区能力和书签分布计算 VS Code 上下文键，驱动菜单与欢迎视图显隐。
+ * 异步扫描带版本号；较早请求即使后返回，也不能覆盖用户已经切换后的新上下文。
  */
 import * as path from 'path'
 import { Commands } from '../util/constants/Commands'

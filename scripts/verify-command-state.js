@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-command-state`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-command-state` 对应契约。
- * 核心边界：通过断言锁定“verify-command-state”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 核对命令、菜单 when 条件与上下文键的对应关系，确保不同视图状态不会出现无效入口。
+ * 脚本直接调用编译后的 `TreeExpansionState`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -13,7 +10,7 @@ const { isTreeExpandedToLevel } = require('../out/util/TreeExpansionState')
 const COLLAPSED = 1
 const EXPANDED = 2
 const node = (level, state, children = []) => ({
-  level,
+  treeDepth: level,
   collapsibleState: state,
   subs: { size: children.length, values: children },
 })
@@ -34,7 +31,9 @@ assert.equal(isTreeExpandedToLevel([node(0, EXPANDED)], 3, EXPANDED), false)
 
 const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
+const englishManifest = loadLocalizedManifest('en')
 const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]))
+const englishCommands = new Map(englishManifest.contributes.commands.map(command => [command.command, command]))
 const aiAnalysisCommands = [
   'codebookmark.ai.generateAppend',
   'codebookmark.ai.generateOverwrite',
@@ -90,10 +89,22 @@ assert.equal(viewTitle.some(item => item.command === undoDelete.command
 assert.equal(viewTitle.some(item => item.command === redoDelete.command
   && item.when.includes('bookmarks.var.bookmark.redoOperation == deleteBookmarks')), true)
 
+const treeItemMenu = manifest.contributes.menus['view/item/context']
+const pinContainer = treeItemMenu.find(item => item.command === 'codebookmark.pinView')
+const unpinContainer = treeItemMenu.find(item => item.command === 'codebookmark.unpinView')
+assert.equal(commands.get('codebookmark.pinView')?.title, '设置为书签容器')
+assert.equal(commands.get('codebookmark.unpinView')?.title, '取消作为书签容器')
+assert.equal(englishCommands.get('codebookmark.pinView')?.title, 'Set as Bookmark Container')
+assert.equal(englishCommands.get('codebookmark.unpinView')?.title, 'Stop Using as Bookmark Container')
+assert.match(pinContainer?.when ?? '', /!codebookmark\.hasMultipleSelection/)
+assert.match(unpinContainer?.when ?? '', /!codebookmark\.hasMultipleSelection/)
+
 const contextCoordinator = fs.readFileSync('src/providers/BookmarkContextCoordinator.ts', 'utf8')
 const viewFactory = fs.readFileSync('src/providers/createCodeBookmarkView.ts', 'utf8')
 const treeInteractionRunner = fs.readFileSync('src/providers/BookmarkTreeInteractionRunner.ts', 'utf8')
+const provider = fs.readFileSync('src/providers/CodeBookmarkViewProvider.ts', 'utf8')
 assert.match(contextCoordinator, /Commands\.varAIAnalysisAvailable, aiAnalysisAvailable/)
 assert.match(contextCoordinator, /Commands\.varActiveFileAvailable, activeFileAvailable/)
 assert.match(treeInteractionRunner, /isTreeExpandedToLevel\(/)
+assert.match(provider, /Commands\.varHasMultipleSelection, selectedBookmarkCount > 1/)
 assert.ok((viewFactory.match(/provider\.refreshExpandCollapseContext\(\)/g) || []).length >= 2)

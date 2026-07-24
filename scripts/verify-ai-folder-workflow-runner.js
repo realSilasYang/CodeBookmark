@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-ai-folder-workflow-runner`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-ai-folder-workflow-runner` 对应契约。
- * 核心边界：通过断言锁定“verify-ai-folder-workflow-runner”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖文件夹批量生成与优化的目标筛选、失败汇总、取消和最终刷新行为。
+ * 为核对文件夹批量生成与优化的目标筛选、失败汇总、取消和最终刷新行为，脚本在临时目录中调用编译后的 `AIService`、`AITaskRegistry`、`AIWorkflowGuard` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -114,6 +110,7 @@ async function main() {
         if (!bookmarksByPath.has(bookmark.path)) bookmarksByPath.set(bookmark.path, bookmarks)
         bookmarks.push(bookmark)
       },
+      persistGeneratedExpansion: async storageScope => events.push(`persist-expansion:${storageScope}`),
       saveUndoState: action => events.push(`undo:${action}`),
       saveBookmarks: filePaths => events.push(`save:${path.basename(filePaths[0])}`),
       refreshDecoration: () => events.push('refresh'),
@@ -132,6 +129,7 @@ async function main() {
       'add:b.ts',
       'save:b.ts',
       'refresh',
+      `persist-expansion:${scope}`,
     ])
     assert.equal(progressMessages.length, 2)
     assert.equal(informationMessages.at(-1), '文件夹 AI 处理完成，已处理 2 个文件；生成结果：共 2 个书签：一级 2 个。')
@@ -147,6 +145,7 @@ async function main() {
       'add:c.ts',
       'save:c.ts',
       'refresh',
+      `persist-expansion:${scope}`,
     ])
     assert.equal(progressMessages.length, 1)
     bookmarksByPath.delete('c.ts')

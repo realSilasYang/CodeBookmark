@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-view-load-finalizer`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-view-load-finalizer` 对应契约。
- * 核心边界：通过断言锁定“verify-view-load-finalizer”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`createHarness`、`state`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖视图加载成功、取消和失败的收尾，只有当前会话能更新加载上下文。
+ * 脚本直接调用编译后的 `ViewLoadFinalizer`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { finalizeViewLoad } = require('../out/providers/ViewLoadFinalizer')
@@ -55,9 +51,9 @@ async function main() {
   assert.deepEqual(harness.events, [
     'current:7',
     'loadFailed:false',
-    'loaded',
     'refresh',
     'persist:7',
+    'loaded',
     'watcher:7',
     'background:7',
     'finishLoading:7',
@@ -67,7 +63,7 @@ async function main() {
 
   harness = createHarness()
   await finalizeViewLoad(state({ storageReady: false }), harness.port)
-  assert.deepEqual(harness.events.slice(4, 7), ['persist:7', 'closeWatchers', 'finishLoading:7'])
+  assert.deepEqual(harness.events.slice(3, 7), ['persist:7', 'loaded', 'closeWatchers', 'finishLoading:7'])
   assert.equal(harness.events.includes('watcher:7'), false)
   assert.equal(harness.events.includes('background:7'), false)
 
@@ -88,7 +84,7 @@ async function main() {
     'contextFailure:expected context failure',
     'refresh',
   ])
-  assert.equal(harness.events.includes('loaded'), false)
+  assert.equal(harness.events.includes('loaded'), true)
   assert.equal(harness.events.includes('finishInitialLoad:success'), true)
 
   const loadFailure = new Error('expected load failure')
@@ -100,8 +96,8 @@ async function main() {
   assert.deepEqual(harness.events, [
     'current:7',
     'loadFailed:true',
-    'loaded',
     'refresh',
+    'loaded',
     'finishLoading:7',
     'measure:12:true',
     'finishInitialLoad:expected load failure',

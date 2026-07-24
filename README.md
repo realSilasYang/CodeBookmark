@@ -99,7 +99,7 @@
 | --- | --- |
 | 调整书签顺序或层级 | 在同一文件内拖拽书签。父节点不能移进自己的子节点，书签也不能跨文件拖动 |
 | 调整文件显示顺序 | 在工作区中多选并拖拽文件节点。顺序会写入工作区视图配置；如果当前使用时间或位置排序，拖拽后会自动切回自定义排序 |
-| 让新书签自动归入某个节点 | 右键普通书签，选择“设为当前文件的新书签容器”。之后在同一文件中新建的书签都会放入该节点；当前作用域同时只能有一个固定容器，再次执行可取消 |
+| 让新书签自动归入某个节点 | 右键普通书签，选择“设置为书签容器”。之后在同一文件中新建的书签都会放入该节点；当前作用域同时只能有一个固定容器，可通过“取消作为书签容器”恢复默认位置 |
 | 删除带有子项的书签 | 可以连同全部子项一起删除，也可以只删除当前节点，并把子项提升到父级 |
 | 更换排序方式 | “排序模式”支持自定义顺序、创建时间升序/降序、代码位置升序/降序。时间和位置排序只改变当前显示，不会覆盖原有的自定义顺序 |
 
@@ -301,9 +301,15 @@ CodeBookmark/
 ├─ .github/
 │  ├─ ISSUE_TEMPLATE/               Issue 模板与安全报告入口
 │  ├─ workflows/                    持续集成与联动发布
+│  ├─ dependabot.yml                npm 与 GitHub Actions 依赖更新策略
+│  ├─ PULL_REQUEST_TEMPLATE*.md     中英文 Pull Request 检查清单
 │  ├─ CONTRIBUTING*.md              中英文贡献流程与验证要求
 │  ├─ SECURITY*.md                  中英文漏洞报告策略
 │  └─ SUPPORT*.md                   中英文使用支持与问题分类
+├─ .vscode/
+│  ├─ launch.json                   Extension Host 调试入口
+│  ├─ tasks.json                    编译与监听任务
+│  └─ settings.json                 项目文件嵌套规则
 ├─ config/
 │  ├─ eslint.config.mjs             ESLint 严格检查配置
 │  └─ tsconfig.json                 TypeScript 编译配置
@@ -317,41 +323,64 @@ CodeBookmark/
 ├─ scripts/
 │  ├─ build/                        清理、编译清单生成与运行时代码打包
 │  ├─ icons/                        图标清单、下载与字典生成
+│  ├─ i18n/catalogs/                扩展清单的稳定键语言目录
 │  ├─ integration/                  Extension Host 集成测试启动器
-│  ├─ lib/                          构建和验证共享的清单本地化工具
+│  ├─ lib/                          清单稳定键与本地化读取工具
 │  ├─ release/                      Release 正文、SBOM 与校验和生成
+│  ├─ fixtures/                     专项验证共享的固定输入
+│  ├─ test-support/                 Node 验证使用的模块替身与 VS Code 假实现
 │  ├─ verify-*.js                   模块级回归与架构约束
 │  └─ verify-all.js                 专项验证统一入口
 ├─ src/
 │  ├─ extension.ts                  扩展同步激活入口
-│  ├─ i18n/                         运行时中英文语言选择
 │  ├─ commands/                     命令注册、导航与导出
-│  ├─ config/                       配置读取、缓存和存储目录校验
-│  ├─ models/                       Bookmark、BookmarkSet、排序状态
-│  ├─ providers/                    树视图、配置管理界面、保存队列、AI 与撤销
-│  ├─ repository/                   脚本配置目录、移动恢复、删除与存储目录转移
+│  ├─ config/                       VS Code 设置读取与缓存
+│  ├─ i18n/
+│  │  ├─ Localization.ts            语言解析、目录回退与命名参数插值
+│  │  └─ catalogs/                  运行时稳定键语言目录
+│  ├─ models/                       书签领域模型、编解码、序列化树与工作区顺序
+│  ├─ providers/                    用户工作流与 VS Code 视图、保存、AI、撤销编排
+│  ├─ repository/                   磁盘格式、目录索引、导入、移动恢复与存储转移
 │  ├─ subscriptions/                编辑器、文件系统和配置事件适配
-│  └─ util/                         身份、路径、指纹、AI、自动标记和图标工具
+│  ├─ testing/                      真实 Extension Host 的只读测试接口
+│  └─ util/                         身份、路径、指纹、AI、自动标记和图标基础能力
 ├─ tests/
 │  ├─ unit/                         node:test 单元测试
 │  ├─ contracts/                    清单、能力边界与供应链契约测试
 │  └─ integration/                  VS Code Extension Host 集成测试
-├─ .vscode/settings.json            项目文件嵌套规则
 ├─ README.md / CHANGELOG.md         中文项目文档与版本变化记录
 ├─ LICENSE                          项目主许可证
 ├─ package.json                     生成结果，不是命令清单的唯一事实源
 └─ package-lock.json                可复现的 npm 依赖锁定
 ```
 
-`out/`、`.vscode-test/`、`node_modules/` 和根目录的 `package.nls*.json` 都是生成或依赖内容，不应手工修改；NLS 清单由编译生成到 `package.json` 同级供 VS Code 与 VSIX 使用，但不纳入源码管理，并在资源管理器中折叠到 `package.json` 下。扩展元数据和 npm 脚本定义在 `src/util/constants/BasePackage.ts`；命令、菜单、快捷键、设置和子菜单定义在 `src/util/constants/Commands.ts`；颜色定义在 `Colors.ts`。`npm run compile` 会先清理 `out/`、编译 TypeScript，再重新生成 `package.json` 和全部 `package.nls*.json`。Marketplace 不按客户端语言切换搜索元数据，因此默认目录使用中文标题与简介；扩展安装后，中文区域使用中文清单，VS Code 官方支持的非中文区域使用英文清单。
+`out/`、`.vscode-test/`、`node_modules/` 和根目录的 `package.nls*.json` 都是生成或依赖内容，不应手工修改；NLS 清单由编译生成到 `package.json` 同级供 VS Code 与 VSIX 使用，但不纳入源码管理，并在资源管理器中折叠到 `package.json` 下。扩展元数据和 npm 脚本定义在 `src/util/constants/BasePackage.ts`；命令、菜单、快捷键、设置和子菜单定义在 `src/util/constants/Commands.ts`；颜色定义在 `Colors.ts`。`npm run compile` 会先清理 `out/`、编译 TypeScript，再根据 `scripts/i18n/catalogs/manifest.<语言>.json` 重新生成 `package.json` 和 NLS 目录。Marketplace 不按访客语言切换搜索元数据，因此默认目录保持中文标题优先，并在同一个简短简介中加入英文核心价值和各支持语言的“代码书签”名称；30 个关键词则覆盖核心英文、简繁中文以及日、韩、越、西/葡、法、俄、德、意检索词。扩展安装后，各语言环境仍使用各自完整的母语清单，其他明确的非中文环境回退英文。
 
-运行时文案统一经过 `src/i18n/Localization.ts`：VS Code 的语言标识只要以 `zh` 开头就使用中文，其他语言环境全部使用英文。翻译只负责显示；命令 ID、菜单条件、Webview 消息、筛选/排序稳定值、配置键和持久化字段均不依赖译文。新增用户可见文本必须同时提供中英文，并由 `verify-localization.js` 检查清单键、运行时调用和成对文档。
+运行时文案统一使用 `localize('稳定键', { 命名参数 })`，13 套完整目录位于 `src/i18n/catalogs/`。业务源码不保存平行语言原文，也不能用译文参与条件判断；命令 ID、菜单条件、Webview 消息、筛选/排序稳定值、配置键和持久化字段始终与语言无关。运行时目录和 VS Code 在扩展激活前解析的命令、菜单、设置文案均跟随 `vscode.env.language`，因此插件界面始终与 VS Code 显示语言一致。简体中文是探测为空时的默认目录，`zh-Hans` 回退简体，`zh-Hant` 回退台繁，澳门地区回退港繁；明确但未注册的非中文语言回退英文。
+
+新增运行时文案时，应在所有已注册目录加入同一个稳定键，并保证 `{name}` 占位符集合完全一致，再由业务代码传入对应命名参数。新增一种界面语言需要增加统一导出 `messages` 的目录文件，在 `Localization.ts` 注册语言代码和格式区域，并在本地化验证器登记语言身份特征；不需要修改任何功能模块。清单语言则增加 `scripts/i18n/catalogs/manifest.<语言>.json`，生成器会自动发现。`verify-localization.js` 会逐项检查 13 种目录的发现与注册、目录键、占位符、技术标记、语言身份、静态调用、旧双文本接口、用户可见字面量、清单行为以及配套文档，缺键、结构漂移或翻译缓存残留都会使验证失败。
+
+开发时按职责定位入口：
+
+| 要修改的内容 | 主要位置 | 维护边界 |
+| --- | --- | --- |
+| 扩展元数据、设置、命令、菜单与快捷键 | `BasePackage.ts`、`Commands.ts`、`scripts/i18n/catalogs/` | `package.json` 与 `package.nls*.json` 是生成结果 |
+| 运行时界面文案与语言回退 | `src/i18n/Localization.ts`、`src/i18n/catalogs/` | 功能模块只引用稳定键；各目录必须拥有相同键和占位符 |
+| 书签字段、树规则、编解码和工作区顺序 | `src/models/` | 先保持持久化契约，再调整 Provider 的交互编排 |
+| 命令流程、树视图、保存、撤销和配置管理 | `src/commands/`、`src/providers/`、`src/subscriptions/` | VS Code 事件适配与用户工作流在这里汇合 |
+| 脚本信封、索引、导入、移动恢复和存储根转移 | `src/repository/`、`src/util/Persistence*.ts` | 所有磁盘数据都必须经过格式身份、版本和原子写入约束 |
+| AI 地址、协议、传输、响应解析与工作流 | `src/util/AI*.ts`、`src/providers/AI*.ts` | `util` 负责协议与安全边界，Provider 负责状态核验和应用结果 |
+| TODO、FIXME、BUG 自动标记 | `LanguageCommentProfiles.ts` → `CodeMarkerScanner.ts` → `CodeMarkerBookmarks.ts` → `CodeMarker*` Provider | 语言资格、词法扫描、树同步和生命周期逐层分开 |
+| 图标与配置管理 Webview | `src/util/quick_pick_icon/`、`BookmarkConfigurationManagerWebview.ts`、`resources/` | Host 提供白名单数据和本地化文本，Webview 只处理展示与稳定消息值 |
+| 自动化验证 | `tests/unit/`、`tests/contracts/`、`tests/integration/`、`scripts/verify-*.js` | 按纯逻辑、公开契约、真实 VS Code 生命周期和专项回归选择层级 |
 
 ## 2. 激活流程与视图状态
 
 `activate()` 必须同步完成命令、TreeView、订阅器和 UndoManager 的注册，随后把磁盘读取交给 Provider 后台执行，避免慢磁盘让 VS Code 激活超时。AI API Key 由 `ExtensionConfig` 从 VS Code 配置读取，不参与扩展激活时的独立存储初始化。
 
 `CodeBookmarkViewProvider` 是保留 VS Code API 外观的组合根，不再直接承载所有业务实现：AI 文件夹流程、配置管理和自动标记生命周期分别交给独立 Controller，保存、刷新、视图、文档变化等交给对应 Coordinator/Runner。`BookmarkRepository` 保持稳定 Facade，把候选源码索引、脚本信封编解码、文件节点编解码和导入目录扫描下沉到无循环依赖的单一职责模块；架构验证同时限制两个 Facade 的行数预算，防止逻辑重新堆回核心文件。
+
+目录之间采用概念上的依赖方向：`extension.ts` 负责装配，`commands/` 与 `subscriptions/` 适配 VS Code 命令和事件，`providers/` 编排完整工作流，`models/`、`repository/` 与 `util/` 提供领域、持久化和基础能力。这是新增代码应遵守的维护边界，不等同于所有目录都被形式化分层；现有架构守卫实际保证的是生产模块可达、运行时无循环依赖，以及两个核心 Facade 不突破体积预算。
 
 ```text
 extension.activate
@@ -449,11 +478,11 @@ AI 网络链路分为三个独立边界。`AIAddressClassifier` 统一判断本�
 
 ## 10. 自动标记与语言配置
 
-`LanguageCommentProfileRegistry` 遍历已安装扩展的 `contributes.languages`，安全解析带注释和尾逗号的语言配置文件，合并同一语言分散声明的扩展名、文件名、文件模式和注释语法。单个配置最大 512 KiB，最多读取 4,096 个语言贡献，并以最多 8 个并发任务加载。
+`LanguageCommentProfileRegistry` 先从已安装扩展的 `contributes.grammars` 确认哪些语言具有语法高亮，再读取 `contributes.languages` 指向的正式语言配置。只有同时具有 grammar、配置文件可读取且配置中存在有效注释语法的语言，才会得到自动标记扫描资格；同一语言分散声明的扩展名、文件名、文件模式和注释语法会在确认后合并。配置解析兼容注释和尾逗号，单个文件最大 512 KiB，最多读取 4,096 个语言贡献，并以最多 8 个并发任务加载。
 
-`CodeMarkerScanner` 是轻量词法扫描器，跟踪行注释、块注释、普通字符串、持久引号和部分语言的多行字符串；内置规则为动态配置读取失败时的兜底。`CodeMarkerBookmarks` 负责稳定复用原身份、保留用户标签/图标、提升手动子节点、清理消失标记和维持自动节点前缀。
+`CodeMarkerScanner` 是轻量词法扫描器，跟踪行注释、块注释、普通字符串、持久引号和部分语言的多行字符串，只接受注释开头具有明确结构的 TODO、FIXME、BUG 指令。内置语法提示只会细化已经确认的注释 token，例如 AutoHotkey 分号边界、多行字符串和持久引号；它不会按语言 ID 或扩展名单独授权扫描。没有已发现 profile、语言配置读取失败或文件只有普通文本/资源元数据时，扫描规则为空。`CodeMarkerBookmarks` 负责稳定复用原身份、保留用户标签/图标、提升手动子节点、清理消失标记和维持自动节点前缀。
 
-工作区后台扫描最多发现 2,000 个文件，默认跳过超过 2 MiB 的未打开文件，并使用 4 个并发读取任务。打开文档使用内存内容，不受后台文件大小限制，但仍受单配置 10,000 节点上限约束。
+工作区文件发现模式只由已经确认的语言贡献生成。后台扫描最多发现 2,000 个文件，默认跳过超过 2 MiB 的未打开文件，并使用 4 个并发读取任务；打开文档使用内存内容，不受后台文件大小限制。每个脚本最多生成 5,000 个自动标记，手动书签与自动标记组成的整份配置仍受 10,000 节点上限约束。
 
 ## 11. 图标系统与 Webview
 
@@ -468,6 +497,7 @@ IconPicker Webview 对字典字段和图标名做白名单校验，使用 CSP �
 ```bash
 npm ci
 npm run compile
+npm run lint
 npm run verify
 npm run test:unit
 npm run test:contract
@@ -479,18 +509,20 @@ npm run package:vsix
 ```
 
 - `npm run compile`：清理 `out/`、严格编译 TypeScript、将扩展运行时代码打包为单一入口，并生成 `package.json` 与本地化清单。
-- `npm run lint`：检查 `src/**/*.ts`、清单生成器和全部 `scripts/**/*.js`。
+- `npm run lint`：以零警告标准检查 `src/**/*.ts`、`scripts/**/*.js` 和 `tests/**/*.js`。
 - `npm run test:unit` / `npm run test:contract`：使用 Node 标准 `node:test` 运行单元测试和外部行为契约，不依赖第三方测试运行器。
 - `npm run test:coverage`：用 Node 原生覆盖率运行上述标准测试并执行最低覆盖率门槛。
-- `npm run verify`：依次执行 compile、零警告 lint、标准单元/契约测试和全部 `verify-*.js` 专项验证。
-- `npm run test:integration`：编译后自动查找并复用本机已安装的 VS Code，以隔离的临时用户目录启动真实 Extension Host；在中英文环境中验证激活、命令与配置，还实际执行添加书签、撤销/重做、落盘重载、VS Code 内移动和外部移动后的身份追随。找不到本机程序时明确失败，不会下载额外测试运行时。
+- `npm run verify`：依次执行 compile、零警告 lint、标准单元/契约测试和全部 `verify-*.js` 专项验证；其中激活守卫通过 TypeScript AST 检查真实 `AwaitExpression`，加载状态与视图切换守卫按方法结构定位，不把注释当成代码边界。
+- `npm run test:integration`：编译后自动查找并复用本机已安装的 VS Code，以隔离的临时用户目录启动真实 Extension Host；分别验证简中、港繁、台繁、英、日、越、韩、西、法、葡、俄、德、意 13 种清单、激活、命令与配置，并额外验证土耳其语宿主回退英文。简中和英文环境还会实际执行添加书签、撤销/重做、落盘重载、VS Code 内移动和外部移动后的身份追随，以及自动标记指令与 SVG 元数据反例。找不到本机程序时明确失败，不会下载额外测试运行时。
 - 如需指定其他 VS Code，可运行 `node scripts/integration/run-integration-tests.js "--vscode-executable=<Code.exe 路径>"`，或设置 `CODEBOOKMARK_VSCODE_EXECUTABLE_PATH`；显式路径优先于自动发现。
 - `npm run verify:icons`：单独核对 SVG 文件名、安全内容和字典一一对应。
 - `npm run package:list`：使用固定版本的 VS Code 官方打包工具预览 VSIX 文件清单。
 - `npm run package:vsix`：编译并生成可安装的 VSIX；可通过 `-- --out <文件名>` 指定输出路径。
 - `npm run check:release`：依次执行全量验证、扩展宿主集成测试、依赖审计和打包清单检查。
 
-当前标准测试与专项验证覆盖激活时序、工作区能力、持久化版本、AI 地址归一化、五类 AI 协议、同源路由回退、密钥、大小与取消，以及自动标记、导入导出、命令清单、存储根转移、移动重连、外部配置、保存队列、作用域、撤销、视图切换、图标资源和发布供应链。纯逻辑优先加入 `tests/unit`，公开清单或跨模块约束加入 `tests/contracts`，复杂历史回归保留在对应 `verify-*.js`，涉及 VS Code API 生命周期的行为必须补真实 Extension Host 测试。
+当前标准测试与专项验证覆盖激活时序、工作区能力、持久化版本、AI 地址归一化、五类 AI 协议、同源路由回退、密钥、大小与取消，以及自动标记、导入导出、命令清单、存储根转移、移动重连、外部配置、保存队列、作用域、撤销、视图切换、图标资源和发布供应链。模块图守卫当前验证 148 个生产 TypeScript 模块均可从声明入口到达，且运行时循环依赖为 0。纯逻辑优先加入 `tests/unit`，公开清单或跨模块约束加入 `tests/contracts`，复杂历史回归保留在对应 `verify-*.js`，涉及 VS Code API 生命周期的行为必须补真实 Extension Host 测试。
+
+`scripts/verify-chinese-comments.js` 当前覆盖 `.github/`、`config/`、`scripts/`、`src/` 和 `tests/` 中 303 个一方维护的 TypeScript、JavaScript、MJS 与 YAML 脚本。每个模块必须以至少两句结合实际职责的完整中文说明开头；守卫同时拒绝旧五段式模板、纯英文说明、重复说明句和整段复用。`resources/fuse.min.js` 等第三方代码以及 ESLint、TypeScript、覆盖率等机器指令不在中文改写范围内。
 
 图标维护流程：
 

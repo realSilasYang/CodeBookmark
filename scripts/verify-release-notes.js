@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-release-notes`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-release-notes` 对应契约。
- * 核心边界：通过断言锁定“verify-release-notes”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 从每个更新日志版本生成 Release 正文，检查标题层级、重要说明顺序和附件说明。
+ * 脚本读取仓库真实文件，围绕“从每个更新日志版本生成 Release 正文”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')

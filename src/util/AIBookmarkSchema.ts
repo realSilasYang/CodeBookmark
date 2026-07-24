@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIBookmarkSchema`。
- *
- * 实现要点：定义并校验结构化数据边界，拒绝缺失、越界或不受支持的字段组合。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`AIBookmark`、`AIOptimizedBookmark`、`normalizeAIBookmarkPayload`、`formatLineNumberedSource`、`resolveAIBookmarkLine`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 校验 AI 生成与优化 JSON，把行号、锚点、层级、标签和图标收敛为受信任结构。
+ * 行号不可靠时使用源码锚点消歧；无法唯一定位的结果会被丢弃，而不是猜一个相近位置。
  */
 import { findBestFingerprintLine } from './FingerprintMatcher'
 import { localize } from '../i18n/Localization'
@@ -61,10 +57,7 @@ function generatedBookmarkItems(payload: unknown): unknown[] {
 		const items = payload.bookmarks
 		if (Array.isArray(items)) return items
 	}
-	throw new Error(localize(
-		'AI 响应必须包含 bookmarks 数组。',
-		'AI response must contain a bookmarks array.',
-	))
+	throw new Error(localize("util.AIBookmarkSchema.aiResponseMustContainABookmarksArray"))
 }
 
 export function normalizeAIBookmarkPayload(payload: unknown): AIBookmark[] {
@@ -72,14 +65,14 @@ export function normalizeAIBookmarkPayload(payload: unknown): AIBookmark[] {
 
 	const normalizeItems = (items: unknown[], depth: number): AIBookmark[] => {
 		if (items.length > 0 && depth > MAX_AI_BOOKMARK_DEPTH) {
-			throw new Error(localize(`AI 书签层级不能超过 ${MAX_AI_BOOKMARK_DEPTH} 层`, `AI bookmark nesting cannot exceed ${MAX_AI_BOOKMARK_DEPTH} levels.`))
+			throw new Error(localize("util.AIBookmarkSchema.aiBookmarkNestingCannotExceedLevels", { MAX_AI_BOOKMARK_DEPTH }))
 		}
 		const normalized: AIBookmark[] = []
 
 		for (const value of items) {
 			visited++
 			if (visited > MAX_AI_BOOKMARKS) {
-				throw new Error(localize(`AI 单次生成不能超过 ${MAX_AI_BOOKMARKS} 个书签`, `AI cannot generate more than ${MAX_AI_BOOKMARKS} bookmarks in one request.`))
+				throw new Error(localize("util.AIBookmarkSchema.aiCannotGenerateMoreThanBookmarksInOneRequest", { MAX_AI_BOOKMARKS }))
 			}
 			if (!isJsonRecord(value)) continue
 
@@ -165,7 +158,7 @@ export function normalizeAIOptimizedBookmarks(
 	const normalized: AIOptimizedBookmark[] = []
 
 	if (!Array.isArray(payload)) {
-		throw new Error(localize('AI 响应必须是 JSON 数组。', 'AI response must be a JSON array.'))
+		throw new Error(localize("util.AIBookmarkSchema.aiResponseMustBeAJsonArray"))
 	}
 	for (const value of payload) {
 		if (!isJsonRecord(value)) continue

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `AISingleFileWorkflowRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`AIGenerationMode`、`AISingleFileWorkflowPort`、`runGenerateBookmarksForFile`、`runOptimizeBookmarksForFile`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 编排当前脚本的 AI 生成、追加、替换与标签优化，并在请求前后核对文件快照。
+ * 源文件或存储作用域在等待 AI 时发生变化会中止提交，避免把过期结果写进新内容。
  */
 import * as path from 'path'
 import * as vscode from 'vscode'
@@ -16,7 +12,7 @@ import { Helper } from '../util/Helper'
 import { applyAIOptimizationChanges, resolveAIOptimizationChanges } from '../util/AIOptimizationMutations'
 import { assertAIDocumentSnapshot } from '../util/AISourceSnapshot'
 import { formatBookmarkLevelSummary, summarizeBookmarks, summarizeBookmarkTrees } from '../util/BookmarkStatistics'
-import { buildAIBookmarks } from './AIBookmarkBuilder'
+import { buildAIBookmarks, expandGeneratedBookmarkTree } from './AIBookmarkBuilder'
 import type { AITaskRegistry } from './AITaskRegistry'
 import type { AIWorkflowGuard } from './AIWorkflowGuard'
 
@@ -31,6 +27,7 @@ export interface AISingleFileWorkflowPort {
 	documentLines(document: vscode.TextDocument): string[]
 	deleteBookmark(id: string): void
 	addBookmark(bookmark: Bookmark): void
+	persistGeneratedExpansion(storageScope: string): Promise<void>
 	saveUndoState(action: 'generateAIBookmarks' | 'optimizeAIBookmarks'): void
 	saveBookmarks(filePaths: string[]): void
 	refreshDecoration(): void
@@ -57,18 +54,18 @@ export async function runGenerateBookmarksForFile(
 	const taskKey = port.taskRegistry.fileTaskKey(taskScope, pathRel)
 
 	if (port.taskRegistry.isFileRunning(taskKey)) {
-		vscode.window.showWarningMessage(localize('当前文件已有 AI 任务正在运行，请稍候再试。', 'An AI task is already running for the current file. Try again shortly.'))
+		vscode.window.showWarningMessage(localize("providers.AISingleFileWorkflowRunner.anAiTaskIsAlreadyRunningForTheCurrent"))
 		return
 	}
 	const existingBookmarks = port.bookmarksForPath(pathRel)
 
 	if (mode === 'skip_existing' && existingBookmarks.length > 0) {
-		vscode.window.showInformationMessage(localize('当前文件已有书签，根据模式已跳过生成。', 'The current file already has bookmarks, so generation was skipped for this mode.'))
+		vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.theCurrentFileAlreadyHasBookmarksSoGenerationWas"))
 		return
 	}
 	const bookmarkInputSnapshot = port.workflowGuard.captureBookmarkInput(pathRel)
 	if (!port.taskRegistry.tryStartFile(taskKey)) {
-		vscode.window.showWarningMessage(localize('当前文件已有 AI 任务正在运行，请稍候再试。', 'An AI task is already running for the current file. Try again shortly.'))
+		vscode.window.showWarningMessage(localize("providers.AISingleFileWorkflowRunner.anAiTaskIsAlreadyRunningForTheCurrent"))
 		return
 	}
 
@@ -76,7 +73,7 @@ export async function runGenerateBookmarksForFile(
 		await AIService.confirmSourceSize(aiContentByteLength(codeContent), sourcePath)
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: localize('AI 智能代码书签提取运行中...', 'AI is generating code bookmarks…'),
+			title: localize("providers.AISingleFileWorkflowRunner.aiIsGeneratingCodeBookmarks"),
 			cancellable: true,
 		}, async (_progress, token) => {
 			let statusDisposable: vscode.Disposable | undefined
@@ -91,15 +88,12 @@ export async function runGenerateBookmarksForFile(
 				assertAIDocumentSnapshot(document, sourceVersion, codeContent, sourcePath)
 
 				if (!aiBookmarks || aiBookmarks.length === 0) {
-					vscode.window.showInformationMessage(localize('AI 未能发现需要添加书签的核心逻辑。', 'AI did not find any core logic that needs a bookmark.'))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiDidNotFindAnyCoreLogicThatNeeds"))
 					return
 				}
 				const currentBookmarks = port.bookmarksForPath(pathRel)
 				if (mode === 'skip_existing' && currentBookmarks.length > 0) {
-					vscode.window.showInformationMessage(localize(
-						'AI 分析期间当前文件已添加书签，根据模式未应用生成结果。',
-						'Bookmarks were added to the current file during AI analysis, so the generated result was not applied for this mode.',
-					))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.bookmarksWereAddedToTheCurrentFileDuringAi"))
 					return
 				}
 				if (mode === 'overwrite') port.workflowGuard.assertBookmarkInput(pathRel, bookmarkInputSnapshot)
@@ -113,17 +107,14 @@ export async function runGenerateBookmarksForFile(
 				)
 				if (built.roots.length === 0) {
 					const skipped = built.skipped > 0
-						? localize(`，已跳过 ${built.skipped} 个重复位置`, `; skipped ${built.skipped} duplicate locations`)
+						? localize("providers.AISingleFileWorkflowRunner.skippedDuplicateLocations", { skipped: built.skipped })
 						: ''
-					vscode.window.showInformationMessage(localize(
-						`AI 未生成可添加的新书签${skipped}；生成结果：${formatBookmarkLevelSummary(summarizeBookmarkTrees([]))}。`,
-						`AI did not generate any new bookmarks that could be added${skipped}. Generated: ${formatBookmarkLevelSummary(summarizeBookmarkTrees([]))}.`,
-					))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiDidNotGenerateAnyNewBookmarksThatCould", { skipped, formatBookmarkLevelSummary: formatBookmarkLevelSummary(summarizeBookmarkTrees([])) }))
 					return
 				}
 
 				if (statusDisposable) statusDisposable.dispose()
-				statusDisposable = vscode.window.setStatusBarMessage(localize('AI: 正在将智能书签落盘保存...', 'AI: Saving generated bookmarks…'))
+				statusDisposable = vscode.window.setStatusBarMessage(localize("providers.AISingleFileWorkflowRunner.aiSavingGeneratedBookmarks"))
 
 				port.saveUndoState('generateAIBookmarks')
 				if (mode === 'overwrite') {
@@ -132,23 +123,22 @@ export async function runGenerateBookmarksForFile(
 					}
 				}
 				for (const bookmark of built.roots) port.addBookmark(bookmark)
+				expandGeneratedBookmarkTree(built.roots)
 
 				port.saveBookmarks([document.uri.fsPath])
 				port.refreshDecoration()
+				await port.persistGeneratedExpansion(taskScope)
 				const skipped = built.skipped > 0
-					? localize(`，跳过 ${built.skipped} 个重复位置`, `; skipped ${built.skipped} duplicate locations`)
+					? localize("providers.AISingleFileWorkflowRunner.skippedDuplicateLocations2", { skipped: built.skipped })
 					: ''
 				const summary = summarizeBookmarkTrees(built.roots)
-				vscode.window.showInformationMessage(localize(
-					`AI 分析完成，生成结果：${formatBookmarkLevelSummary(summary)}${skipped}。`,
-					`AI analysis completed. Generated: ${formatBookmarkLevelSummary(summary)}${skipped}.`,
-				))
+				vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiAnalysisCompletedGenerated", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(summary), skipped }))
 			} catch (error: unknown) {
 				const message = errorMessage(error)
 				if (isUserCancelledError(error) || token.isCancellationRequested) {
-					vscode.window.showInformationMessage(localize('已取消 AI 书签生成任务。', 'AI bookmark generation was cancelled.'))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiBookmarkGenerationWasCancelled"))
 				} else {
-					vscode.window.showErrorMessage(localize(`AI 书签生成失败：${message}`, `AI bookmark generation failed: ${message}`))
+					vscode.window.showErrorMessage(localize("providers.AISingleFileWorkflowRunner.aiBookmarkGenerationFailed", { message }))
 				}
 			} finally {
 				if (statusDisposable) statusDisposable.dispose()
@@ -173,18 +163,18 @@ export async function runOptimizeBookmarksForFile(
 	const taskKey = port.taskRegistry.fileTaskKey(taskScope, pathRel)
 
 	if (port.taskRegistry.isFileRunning(taskKey)) {
-		vscode.window.showWarningMessage(localize('当前文件已有 AI 任务正在运行，请稍候再试。', 'An AI task is already running for the current file. Try again shortly.'))
+		vscode.window.showWarningMessage(localize("providers.AISingleFileWorkflowRunner.anAiTaskIsAlreadyRunningForTheCurrent"))
 		return
 	}
 
 	const existingBookmarks = port.bookmarksForPath(pathRel)
 	if (existingBookmarks.length === 0) {
-		vscode.window.showInformationMessage(localize('当前文件没有可以优化的书签。', 'The current file has no bookmarks to improve.'))
+		vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.theCurrentFileHasNoBookmarksToImprove"))
 		return
 	}
 	const bookmarkInputSnapshot = port.workflowGuard.captureBookmarkInput(pathRel)
 	if (!port.taskRegistry.tryStartFile(taskKey)) {
-		vscode.window.showWarningMessage(localize('当前文件已有 AI 任务正在运行，请稍候再试。', 'An AI task is already running for the current file. Try again shortly.'))
+		vscode.window.showWarningMessage(localize("providers.AISingleFileWorkflowRunner.anAiTaskIsAlreadyRunningForTheCurrent"))
 		return
 	}
 
@@ -192,7 +182,7 @@ export async function runOptimizeBookmarksForFile(
 		await AIService.confirmSourceSize(aiContentByteLength(codeContent), sourcePath)
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: localize('AI 书签优化运行中...', 'AI is improving bookmarks…'),
+			title: localize("providers.AISingleFileWorkflowRunner.aiIsImprovingBookmarks"),
 			cancellable: true,
 		}, async (_progress, token) => {
 			let statusDisposable: vscode.Disposable | undefined
@@ -214,12 +204,12 @@ export async function runOptimizeBookmarksForFile(
 				port.workflowGuard.assertBookmarkInput(pathRel, bookmarkInputSnapshot)
 
 				if (!optimizedList || optimizedList.length === 0) {
-					vscode.window.showInformationMessage(localize('AI 未返回任何有效的标签更新。', 'AI did not return any valid label updates.'))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiDidNotReturnAnyValidLabelUpdates"))
 					return
 				}
 
 				if (statusDisposable) statusDisposable.dispose()
-				statusDisposable = vscode.window.setStatusBarMessage(localize('AI: 正在应用优化后的书签...', 'AI: Applying bookmark improvements…'))
+				statusDisposable = vscode.window.setStatusBarMessage(localize("providers.AISingleFileWorkflowRunner.aiApplyingBookmarkImprovements"))
 				const changes = resolveAIOptimizationChanges(
 					optimizedList,
 					port.bookmarksForPath(pathRel),
@@ -233,22 +223,16 @@ export async function runOptimizeBookmarksForFile(
 					port.saveBookmarks([document.uri.fsPath])
 					port.refreshDecoration()
 					const summary = summarizeBookmarks(changes.map(change => change.bookmark))
-					vscode.window.showInformationMessage(localize(
-						`AI 书签优化完成，更新结果：${formatBookmarkLevelSummary(summary)}。`,
-						`AI bookmark improvement completed. Updated: ${formatBookmarkLevelSummary(summary)}.`,
-					))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiBookmarkImprovementCompletedUpdated", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(summary) }))
 				} else {
-					vscode.window.showInformationMessage(localize(
-						`AI 书签优化完成，但没有内容改变；更新结果：${formatBookmarkLevelSummary(summarizeBookmarks([]))}。`,
-						`AI bookmark improvement completed with no changes. Updated: ${formatBookmarkLevelSummary(summarizeBookmarks([]))}.`,
-					))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiBookmarkImprovementCompletedWithNoChangesUpdated", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(summarizeBookmarks([])) }))
 				}
 			} catch (error: unknown) {
 				const message = errorMessage(error)
 				if (isUserCancelledError(error) || token.isCancellationRequested) {
-					vscode.window.showInformationMessage(localize('已取消 AI 标签优化任务。', 'AI label improvement was cancelled.'))
+					vscode.window.showInformationMessage(localize("providers.AISingleFileWorkflowRunner.aiLabelImprovementWasCancelled"))
 				} else {
-					vscode.window.showErrorMessage(localize(`AI 标签优化失败：${message}`, `AI label improvement failed: ${message}`))
+					vscode.window.showErrorMessage(localize("providers.AISingleFileWorkflowRunner.aiLabelImprovementFailed", { message }))
 				}
 			} finally {
 				if (statusDisposable) statusDisposable.dispose()

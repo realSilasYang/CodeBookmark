@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `CodeMarkerScanner`。
- *
- * 实现要点：按受控规则扫描输入并生成结构化结果，同时限制范围、容量和误匹配。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`CODE_MARKER_ICON`、`MAX_CODE_MARKERS_PER_FILE`、`CodeMarkerMetadata`、`CodeMarkerOccurrence`、`CodeMarkerLineCommentToken`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 按照 VS Code 提供的注释语法扫描每行，只接受注释开头具有明确结构的 TODO/FIXME/BUG 指令。
+ * 字符串、普通说明文字、资源元数据和没有语法高亮依据的文件不会生成自动书签。
  */
 import * as path from 'path'
 
@@ -71,8 +67,8 @@ const HASH_PROFILE: CodeMarkerSyntaxProfile = {
 	blockComments: [],
 }
 const AUTOHOTKEY_PROFILE: CodeMarkerSyntaxProfile = {
-	// AutoHotkey 仅在分号位于首个非空白位置，或前面存在空白时把它视为注释分隔符；
-	// 当前支持的 AutoHotkey 方言同时允许 C 风格块注释。
+	// AutoHotkey 的分号只有出现在行首非空白处，或前面留有空白时才开始注释；
+	// 直接跟在表达式后的分号可能属于源码。其块注释则继续按 /* ... */ 处理。
 	lineComments: [{ value: ';', requiresWhitespaceBefore: true }],
 	blockComments: [['/*', '*/']],
 }
@@ -159,9 +155,8 @@ export function supportsCodeMarkerSyntax(
 }
 
 function markerDirective(segment: string): { marker: CodeMarkerKind, offset: number, descriptionStart: number } | undefined {
-	// 标记必须是显式指令，不能只是注释说明中恰好出现的普通单词。
-	// JSDoc 星号、@TODO 和 [TODO] 属于显式结构；裸标记后若带说明必须使用标点，
-	// 这样“BUG Icon”一类普通标题仍会被判定为说明文字。
+	// 先跨过 JSDoc 行首星号，再识别 @TODO、[TODO] 或裸标记。裸标记后若还有说明，
+	// 必须用冒号、破折号等边界隔开；这样“BUG Icon”仍是普通标题，而不是待办指令。
 	const prefix = /^[\t ]*(?:\*[\t ]*)?/u.exec(segment)?.[0] ?? ''
 	let cursor = prefix.length
 	const atForm = segment[cursor] === '@'

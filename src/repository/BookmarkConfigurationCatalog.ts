@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `BookmarkConfigurationCatalog`。
- *
- * 实现要点：维护经过审计的静态条目与查找元数据，使展示和语义匹配保持稳定。
- * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
- * 主要入口：`BookmarkConfigurationEntry`、`BookmarkConfigurationDeleteRequest`、`BookmarkConfigurationDeletionResult`、`listBookmarkConfigurationFiles`、`removeBookmarkConfigurationFiles`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 枚举存储根目录中的脚本配置、索引、迁移日志和历史残留，计算管理页面所需的健康信息。
+ * 删除操作按文件类别白名单执行，并在返回结果中区分成功、跳过和失败，避免误清理用户文件。
  */
 import * as crypto from 'crypto'
 import * as fs from 'fs'
@@ -12,6 +8,7 @@ import * as path from 'path'
 import { localize } from '../i18n/Localization'
 import { isJsonRecord } from '../util/JsonRecord'
 import { decodeWorkspaceOrderPersistence } from '../models/WorkspaceOrder'
+import { decodeWorkspaceLayoutPersistence, workspaceNodeReferenceKey } from '../models/WorkspaceLayout'
 import { decodePersistenceRecord, PersistenceFormats } from '../util/PersistenceSchema'
 import { isScriptId } from '../util/ScriptIdentity'
 import {
@@ -25,9 +22,9 @@ const INSPECTION_CONCURRENCY = 12
 const MAX_INSPECTED_BOOKMARK_NODES = 10_000
 const MAX_INSPECTED_BOOKMARK_DEPTH = 64
 
-type BookmarkConfigurationEntryKind = 'script' | 'workspaceOrder' | 'transferJournal'
-type BookmarkConfigurationRole = 'primary' | 'backup' | 'conflict' | 'superseded' | 'workspaceOrder' | 'transferJournal' | 'unknown'
-type BookmarkConfigurationHealth = 'bound' | 'missing' | 'empty' | 'snapshot' | 'metadata' | 'invalid'
+type BookmarkConfigurationEntryKind = 'script' | 'workspaceOrder' | 'workspaceLayout' | 'transferJournal' | 'temporaryArtifact'
+type BookmarkConfigurationRole = 'primary' | 'backup' | 'conflict' | 'superseded' | 'workspaceOrder' | 'workspaceLayout' | 'transferJournal' | 'batchRenameTemporary' | 'unknown'
+type BookmarkConfigurationHealth = 'bound' | 'missing' | 'empty' | 'snapshot' | 'valid' | 'temporary' | 'invalid'
 
 export interface BookmarkConfigurationEntry {
 	kind: BookmarkConfigurationEntryKind
@@ -52,6 +49,12 @@ export interface BookmarkConfigurationEntry {
 	workspaceName?: string
 	workspacePathHash?: string
 	orderedPaths?: readonly string[]
+	layoutNodeCount?: number
+	layoutHiddenFileCount?: number
+	layoutCrossFileRelationCount?: number
+	layoutPinnedContainer?: string
+	layoutExpandedNodeCount?: number
+	layoutCollapsedNodeCount?: number
 	transferStatus?: 'in_progress' | 'complete'
 	transferSource?: string
 	transferTarget?: string
@@ -93,15 +96,19 @@ function isTemporaryConfiguration(fileName: string): boolean {
 	return fileName.toLowerCase().endsWith('.tmp')
 }
 
+function isBatchRenameDraft(fileName: string): boolean {
+	return /^batch-rename-\d+\.txt$/i.test(fileName)
+}
+
 const emptyBookmarkSummary = (): BookmarkLevelSummary => ({ total: 0, levelCounts: [] })
 
 function storageRelativePath(storageRoot: string, filePath: string): string {
 	return path.relative(path.resolve(storageRoot), path.resolve(filePath)).split(path.sep).join('/')
 }
 
-function metadataEntryBase(
-	kind: 'workspaceOrder' | 'transferJournal',
-	role: 'workspaceOrder' | 'transferJournal',
+function recordEntryBase(
+	kind: 'workspaceOrder' | 'workspaceLayout' | 'transferJournal' | 'temporaryArtifact',
+	role: BookmarkConfigurationRole,
 	filePath: string,
 	storageRoot: string,
 	stat: fs.Stats,
@@ -122,6 +129,10 @@ function metadataEntryBase(
 		invalidBookmarkCount: 0,
 		labelPreview: [],
 	}
+}
+
+function validRecordHealth(role: BookmarkConfigurationRole): BookmarkConfigurationHealth {
+	return role === 'backup' || role === 'conflict' || role === 'superseded' ? 'snapshot' : 'valid'
 }
 
 function configurationRole(fileName: string): BookmarkConfigurationRole {
@@ -220,7 +231,7 @@ async function inspectBookmarkConfigurationFile(
 			modifiedAt: stat.mtimeMs,
 			role,
 			health: 'invalid',
-			problem: localize('配置文件过大，未解析', 'Configuration file is too large and was not parsed'),
+			problem: localize("repository.BookmarkConfigurationCatalog.configurationFileIsTooLargeAndWasNotParsed"),
 			sourceExists: false,
 			bookmarkSummary: emptyInspection.summary,
 			automaticBookmarkCount: 0,
@@ -250,7 +261,7 @@ async function inspectBookmarkConfigurationFile(
 			modifiedAt: stat.mtimeMs,
 			role,
 			health: 'invalid',
-			problem: localize('JSON 格式损坏', 'Invalid JSON'),
+			problem: localize("repository.BookmarkConfigurationCatalog.invalidJson"),
 			sourceExists: false,
 			bookmarkSummary: emptyInspection.summary,
 			automaticBookmarkCount: 0,
@@ -262,7 +273,8 @@ async function inspectBookmarkConfigurationFile(
 	try {
 		parsed = decodePersistenceRecord(parsed, PersistenceFormats.script).value
 	} catch {
-		// 下方健康检查会把不受支持的持久化信封统一报告为无效配置。
+		// 能读成 JSON 不代表就是当前配置。格式身份和版本留给下面的健康检查统一判断，
+		// 这样旧版、异类和损坏信封都会以同一种“无效配置”状态呈现。
 		parsed = undefined
 	}
 	const script = isJsonRecord(parsed) && isJsonRecord(parsed.script) ? parsed.script : undefined
@@ -311,8 +323,8 @@ async function inspectBookmarkConfigurationFile(
 		role,
 		health,
 		problem: validEnvelope ? undefined : identityMatchesFile
-			? localize('缺少有效的脚本身份、绝对路径或书签数组', 'Missing a valid script identity, absolute path, or bookmarks array')
-			: localize('配置文件名与脚本身份不一致', 'Configuration file name does not match the script identity'),
+			? localize("repository.BookmarkConfigurationCatalog.missingAValidScriptIdentityAbsolutePathOrBookmarks")
+			: localize("repository.BookmarkConfigurationCatalog.configurationFileNameDoesNotMatchTheScriptIdentity"),
 		scriptId,
 		scriptPath,
 		sourceExists,
@@ -329,6 +341,7 @@ async function inspectWorkspaceOrderFile(
 	filePath: string,
 	storageRoot: string,
 	folderName: string,
+	role: BookmarkConfigurationRole = 'workspaceOrder',
 ): Promise<BookmarkConfigurationEntry | undefined> {
 	let stat: fs.Stats
 	let content: Buffer
@@ -346,9 +359,9 @@ async function inspectWorkspaceOrderFile(
 		parsed = JSON.parse(content.toString('utf8')) as unknown
 	} catch {
 		return {
-			...metadataEntryBase('workspaceOrder', 'workspaceOrder', filePath, storageRoot, stat, content),
+			...recordEntryBase('workspaceOrder', role, filePath, storageRoot, stat, content),
 			health: 'invalid',
-			problem: localize('工作区排序 JSON 格式损坏', 'Workspace order JSON is invalid'),
+			problem: localize("repository.BookmarkConfigurationCatalog.workspaceOrderJsonIsInvalid"),
 			workspaceName: match?.[1] ?? folderName,
 			workspacePathHash: match?.[2],
 		}
@@ -362,14 +375,81 @@ async function inspectWorkspaceOrderFile(
 		validOrder = false
 	}
 	return {
-		...metadataEntryBase('workspaceOrder', 'workspaceOrder', filePath, storageRoot, stat, content),
-		health: validOrder ? 'metadata' : 'invalid',
-		problem: validOrder ? undefined : localize('工作区排序文件不是有效的路径数组', 'Workspace order file is not a valid array of paths'),
+		...recordEntryBase('workspaceOrder', role, filePath, storageRoot, stat, content),
+		health: validOrder ? validRecordHealth(role) : 'invalid',
+		problem: validOrder ? undefined : localize("repository.BookmarkConfigurationCatalog.workspaceOrderFileIsNotAValidArrayOf"),
 		workspaceName: match?.[1] ?? folderName,
 		workspacePathHash: match?.[2],
 		orderedPaths,
 		labelPreview: orderedPaths.slice(0, 8),
 	}
+}
+
+async function inspectWorkspaceLayoutFile(
+	filePath: string,
+	storageRoot: string,
+	folderName: string,
+	role: BookmarkConfigurationRole = 'workspaceLayout',
+): Promise<BookmarkConfigurationEntry | undefined> {
+	let stat: fs.Stats
+	let content: Buffer
+	try {
+		stat = await fs.promises.stat(filePath)
+		if (!stat.isFile()) return undefined
+		content = await fs.promises.readFile(filePath)
+	} catch (error) {
+		if (errorCode(error) === 'ENOENT') return undefined
+		throw error
+	}
+	const match = /^(.+)_([0-9a-f]{16})$/i.exec(folderName)
+	try {
+		const { layout } = decodeWorkspaceLayoutPersistence(JSON.parse(content.toString('utf8')))
+		const crossFileRelations = layout.entries.filter(entry => entry.parent
+			&& entry.node.scriptId !== entry.parent.scriptId).length
+		const pinned = layout.pinnedContainer ? workspaceNodeReferenceKey(layout.pinnedContainer) : undefined
+		const expandedNodes = layout.expansionStates.filter(state => state.expanded).length
+		const collapsedNodes = layout.expansionStates.length - expandedNodes
+		return {
+			...recordEntryBase('workspaceLayout', role, filePath, storageRoot, stat, content),
+			health: validRecordHealth(role),
+			workspaceName: match?.[1] ?? folderName,
+			workspacePathHash: match?.[2],
+			layoutNodeCount: layout.entries.length,
+			layoutHiddenFileCount: layout.hiddenFiles.length,
+			layoutCrossFileRelationCount: crossFileRelations,
+			layoutPinnedContainer: pinned,
+			layoutExpandedNodeCount: expandedNodes,
+			layoutCollapsedNodeCount: collapsedNodes,
+			labelPreview: [
+				localize("repository.BookmarkConfigurationCatalog.nodes", { entriesCount: layout.entries.length }),
+				localize("repository.BookmarkConfigurationCatalog.crossFileRelationships", { crossFileRelations }),
+				localize("repository.BookmarkConfigurationCatalog.expandedCollapsed", { expandedNodes, collapsedNodes }),
+			],
+		}
+	} catch (error) {
+		return {
+			...recordEntryBase('workspaceLayout', role, filePath, storageRoot, stat, content),
+			health: 'invalid',
+			problem: localize("repository.BookmarkConfigurationCatalog.workspaceLayoutIsInvalid", { error }),
+			workspaceName: match?.[1] ?? folderName,
+			workspacePathHash: match?.[2],
+		}
+	}
+}
+
+function workspaceRecordRole(
+	fileName: string,
+	primaryFileName: '_workspace_order.json' | '_workspace_layout.json',
+): BookmarkConfigurationRole | undefined {
+	const lower = fileName.toLowerCase()
+	const primary = primaryFileName.toLowerCase()
+	if (lower === primary) return primaryFileName === '_workspace_order.json' ? 'workspaceOrder' : 'workspaceLayout'
+	if (lower === `${primary}.transfer-base` || lower.startsWith(`${primary}.transfer-copy_`)) return 'backup'
+	const stem = primary.slice(0, -'.json'.length)
+	if (new RegExp(`^${stem}\\.transfer-conflict_[0-9a-f]+(?:_\\d+)?\\.json$`).test(lower)) return 'conflict'
+	if (primaryFileName === '_workspace_layout.json'
+		&& new RegExp(`^${stem}\\.relocation-conflict_[0-9a-f]+\\.json$`).test(lower)) return 'conflict'
+	return undefined
 }
 
 async function inspectTransferJournal(
@@ -386,12 +466,12 @@ async function inspectTransferJournal(
 		if (errorCode(error) === 'ENOENT') return undefined
 		throw error
 	}
-	const base = metadataEntryBase('transferJournal', 'transferJournal', filePath, storageRoot, stat, content)
+	const base = recordEntryBase('transferJournal', 'transferJournal', filePath, storageRoot, stat, content)
 	let parsed: unknown
 	try {
 		parsed = JSON.parse(content.toString('utf8')) as unknown
 	} catch {
-		return { ...base, health: 'invalid', problem: localize('存储迁移记录 JSON 格式损坏', 'Storage transfer journal JSON is invalid') }
+		return { ...base, health: 'invalid', problem: localize("repository.BookmarkConfigurationCatalog.storageTransferJournalJsonIsInvalid") }
 	}
 	try {
 		parsed = decodePersistenceRecord(parsed, PersistenceFormats.storageTransfer).value
@@ -420,11 +500,8 @@ async function inspectTransferJournal(
 		&& copiedFiles !== undefined && mergedFiles !== undefined && conflictFiles !== undefined
 	return {
 		...base,
-		health: valid ? 'metadata' : 'invalid',
-		problem: valid ? undefined : localize(
-			'存储迁移记录缺少有效状态、来源、目标、开始时间或文件计数',
-			'Storage transfer journal is missing a valid status, source, target, start time, or file counts',
-		),
+		health: valid ? 'valid' : 'invalid',
+		problem: valid ? undefined : localize("repository.BookmarkConfigurationCatalog.storageTransferJournalIsMissingAValidStatusSource"),
 		transferStatus: status,
 		transferSource: source,
 		transferTarget: target,
@@ -437,7 +514,38 @@ async function inspectTransferJournal(
 	}
 }
 
-async function listWorkspaceOrderEntries(storageRoot: string): Promise<BookmarkConfigurationEntry[]> {
+async function inspectBatchRenameDraft(
+	filePath: string,
+	storageRoot: string,
+	folderName: string,
+): Promise<BookmarkConfigurationEntry | undefined> {
+	let stat: fs.Stats
+	let content: Buffer
+	try {
+		stat = await fs.promises.stat(filePath)
+		if (!stat.isFile()) return undefined
+		content = await fs.promises.readFile(filePath)
+	} catch (error) {
+		if (errorCode(error) === 'ENOENT') return undefined
+		throw error
+	}
+	const match = /^(.+)_([0-9a-f]{16})$/i.exec(folderName)
+	const preview = content.toString('utf8')
+		.split(/\r?\n/)
+		.map(line => line.replace(/^\t+/, '').trim())
+		.filter(Boolean)
+		.slice(0, 8)
+	return {
+		...recordEntryBase('temporaryArtifact', 'batchRenameTemporary', filePath, storageRoot, stat, content),
+		health: 'temporary',
+		problem: localize("repository.BookmarkConfigurationCatalog.aTemporaryFileLeftWhenABatchRenameEditor"),
+		workspaceName: match?.[1] ?? folderName,
+		workspacePathHash: match?.[2],
+		labelPreview: preview,
+	}
+}
+
+async function listWorkspaceRecordEntries(storageRoot: string): Promise<BookmarkConfigurationEntry[]> {
 	const scopesFolder = path.join(storageRoot, 'scopes')
 	let folders: fs.Dirent[]
 	try {
@@ -448,9 +556,28 @@ async function listWorkspaceOrderEntries(storageRoot: string): Promise<BookmarkC
 	}
 	const entries: BookmarkConfigurationEntry[] = []
 	for (const folder of folders.filter(item => item.isDirectory()).sort((left, right) => left.name.localeCompare(right.name))) {
-		const filePath = path.join(scopesFolder, folder.name, '_workspace_order.json')
-		const entry = await inspectWorkspaceOrderFile(filePath, storageRoot, folder.name)
-		if (entry) entries.push(entry)
+		const scopeFolder = path.join(scopesFolder, folder.name)
+		const files = (await fs.promises.readdir(scopeFolder, { withFileTypes: true }))
+			.filter(entry => entry.isFile() && !isTemporaryConfiguration(entry.name))
+			.sort((left, right) => left.name.localeCompare(right.name))
+		for (const file of files) {
+			if (isBatchRenameDraft(file.name)) {
+				const entry = await inspectBatchRenameDraft(path.join(scopeFolder, file.name), storageRoot, folder.name)
+				if (entry) entries.push(entry)
+				continue
+			}
+			const orderRole = workspaceRecordRole(file.name, '_workspace_order.json')
+			if (orderRole) {
+				const entry = await inspectWorkspaceOrderFile(path.join(scopeFolder, file.name), storageRoot, folder.name, orderRole)
+				if (entry) entries.push(entry)
+				continue
+			}
+			const layoutRole = workspaceRecordRole(file.name, '_workspace_layout.json')
+			if (layoutRole) {
+				const entry = await inspectWorkspaceLayoutFile(path.join(scopeFolder, file.name), storageRoot, folder.name, layoutRole)
+				if (entry) entries.push(entry)
+			}
+		}
 	}
 	return entries
 }
@@ -489,7 +616,7 @@ export async function listBookmarkConfigurationFiles(
 	))
 	return [
 		...entries.filter((entry): entry is BookmarkConfigurationEntry => entry !== undefined),
-		...await listWorkspaceOrderEntries(storageRoot),
+		...await listWorkspaceRecordEntries(storageRoot),
 		...await listTransferJournalEntries(storageRoot),
 	]
 }
@@ -556,7 +683,8 @@ export async function removeBookmarkConfigurationFiles(
 		}
 		try {
 			await port.deleteFile(entry.filePath)
-			if (entry.kind === 'workspaceOrder' && port.deleteEmptyDirectory) {
+			if ((entry.kind === 'workspaceOrder' || entry.kind === 'workspaceLayout' || entry.kind === 'temporaryArtifact')
+				&& port.deleteEmptyDirectory) {
 				try {
 					await port.deleteEmptyDirectory(path.dirname(entry.filePath))
 				} catch (error) {

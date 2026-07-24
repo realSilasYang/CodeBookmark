@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责图标选择界面与资源检索，具体对象为 `IconPickerWebview`。
- *
- * 实现要点：生成受 CSP 约束的界面资源，并通过结构化消息处理用户操作。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`shouldShowRestoreDefaultIcon`、`IconPickerWebview`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 生成支持搜索、分类、最近使用和恢复默认值的图标选择 Webview。
+ * 页面通过结构化消息回传选择结果，并在 CSP、主题切换和键盘操作下保持相同状态。
  */
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
@@ -63,7 +59,7 @@ export class IconPickerWebview {
 
         const panel = vscode.window.createWebviewPanel(
             'iconPicker',
-            localize('🎨 选择书签图标', '🎨 Choose a Bookmark Icon'),
+            localize("util.quickpickicon.IconPickerWebview.chooseABookmarkIcon"),
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -96,7 +92,7 @@ export class IconPickerWebview {
         this._panel.webview.onDidReceiveMessage(
             (message: unknown) => {
                 void this._handleMessage(message).catch(error => {
-                    logger.error(localize(`处理图标选择消息失败：${error}`, `Failed to handle an icon picker message: ${error}`));
+                    logger.error(localize("util.quickpickicon.IconPickerWebview.failedToHandleAnIconPickerMessage", { error }));
                 });
             },
             null,
@@ -164,14 +160,14 @@ export class IconPickerWebview {
     private _update(): void {
         const generation = ++this._renderGeneration;
         if (!iconDictionaryCatalog.isLoaded) {
-            this._panel.webview.html = `<!DOCTYPE html><html lang="${currentLanguage()}"><body>${localize('正在加载图标…', 'Loading icons…')}</body></html>`;
+            this._panel.webview.html = `<!DOCTYPE html><html lang="${currentLanguage()}"><body>${localize("util.quickpickicon.IconPickerWebview.loadingIcons")}</body></html>`;
         }
         void this._getHtmlForWebview().then(html => {
             if (!this._disposed && generation === this._renderGeneration) this._panel.webview.html = html;
         }).catch(error => {
-            logger.error(localize(`加载图标选择器失败：${error}`, `Failed to load the icon picker: ${error}`));
+            logger.error(localize("util.quickpickicon.IconPickerWebview.failedToLoadTheIconPicker", { error }));
             if (!this._disposed && generation === this._renderGeneration) {
-                this._panel.webview.html = `<!DOCTYPE html><html lang="${currentLanguage()}"><body>${localize('无法加载图标资源。', 'Unable to load icon resources.')}</body></html>`;
+                this._panel.webview.html = `<!DOCTYPE html><html lang="${currentLanguage()}"><body>${localize("util.quickpickicon.IconPickerWebview.unableToLoadIconResources")}</body></html>`;
             }
         });
     }
@@ -184,24 +180,21 @@ export class IconPickerWebview {
         const locale = currentFormattingLocale();
         const htmlLanguage = currentLanguage();
         const text = {
-            addRecent: localize('添加到最近使用', 'Add to recently used'),
-            brandName: localize('代码书签', 'CodeBookmark'),
-            categoryArchitecture: localize('核心架构', 'Architecture'),
-            categoryBrand: localize('品牌徽标', 'Brand Logos'),
-            categoryFun: localize('趣味标签', 'Fun Tags'),
-            categoryStatus: localize('代码状态', 'Code Status'),
-            categoryUi: localize('界面资源', 'UI Resources'),
-            emptyRecent: localize('暂无最近使用记录', 'No recently used icons'),
-            noMatches: localize('未找到匹配的图标', 'No matching icons found'),
-            recent: localize('最近使用', 'Recently Used'),
-            remove: localize('移除', 'Remove'),
-            restoreDefault: localize('恢复默认', 'Restore Default'),
-            searchPlaceholder: localize(
-                `在 ${iconDictionary.length.toLocaleString(locale)} 个代码书签图标中搜索（支持中英双语检索）`,
-                `Search ${iconDictionary.length.toLocaleString(locale)} bookmark icons in English or Chinese`,
-            ),
-            selectIcon: localize('选择书签图标', 'Choose a Bookmark Icon'),
-            searchableKeywords: localize('可以搜索这些关键词：{keywords}', 'Searchable keywords: {keywords}'),
+            addRecent: localize("util.quickpickicon.IconPickerWebview.addToRecentlyUsed"),
+            brandName: localize("util.quickpickicon.IconPickerWebview.codebookmark"),
+            categoryArchitecture: localize("util.quickpickicon.IconPickerWebview.architecture"),
+            categoryBrand: localize("util.quickpickicon.IconPickerWebview.brandLogos"),
+            categoryFun: localize("util.quickpickicon.IconPickerWebview.funTags"),
+            categoryStatus: localize("util.quickpickicon.IconPickerWebview.codeStatus"),
+            categoryUi: localize("util.quickpickicon.IconPickerWebview.uiResources"),
+            emptyRecent: localize("util.quickpickicon.IconPickerWebview.noRecentlyUsedIcons"),
+            noMatches: localize("util.quickpickicon.IconPickerWebview.noMatchingIconsFound"),
+            recent: localize("util.quickpickicon.IconPickerWebview.recentlyUsed"),
+            remove: localize("util.quickpickicon.IconPickerWebview.remove"),
+            restoreDefault: localize("util.quickpickicon.IconPickerWebview.restoreDefault"),
+            searchPlaceholder: localize("util.quickpickicon.IconPickerWebview.searchBookmarkIconsInEnglishOrChinese", { locale: iconDictionary.length.toLocaleString(locale) }),
+            selectIcon: localize("util.quickpickicon.IconPickerWebview.chooseABookmarkIcon2"),
+            searchableKeywords: localize("util.quickpickicon.IconPickerWebview.searchableKeywords"),
         };
         const textJson = JSON.stringify(text)
             .replace(/</g, '\\u003c')
@@ -232,7 +225,8 @@ export class IconPickerWebview {
             </div>
         `).join('');
 
-        // 根据同步后的最近图标状态动态生成“最近使用”标签页。
+        // “最近使用”来自扩展同步进来的最新状态，不能写死在初始 HTML 中；
+        // 每次状态更新都重建该标签页，跨设备同步后的顺序才能立即反映出来。
         let recentInnerGrid = '';
         const showRestoreDefault = shouldShowRestoreDefaultIcon(this._currentIcon, this._defaultIcon);
         

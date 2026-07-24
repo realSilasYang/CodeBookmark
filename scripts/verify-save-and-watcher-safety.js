@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-save-and-watcher-safety`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-save-and-watcher-safety` 对应契约。
- * 核心边界：通过断言锁定“verify-save-and-watcher-safety”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查保存队列与配置监听器的互斥和忽略窗口，内部写盘不能触发自我重载循环。
+ * 脚本读取仓库真实文件，围绕“检查保存队列与配置监听器的互斥和忽略窗口”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -24,15 +21,15 @@ const saveCoordinator = fs.readFileSync('src/providers/BookmarkSaveCoordinator.t
 const viewLoadFinalizer = fs.readFileSync('src/providers/ViewLoadFinalizer.ts', 'utf8')
 const orderLoader = fs.readFileSync('src/providers/WorkspaceOrderViewLoader.ts', 'utf8')
 const changeClassifier = fs.readFileSync('src/providers/BookmarkConfigChangeClassifier.ts', 'utf8')
-const reloadRunner = fs.readFileSync('src/providers/ExternalBookmarkReloadRunner.ts', 'utf8')
 const watcherLifecycle = fs.readFileSync('src/providers/ConfigWatcherLifecycle.ts', 'utf8')
 const watcherCoordinator = fs.readFileSync('src/providers/BookmarkConfigWatcherCoordinator.ts', 'utf8')
+const fileUtils = fs.readFileSync('src/util/FileUtils.ts', 'utf8')
 
 assert.doesNotMatch(provider, /saveBookmarksToFile\(\s*\)/)
 assert.match(provider, /private saveAllBookmarksToFile\(\)/)
-assert.match(provider, /public saveBookmarkNodeState\(bookmark: Bookmark\)/)
+assert.match(provider, /public saveTreeNodeExpansionState\(bookmark: Bookmark\)/)
 assert.equal((folderAIRunner.match(/port\.saveBookmarks\(\[filePath\]\)/g) || []).length, 2)
-assert.match(view, /saveBookmarkNodeState\(event\.element\)/)
+assert.equal((view.match(/saveTreeNodeExpansionState\(event\.element\)/g) || []).length, 2)
 
 assert.match(subscriber, /isExcludedSourceRelativePath/)
 assert.match(subscriber, /watcher\.onDidCreate/)
@@ -84,25 +81,32 @@ assert.doesNotMatch(provider, /const canIncrementallyRead = \(dir: string\)/)
 assert.match(changeClassifier, /collectExternalChanges\(directory\)/)
 assert.match(changeClassifier, /filename === '_workspace_order\.json'/)
 assert.match(changeClassifier, /scriptConfigFilename\.test\(filename\)/)
-assert.match(provider, /runExternalBookmarkReload\(fileNames, scope, this\.currentScopeFilePath/)
+assert.match(provider, /private async reloadExternalBookmarkFiles\(fileNames: readonly string\[\]\)/)
+assert.match(provider, /await this\.flushPendingSaves\(true\)[\s\S]*?await this\.refresh\(undefined, this\.currentStorageScope, true\)/)
 assert.doesNotMatch(provider, /const scriptIds = new Set\(normalizedNames/)
-assert.match(reloadRunner, /bookmarks\.mergeDuplicateFileNodes\(scriptIds\)/)
-assert.match(reloadRunner, /port\.clearExternalBookmarkCaches\(\)/)
-assert.match(reloadRunner, /await port\.publishTransition\(/)
 assert.match(provider, /private readonly configWatcherCoordinator = new BookmarkConfigWatcherCoordinator/)
 assert.match(provider, /return this\.configWatcherCoordinator\.setup\(generation, this\.configWatcherCoordinatorPort\(\)\)/)
 assert.match(watcherCoordinator, /private readonly watcherLifecycle = new ConfigWatcherLifecycle\(\)/)
 assert.match(watcherCoordinator, /await this\.watcherLifecycle\.replace\(/)
+const workspaceFolderResolver = fileUtils.slice(
+  fileUtils.indexOf('getWorkspaceBookmarkFolder('),
+  fileUtils.indexOf('getScriptStoreFolder('),
+)
+assert.doesNotMatch(workspaceFolderResolver, /mkdirSync|existsSync/)
+assert.match(provider, /private async writeWorkspaceMetadata\(/)
+assert.match(provider, /if \(written && !directoryExisted\) await this\.setupConfigWatcher\(\)/)
 assert.doesNotMatch(provider, /private configWatchers: fs\.FSWatcher\[\]/)
 assert.match(watcherLifecycle, /if \(!port\.isCurrent\(\)\)/)
 assert.match(watcherLifecycle, /this\.close\(\)[\s\S]*?this\.watchers = prepared/)
 assert.match(watcherLifecycle, /prepared\.forEach\(watcher => watcher\.close\(\)\)/)
 assert.match(provider, /saveAllBookmarks: \(\) => this\.saveAllBookmarksToFile\(\)/)
+assert.equal((provider.match(/deleteFile: filePath => fileUtils\.deleteJsonFileAsync\(filePath\)/g) || []).length, 2)
 assert.match(provider, /startConfigWatcher: candidateGeneration =>/)
 assert.match(provider, /startBackgroundEnhancements: candidateGeneration =>/)
 assert.match(provider, /closeConfigWatchers: \(\) =>/)
 assert.match(viewLoadFinalizer, /if \(prepared\?\.contentUpdated\) port\.saveAllBookmarks\(\)/)
-assert.match(viewLoadFinalizer, /if \(prepared\) port\.persistWorkspaceOrder\(prepared, generation\)/)
+assert.match(viewLoadFinalizer, /if \(prepared\) await port\.persistWorkspaceOrder\(prepared, generation\)/)
+assert.match(viewLoadFinalizer, /await port\.persistWorkspaceOrder\(prepared, generation\)[\s\S]*?await port\.setLoadedContext\(\)/)
 assert.match(viewLoadFinalizer, /if \(transition && storageReady\)/)
 assert.match(viewLoadFinalizer, /port\.startConfigWatcher\(generation\)[\s\S]*?port\.startBackgroundEnhancements\(generation\)/)
 assert.match(viewLoadFinalizer, /else if \(transition\) \{[\s\S]*?port\.closeConfigWatchers\(\)/)

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `Logger`。
- *
- * 实现要点：集中实现 `Logger` 的无界面规则和边界处理，供多个上层流程复用。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`logger`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 延迟创建 CodeBookmark 输出通道，统一记录可诊断错误并在扩展停用时释放资源。
+ * VS Code 已关闭通道时写入会静默结束，避免停用阶段的次生异常掩盖原问题。
  */
 import * as vscode from 'vscode';
 import { currentLanguage, localize } from '../i18n/Localization';
@@ -28,12 +24,12 @@ class Logger implements vscode.Disposable {
 	}
 
 	info(message: unknown) {
-		this.appendLine(`${localize('[信息]', '[INFO]')} ${this.normalizeMessage(message)}`);
+		this.appendLine(`${localize("util.Logger.info")} ${this.normalizeMessage(message)}`);
 	}
 
 	error(message: unknown) {
 		console.error(message);
-		this.appendLine(`${localize('[错误]', '[ERROR]')} ${this.normalizeMessage(message)}`);
+		this.appendLine(`${localize("util.Logger.error")} ${this.normalizeMessage(message)}`);
 	}
 
 	showWarningMessage(message: string) {

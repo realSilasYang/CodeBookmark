@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-scope-safety`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-scope-safety` 对应契约。
- * 核心边界：通过断言锁定“verify-scope-safety”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 验证异步操作提交前重新检查作用域，切换文件夹或单文件后旧结果必须失效。
+ * 脚本读取仓库真实文件，围绕“验证异步操作提交前重新检查作用域”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -25,7 +22,8 @@ assert.match(provider, /this\.initViewEditor\(scopePath, true, generation, stora
 assert.match(provider, /editor\?\.document\.uri\.scheme === 'file' && this\.uriMatchesCurrentScope/)
 assert.match(documentChangeCoordinator, /if \(!port\.isCurrentScope\(uri\)\) return/)
 assert.doesNotMatch(provider, /undoManager\.clear\(/)
-assert.match(provider, /return commitBookmarkView\(prepared, \{/)
+assert.match(provider, /const transition = commitBookmarkView\(prepared, \{/)
+assert.match(provider, /this\.workspaceLayoutWriteBlocked = prepared\.workspaceLayoutWriteBlocked/)
 assert.match(committer, /port\.setCurrentStorageScope\(prepared\.storageScope\)/)
 assert.match(provider, /publishCommittedViewTransition[\s\S]*?undoManager\.setActiveScope\(this\.currentStorageScope\)/)
 assert.match(provider, /relocateUndoPath:[\s\S]*?undoManager\.relocatePath\(/)

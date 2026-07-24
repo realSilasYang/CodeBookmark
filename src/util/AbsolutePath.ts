@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AbsolutePath`。
- *
- * 实现要点：统一路径规范化、比较和作用域判断，消除平台分隔符与大小写差异。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`normalizedAbsolutePath`、`absolutePathKey`、`isSameOrDescendantAbsolutePath`、`renamedAbsolutePath`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 统一处理操作系统绝对路径的规范化、大小写比较、后代判断和重命名映射。
+ * 这些函数面向真实磁盘路径，与使用正斜杠的书签持久化路径刻意分开。
  */
 import * as path from 'path'
 

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责用户命令注册与交互流程，具体对象为 `bookmarkCommands`。
- *
- * 实现要点：把 VS Code 命令参数转换为领域操作，并统一处理选择范围、用户取消和结果反馈。
- * 核心边界：命令层只编排用户意图、确认与结果提示，持久化和领域规则交由下层模块执行。
- * 主要入口：`bookmarkCommands`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 集中注册编辑器、书签树和工具栏命令，把 VS Code 传入的节点或 URI 转交给对应工作流。
+ * 这里负责命令参数与用户反馈，不直接复制书签领域规则或持久化实现。
  */
 import * as vscode from 'vscode'
 import { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
@@ -34,7 +30,7 @@ export function bookmarkCommands(
 			await provider.ensureEditorScope(editor)
 			return handler(editor)
 		}
-		void vscode.window.showInformationMessage(localize('请先打开一个本地文件。', 'Open a local file first.'))
+		void vscode.window.showInformationMessage(localize("commands.bookmarkCommands.openALocalFileFirst"))
 	})
 
 	const checkAIPrerequisites = async (): Promise<vscode.TextEditor | undefined> => {
@@ -43,10 +39,7 @@ export function bookmarkCommands(
 		if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return undefined
 		const editor = vscode.window.activeTextEditor
 		if (!editor || editor.document.uri.scheme !== 'file') {
-			vscode.window.showInformationMessage(localize(
-				'未打开任何文件，无法进行 AI 分析。',
-				'No file is open, so AI analysis cannot run.',
-			))
+			vscode.window.showInformationMessage(localize("commands.bookmarkCommands.noFileIsOpenSoAiAnalysisCannotRun"))
 			return undefined
 		}
 		return editor
@@ -59,10 +52,7 @@ export function bookmarkCommands(
 			await provider.ensureEditorScope(editor)
 			await handler(editor)
 		} catch (error) {
-			vscode.window.showErrorMessage(localize(
-				`AI 操作失败：${error instanceof Error ? error.message : String(error)}`,
-				`AI operation failed: ${error instanceof Error ? error.message : String(error)}`,
-			))
+			vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiOperationFailed", { errorMessage: error instanceof Error ? error.message : String(error) }))
 		}
 	}
 
@@ -73,10 +63,7 @@ export function bookmarkCommands(
 			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return
 			await handler()
 		} catch (error) {
-			vscode.window.showErrorMessage(localize(
-				`AI 操作失败：${error instanceof Error ? error.message : String(error)}`,
-				`AI operation failed: ${error instanceof Error ? error.message : String(error)}`,
-			))
+			vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiOperationFailed", { errorMessage: error instanceof Error ? error.message : String(error) }))
 		}
 	}
 
@@ -111,12 +98,9 @@ export function bookmarkCommands(
 				await provider.importBookmarkConfiguration()
 			} catch (error) {
 				if (isUserCancelledError(error)) {
-					vscode.window.showInformationMessage(localize('已取消导入书签配置。', 'Bookmark configuration import was cancelled.'))
+					vscode.window.showInformationMessage(localize("commands.bookmarkCommands.bookmarkConfigurationImportWasCancelled"))
 				} else {
-					vscode.window.showErrorMessage(localize(
-						`导入书签配置失败：${error instanceof Error ? error.message : String(error)}`,
-						`Failed to import bookmark configuration: ${error instanceof Error ? error.message : String(error)}`,
-					))
+					vscode.window.showErrorMessage(localize("commands.bookmarkCommands.failedToImportBookmarkConfiguration", { errorMessage: error instanceof Error ? error.message : String(error) }))
 				}
 			}
 		}))
@@ -164,33 +148,24 @@ export function bookmarkCommands(
 	register(Commands.bookmarkCommands.aiTestConnection.command, async () => {
 		if (!ensureAIWorkspaceTrusted()) return
 		if (!ExtensionConfig.ensureAIConfigured()) return
-		void vscode.window.showInformationMessage(localize('正在测试 AI 连接，请稍候…', 'Testing the AI connection…'))
+		void vscode.window.showInformationMessage(localize("commands.bookmarkCommands.testingTheAiConnection"))
 		let successfulAddress: string
 		try {
 			successfulAddress = await AIService.testConnection()
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
-			void vscode.window.showErrorMessage(localize(
-				`AI 连接测试失败：${message}`,
-				`AI connection test failed: ${message}`,
-			))
+			void vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiConnectionTestFailed", { message }))
 			return
 		}
 
 		try {
 			const updated = await ExtensionConfig.updateAIAddress(successfulAddress)
 			void vscode.window.showInformationMessage(updated
-				? localize(
-					'AI 连接测试成功，接口地址已更新为实际可用地址。',
-					'AI connection test succeeded. The address was updated to the working endpoint.',
-				)
-				: localize('AI 连接测试成功！', 'AI connection test succeeded.'))
+				? localize("commands.bookmarkCommands.aiConnectionTestSucceededTheAddressWasUpdatedTo")
+				: localize("commands.bookmarkCommands.aiConnectionTestSucceeded"))
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
-			void vscode.window.showWarningMessage(localize(
-				`AI 连接测试成功，但无法更新接口地址：${message}`,
-				`AI connection test succeeded, but the address could not be updated: ${message}`,
-			))
+			void vscode.window.showWarningMessage(localize("commands.bookmarkCommands.aiConnectionTestSucceededButTheAddressCouldNot", { message }))
 		}
 	})
 

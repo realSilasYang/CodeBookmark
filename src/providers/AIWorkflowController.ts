@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `AIWorkflowController`。
- *
- * 实现要点：把上层意图编排为多个纯工作流，并在单一边界适配 VS Code 与持久化依赖。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`AIWorkflowController`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 连接 AI 菜单命令与单文件、文件夹、选中书签工作流，集中装配它们所需的端口。
+ * 控制器负责 VS Code 交互和结果提示，具体生成、优化与提交规则留在各 Runner 中。
  */
 import * as path from 'path'
 import * as vscode from 'vscode'
@@ -95,7 +91,7 @@ export class AIWorkflowController {
 		}
 
 		const directory = this.port.workspaceFolderRootForCurrentScope()
-		if (!directory) throw new Error(localize('请先打开文件夹或工作区。', 'Open a folder or workspace first.'))
+		if (!directory) throw new Error(localize("providers.AIWorkflowController.openAFolderOrWorkspaceFirst"))
 		const storageScope = this.port.storageScopeForUri(vscode.Uri.file(directory))
 		await this.port.refreshScope(storageScope)
 		return { directory, storageScope }

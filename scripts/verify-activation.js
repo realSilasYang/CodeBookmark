@@ -1,13 +1,10 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-activation`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-activation` 对应契约。
- * 核心边界：通过断言锁定“verify-activation”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`activate`、`activate`、`activate`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查扩展激活顺序与入口依赖，确保命令和 TreeDataProvider 在任何慢速磁盘加载之前完成注册。
+ * 脚本读取仓库真实文件，围绕“检查扩展激活顺序与入口依赖”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const ts = require('typescript')
 
 const extension = fs.readFileSync('src/extension.ts', 'utf8')
 const extensionStateKeys = fs.readFileSync('src/util/constants/ExtensionStateKeys.ts', 'utf8')
@@ -48,7 +45,24 @@ const activateBody = extension.slice(activateStart, activateEnd)
 const createView = activateBody.indexOf('createCodeBookmarkView(')
 const initializeProvider = activateBody.indexOf('codeBookmarkProvider.init(')
 assert.ok(createView >= 0 && initializeProvider > createView, 'TreeView must be registered before provider I/O starts')
-assert.equal(activateBody.includes('await '), false, 'activate must return without awaiting I/O')
+const extensionSource = ts.createSourceFile(
+  'src/extension.ts',
+  extension,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+)
+const activateDeclaration = extensionSource.statements.find(statement => (
+  ts.isFunctionDeclaration(statement) && statement.name?.text === 'activate'
+))
+assert.ok(activateDeclaration?.body, 'activate declaration must be present')
+let activateAwaitsIO = false
+const findAwait = node => {
+  if (ts.isAwaitExpression(node)) activateAwaitsIO = true
+  ts.forEachChild(node, findAwait)
+}
+findAwait(activateDeclaration.body)
+assert.equal(activateAwaitsIO, false, 'activate must return without awaiting I/O')
 assert.doesNotMatch(activateBody, /codeBookmarkProvider\.init\([^)]*\)\.catch/)
 
 assert.match(provider, /init\(treeView: vscode\.TreeView<Bookmark>\): void/)

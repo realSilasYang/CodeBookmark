@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-storage-root-activator`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-storage-root-activator` 对应契约。
- * 核心边界：通过断言锁定“verify-storage-root-activator”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`createHarness`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 验证存储根目录创建、当前格式初始化、旧数据迁移和无关文件保护。
+ * 脚本直接调用编译后的 `StorageRootActivator`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { ensureStorageRootActive } = require('../out/providers/StorageRootActivator')

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-workspace-root-rebind`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-workspace-root-rebind` 对应契约。
- * 核心边界：通过断言锁定“verify-workspace-root-rebind”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`fingerprint`、`envelope`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 模拟工作区根目录移动，验证子脚本绑定和已保存顺序整体跟随。
+ * 为核对工作区根目录移动，验证子脚本绑定和已保存顺序整体跟随，脚本在临时目录中调用编译后的 `PathHash`、`BookmarkRepository` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
@@ -66,6 +62,7 @@ installModuleMocks({ vscode: vscodeMock })
 
 const { stableWorkspacePathHash } = require('../out/util/PathHash')
 const { bookmarkRepository } = require('../out/repository/BookmarkRepository')
+const { cleanupEmptyWorkspaceScopeFolders } = require('../out/util/WorkspaceScopeFolderLifecycle')
 
 function fingerprint(content) {
   return {
@@ -112,6 +109,8 @@ async function main() {
   assert.equal(reboundOrder.format, 'codebookmark.workspace-order')
   assert.equal(reboundOrder.schemaVersion, 1)
   assert.deepEqual(reboundOrder.order, ['src/b.ts', 'src/a.ts'])
+  assert.equal(fs.existsSync(oldScope), true, 'repository cleanup waits until undo retention is known')
+  assert.equal(await cleanupEmptyWorkspaceScopeFolders(storageRoot, []), 1)
   assert.equal(fs.existsSync(oldScope), false)
   assert.equal(fs.existsSync(path.join(storageRoot, '.script-relocations')), false)
 }

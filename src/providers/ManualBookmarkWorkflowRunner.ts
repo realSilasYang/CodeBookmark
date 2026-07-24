@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `ManualBookmarkWorkflowRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`ManualBookmarkWorkflowPort`、`runForceAddBookmark`、`runForceDeleteBookmark`、`runToggleBookmark`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 实现 Ctrl+B 切换、强制添加和强制删除，按光标位置处理当前脚本的手动书签。
+ * 自动标记节点不会被普通切换命令误删；实际变化会进入撤销记录并立即刷新视图。
  */
 import * as vscode from 'vscode'
 import { Bookmark, CursorIndex } from '../models/Bookmark'
@@ -41,7 +37,7 @@ function uniqueSelections(selections: readonly vscode.Selection[]): vscode.Selec
 
 function defaultLabel(document: vscode.TextDocument, selection: vscode.Selection, maxLength: number): string {
 	const selected = document.getText(selection).split(/\r?\n/, 1)[0].trim()
-	const value = selected || document.lineAt(selection.start.line).text.trim() || localize('未命名', 'Untitled')
+	const value = selected || document.lineAt(selection.start.line).text.trim() || localize("providers.ManualBookmarkWorkflowRunner.untitled")
 	return value.slice(0, maxLength)
 }
 
@@ -79,12 +75,12 @@ async function prepareBookmarks(
 	if (deduplicated.length === 1) {
 		const selection = deduplicated[0]
 		const label = await port.showInputBox({
-			prompt: localize('请输入书签标签', 'Enter a bookmark label'),
+			prompt: localize("providers.ManualBookmarkWorkflowRunner.enterABookmarkLabel"),
 			value: defaultLabel(editor.document, selection, 80),
 		})
 		if (label === undefined) return undefined
 		if (label.trim() === '') {
-			logger.showWarningMessage(localize('标签不能为空', 'The label cannot be empty.'))
+			logger.showWarningMessage(localize("providers.ManualBookmarkWorkflowRunner.theLabelCannotBeEmpty"))
 			return undefined
 		}
 		return [createBookmarkFromDocument(
@@ -99,10 +95,7 @@ async function prepareBookmarks(
 
 	const defaultLabels = deduplicated.map(selection => defaultLabel(editor.document, selection, 30))
 	const labelString = await port.showInputBox({
-		prompt: localize(
-			`请输入 ${deduplicated.length} 个书签标签（使用“│”分隔）`,
-			`Enter ${deduplicated.length} bookmark labels, separated by “│”`,
-		),
+		prompt: localize("providers.ManualBookmarkWorkflowRunner.enterBookmarkLabelsSeparatedBy", { deduplicatedCount: deduplicated.length }),
 		value: defaultLabels.join(' │ '),
 	})
 	if (labelString === undefined) return undefined
@@ -150,10 +143,7 @@ export async function runForceAddBookmark(
 	port.refreshDecoration()
 	if (bookmarks.length > 1) {
 		const summary = formatBookmarkLevelSummary(summarizeBookmarks(bookmarks))
-		logger.showMessage(localize(
-			`批量添加完成，新增结果：${summary}。`,
-			`Batch add completed. Added: ${summary}.`,
-		))
+		logger.showMessage(localize("providers.ManualBookmarkWorkflowRunner.batchAddCompletedAdded", { summary }))
 	}
 }
 

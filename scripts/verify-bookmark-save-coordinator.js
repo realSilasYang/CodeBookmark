@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-save-coordinator`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-save-coordinator` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-save-coordinator”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`createHarness`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖保存请求合并、按作用域分组、重试、强制刷新和队列清空。
+ * 脚本直接调用编译后的 `BookmarkSaveCoordinator`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { createVscodeFake } = require('./test-support/vscode-fake')
@@ -53,9 +49,11 @@ function createHarness() {
   let storageRoot = 'C:\\bookmark-storage'
   let activeFilePath
   let currentScopeFilePath
+  let fullSnapshotAuthoritative = true
   let saveImplementation = async () => true
   const port = {
     ensureStorageRoot: () => storageRoot,
+    canQueueFullSave: () => fullSnapshotAuthoritative,
     currentBookmarks: () => bookmarks,
     activeFilePathInCurrentScope: () => activeFilePath,
     currentScopeFilePath: () => currentScopeFilePath,
@@ -81,6 +79,7 @@ function createHarness() {
     setStorageRoot: value => { storageRoot = value },
     setActiveFilePath: value => { activeFilePath = value },
     setCurrentScopeFilePath: value => { currentScopeFilePath = value },
+    setFullSnapshotAuthoritative: value => { fullSnapshotAuthoritative = value },
     getCurrentScopeFilePath: () => currentScopeFilePath,
     setSaveImplementation: value => { saveImplementation = value },
   }
@@ -121,6 +120,15 @@ async function main() {
   await activeFallback.coordinator.flushPendingSaves()
   assert.equal(activeFallback.saves[0].filePath, 'active.ts')
   assert.equal(activeFallback.saves[0].dirtyPaths, undefined)
+
+  const incompleteView = createHarness()
+  incompleteView.setActiveFilePath('must-not-prune.ts')
+  incompleteView.setFullSnapshotAuthoritative(false)
+  incompleteView.coordinator.queueAll()
+  assert.deepEqual(incompleteView.scheduling.timers, [])
+  incompleteView.coordinator.queueAll(true)
+  await incompleteView.coordinator.flushPendingSaves()
+  assert.deepEqual(incompleteView.saves.map(save => save.filePath), ['must-not-prune.ts'])
 
   const currentFallback = createHarness()
   currentFallback.setCurrentScopeFilePath('current.ts')

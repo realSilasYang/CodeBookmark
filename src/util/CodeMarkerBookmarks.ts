@@ -1,15 +1,12 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `CodeMarkerBookmarks`。
- *
- * 实现要点：集中实现 `CodeMarkerBookmarks` 的无界面规则和边界处理，供多个上层流程复用。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`CodeMarkerSyncResult`、`synchronizeCodeMarkerBookmarks`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把扫描到的 TODO/FIXME/BUG 与现有自动书签比较，生成新增、更新和删除结果。
+ * 匹配依赖标记元数据与位置；用户手动书签即使同一行同名也不会被扫描器接管。
  */
 import * as path from 'path'
 import * as vscode from 'vscode'
 import { Bookmark, bookmarkLabelText, CursorIndex, MAX_BOOKMARK_NODES } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
+import { allBookmarks, bookmarkOwnerScriptId } from '../models/BookmarkOwnership'
 import { ContextBookmark } from './ContextValue'
 import { getFingerprintContext } from './FingerprintMatcher'
 import { Helper } from './Helper'
@@ -106,20 +103,20 @@ function selectMarkerCandidate(
 	return selected
 }
 
-function extractCodeMarkers(fileNode: Bookmark): { bookmarks: Bookmark[], structureChanged: boolean } {
+function extractCodeMarkers(root: BookmarkSet, fileNode: Bookmark): { bookmarks: Bookmark[], structureChanged: boolean } {
 	const result: Bookmark[] = []
 	let structureChanged = false
 	let topPrefix = true
 	const originalTopIds: string[] = []
 	for (const child of fileNode.subs.values) {
-		if (topPrefix && child.isCodeMarker) originalTopIds.push(child.id)
+		if (topPrefix && child.isCodeMarker && bookmarkOwnerScriptId(child) === fileNode.scriptId) originalTopIds.push(child.id)
 		else topPrefix = false
 	}
 
-	const visit = (container: BookmarkSet, parent: Bookmark): void => {
+	const visit = (container: BookmarkSet, parent: Bookmark | undefined): void => {
 		for (let index = 0; index < container.values.length;) {
 			const bookmark = container.values[index]
-			if (!bookmark.isCodeMarker) {
+			if (!bookmark.isCodeMarker || bookmarkOwnerScriptId(bookmark) !== fileNode.scriptId) {
 				visit(bookmark.subs, bookmark)
 				index++
 				continue
@@ -137,7 +134,7 @@ function extractCodeMarkers(fileNode: Bookmark): { bookmarks: Bookmark[], struct
 			// 子节点提升后继续检查同一索引，确保嵌套自动标记也被完整提取。
 		}
 	}
-	visit(fileNode.subs, fileNode)
+	visit(root, undefined)
 	if (originalTopIds.length !== result.length || originalTopIds.some((id, index) => result[index]?.id !== id)) {
 		structureChanged = true
 	}
@@ -215,13 +212,14 @@ export function synchronizeCodeMarkerBookmarks(
 	occurrences: readonly CodeMarkerOccurrence[],
 ): CodeMarkerSyncResult {
 	const pathRel = canonicalBookmarkPath(pathValue)
-	let fileNode = root.values.find(bookmark => bookmark.isFile && bookmarkPathKey(bookmark.path) === bookmarkPathKey(pathRel))
+	let fileNode = allBookmarks(root).find(bookmark => bookmark.isFile && bookmarkPathKey(bookmark.path) === bookmarkPathKey(pathRel))
 	if (!fileNode && occurrences.length === 0) return { changed: false, created: 0, removed: 0 }
 
 	let changed = false
 	let created = 0
 	if (!fileNode) {
-		const scriptId = createScriptId()
+		const scriptId = allBookmarks(root).find(bookmark => !bookmark.isFile
+			&& bookmarkPathKey(bookmark.path) === bookmarkPathKey(pathRel))?.ownerScriptId ?? createScriptId()
 		fileNode = new Bookmark({
 			id: `file_${scriptId}`,
 			path: pathRel,
@@ -234,13 +232,11 @@ export function synchronizeCodeMarkerBookmarks(
 		changed = true
 	}
 
-	const extracted = extractCodeMarkers(fileNode)
+	const extracted = extractCodeMarkers(root, fileNode)
 	if (extracted.structureChanged) changed = true
-	const countNodes = (bookmarks: readonly Bookmark[]): number => bookmarks.reduce(
-		(total, bookmark) => total + 1 + countNodes(bookmark.subs.values),
-		0,
-	)
-	const availableMarkerSlots = Math.max(0, MAX_BOOKMARK_NODES - countNodes(fileNode.subs.values))
+	const ownedNodes = allBookmarks(root).filter(bookmark => !bookmark.isFile
+		&& bookmarkOwnerScriptId(bookmark) === fileNode?.scriptId)
+	const availableMarkerSlots = Math.max(0, MAX_BOOKMARK_NODES - ownedNodes.length)
 	const usableOccurrences = occurrences.slice(0, availableMarkerSlots)
 	const capacityLimited = usableOccurrences.length < occurrences.length
 	const unused = new Set(extracted.bookmarks)
@@ -257,6 +253,7 @@ export function synchronizeCodeMarkerBookmarks(
 			if (applyOccurrence(selected, occurrence, lines, pathRel)) changed = true
 		}
 		selected.parent = fileNode
+		selected.ownerScriptId = fileNode.scriptId
 		active.push(selected)
 	}
 
@@ -272,7 +269,8 @@ export function synchronizeCodeMarkerBookmarks(
 	const removed = unused.size
 	if (removed > 0) changed = true
 	if (fileNode.subs.size === 0) {
-		root.fastDelete(fileNode)
+		const container = fileNode.parent?.subs ?? root
+		container.fastDelete(fileNode)
 		fileNode = undefined
 		changed = true
 	}

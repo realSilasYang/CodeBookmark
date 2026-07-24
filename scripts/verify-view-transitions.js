@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-view-transitions`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-view-transitions` 对应契约。
- * 核心边界：通过断言锁定“verify-view-transitions”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 从源码结构与纯计划两侧检查刷新不执行隐藏 I/O，状态迁移不回写旧作用域。
+ * 脚本直接调用编译后的 `ViewTransition`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -17,6 +14,7 @@ const publisher = fs.readFileSync('src/providers/ViewTransitionPublisher.ts', 'u
 const preparation = fs.readFileSync('src/providers/BookmarkViewPreparation.ts', 'utf8')
 const committer = fs.readFileSync('src/providers/BookmarkViewCommitter.ts', 'utf8')
 const orderLoader = fs.readFileSync('src/providers/WorkspaceOrderViewLoader.ts', 'utf8')
+const layoutLoader = fs.readFileSync('src/providers/WorkspaceLayoutViewLoader.ts', 'utf8')
 const refreshCoordinator = fs.readFileSync('src/providers/BookmarkViewRefreshCoordinator.ts', 'utf8')
 const contextCoordinator = fs.readFileSync('src/providers/BookmarkContextCoordinator.ts', 'utf8')
 const treeProjection = fs.readFileSync('src/providers/BookmarkTreeDataProjection.ts', 'utf8')
@@ -35,7 +33,7 @@ const section = (startMarker, endMarker) => {
 }
 
 const prepare = section('private async prepareBookmarkView(', 'private commitPreparedBookmarkView(')
-assert.match(prepare, /return runBookmarkViewPreparation\(target, \{/)
+assert.match(prepare, /return prepareBookmarkViewWithWorkspaceLayout\(\(\) => runBookmarkViewPreparation\(target, \{/)
 assert.match(prepare, /readBookmarks: \(activePaths, candidateSignal\)/)
 assert.match(prepare, /readContentBookmarks: \(bookmarks, scopeFilePath, candidateSignal\)/)
 assert.match(prepare, /readWorkspaceOrder: \(bookmarks, candidateTarget, candidateSignal\)/)
@@ -49,9 +47,12 @@ assert.match(provider, /return loadWorkspaceOrderForView\(/)
 assert.match(orderLoader, /if \(signal\?\.aborted \|\| !storageScope\.startsWith\('workspace:'\)\)/)
 assert.match(orderLoader, /const pathsByKey = new Map\(bookmarkPaths/)
 assert.match(orderLoader, /needsPersist: \(changed \|\| migrated\) && orderFilePath !== undefined && !signal\?\.aborted/)
+assert.match(layoutLoader, /const prepared = await prepareBaseView\(\)/)
+assert.match(layoutLoader, /const snapshot = await readWorkspaceLayoutForView\(/)
 
 const commit = section('private commitPreparedBookmarkView(', 'private async publishCommittedViewTransition(')
-assert.match(commit, /return commitBookmarkView\(prepared, \{/)
+assert.match(commit, /const transition = commitBookmarkView\(prepared, \{/)
+assert.match(commit, /return transition/)
 assert.match(commit, /handleStorageScopeChange: \(\) =>/)
 assert.match(commit, /rebuildFileNodeCache: bookmarks =>/)
 assert.match(committer, /const previousHasContent = port\.currentBookmarkCount\(\) > 0/)
@@ -59,6 +60,7 @@ assert.match(committer, /if \(prepared\.storageScope !== port\.currentStorageSco
 assert.match(committer, /port\.setCurrentStorageScope\(prepared\.storageScope\)/)
 assert.match(committer, /port\.setCurrentScopeFilePath\(prepared\.scopeFilePath\)/)
 assert.match(committer, /port\.setWorkspaceOrder\(prepared\.workspaceOrder\)/)
+assert.match(committer, /port\.setWorkspaceLayout\(prepared\.workspaceLayout\)/)
 assert.match(committer, /port\.setBookmarks\(prepared\.bookmarks\)/)
 assert.match(committer, /port\.rebuildFileNodeCache\(prepared\.bookmarks\.values\)/)
 assert.match(committer, /port\.invalidatePathIndex\(\)/)
@@ -99,7 +101,7 @@ assert.doesNotMatch(getChildren, /await fs\.promises\.readFile/)
 assert.doesNotMatch(getChildren, /await fileUtils\.writeJsonFileAsync/)
 assert.doesNotMatch(treeProjection, /fs\.promises|fileUtils/)
 
-const refresh = section('public async refresh(', '// 处理树节点行内操作按钮触发的重命名命令。')
+const refresh = section('public async refresh(', 'async onRenameBookmark(')
 assert.match(refresh, /return this\.viewRefreshCoordinator\.refresh\(/)
 assert.doesNotMatch(refresh, /this\.currentScopeFilePath = editor\.document\.uri\.fsPath/)
 assert.doesNotMatch(refresh, /workspaceOrderCache = null/)

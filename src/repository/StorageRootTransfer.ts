@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `StorageRootTransfer`。
- *
- * 实现要点：围绕脚本配置的读取、索引、迁移或恢复拆分单一职责，并由仓库统一提交副作用。
- * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
- * 主要入口：`transferStorageRoot`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把脚本配置、顺序、迁移记录和受管元数据从旧存储根目录合并到新目录。
+ * 每次覆盖都留下可恢复快照；迁移完成后只删除 CodeBookmark 明确拥有的旧文件。
  */
 import * as crypto from 'crypto'
 import * as fs from 'fs'
@@ -95,7 +91,8 @@ function mergeJson(source: unknown, target: unknown): unknown | undefined {
 			return workspaceOrderPersistence([...new Set([...targetOrder, ...sourceOrder])])
 		}
 	} catch {
-		// 旧列表格式解析失败后，继续尝试下方的脚本信封格式。
+		// 同一个 JSON 文件既可能是旧式书签数组，也可能是当前脚本信封。
+		// 数组解码不成立时再尝试信封，不能因为第一种形态失败就过早判定文件损坏。
 	}
 	try {
 		source = decodePersistenceRecord(source, PersistenceFormats.script).value
@@ -109,8 +106,8 @@ function mergeJson(source: unknown, target: unknown): unknown | undefined {
 	const targetScript = scriptIdentity(target)
 	if (!sourceScript || !targetScript || sourceScript.id !== targetScript.id) return undefined
 
-	// 来源根目录会在转移前立即刷新，因此通常其 lastSeenAt 更新。
-	// 时间相同时以目标根目录为准，因为其中可能已存在更晚写入的用户数据。
+	// 转移前刚刚读取过来源根目录，它的 lastSeenAt 往往会更新。时间完全相同时仍选目标，
+	// 因为目标可能早已有用户继续编辑的数据，不能被一次迁移中的读取时间反客为主。
 	const sourceIsAuthoritative = sourceScript.lastSeenAt > targetScript.lastSeenAt
 	const primary = sourceIsAuthoritative ? source : target
 	const secondaryBookmarks = sourceIsAuthoritative ? target.bookmarks : source.bookmarks
@@ -166,7 +163,8 @@ async function listFiles(root: string): Promise<string[]> {
 }
 
 async function removeSourceStorageEntries(root: string): Promise<void> {
-	// 存储根目录可能与无关用户文件共用父目录，只能删除明确归 CodeBookmark 所有的条目。
+	// 用户可以把存储根设在已有目录中，迁移完成后只能清理白名单内的 CodeBookmark 文件；
+	// 即使旧根看起来“几乎为空”，也不能顺手删除同级的其他内容。
 	for (const directory of OWNED_STORAGE_DIRECTORIES) {
 		await fs.promises.rm(path.join(root, directory), { recursive: true, force: true })
 	}
@@ -239,7 +237,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		return { copiedFiles: 0, mergedFiles: 0, conflictFiles: 0 }
 	}
 	if (isSameOrDescendantAbsolutePath(source, target) || isSameOrDescendantAbsolutePath(target, source)) {
-		throw new Error(localize('新旧书签存储目录不能互相包含', 'The old and new bookmark storage folders cannot contain one another.'))
+		throw new Error(localize("repository.StorageRootTransfer.theOldAndNewBookmarkStorageFoldersCannotContain"))
 	}
 	const [canonicalSource, canonicalTarget] = await Promise.all([
 		canonicalAbsolute(source),
@@ -247,17 +245,23 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 	])
 	if (isSameOrDescendantAbsolutePath(canonicalSource, canonicalTarget)
 		|| isSameOrDescendantAbsolutePath(canonicalTarget, canonicalSource)) {
-		throw new Error(localize(
-			'新旧书签存储目录不能通过符号链接或目录联接互相包含',
-			'The old and new bookmark storage folders cannot contain one another through symbolic links or directory junctions.',
-		))
+		throw new Error(localize("repository.StorageRootTransfer.theOldAndNewBookmarkStorageFoldersCannotContain2"))
 	}
 
 	await fs.promises.mkdir(target, { recursive: true })
 	const previousJournal = await readJournal(target)
-	const resumable = previousJournal?.status === 'in_progress'
+	const sourceFiles = await listFiles(source)
+	const samePreviousTransfer = previousJournal !== undefined
 		&& normalizedAbsolutePath(previousJournal.source) === normalizedAbsolutePath(source)
 		&& normalizedAbsolutePath(previousJournal.target) === normalizedAbsolutePath(target)
+	if (samePreviousTransfer && previousJournal.status === 'complete' && sourceFiles.length === 0) {
+		return {
+			copiedFiles: previousJournal.copiedFiles,
+			mergedFiles: previousJournal.mergedFiles,
+			conflictFiles: previousJournal.conflictFiles,
+		}
+	}
+	const resumable = samePreviousTransfer && previousJournal.status === 'in_progress'
 	const result: StorageRootTransferResult = resumable ? {
 		copiedFiles: previousJournal.copiedFiles,
 		mergedFiles: previousJournal.mergedFiles,
@@ -271,7 +275,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		return result
 	}
 
-	for (const sourceFile of await listFiles(source)) {
+	for (const sourceFile of sourceFiles) {
 		const relative = path.relative(source, sourceFile)
 		const targetFile = path.join(target, relative)
 		if (!await exists(targetFile)) {
@@ -298,7 +302,8 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		if (merged !== undefined) {
 			const mergedContent = JSON.stringify(merged, null, 2)
 			if (targetContent.toString('utf8') === mergedContent) continue
-			// 每次覆盖目标前都保存快照，不能只保留第一次转移生成的备份。
+			// 每一次覆盖都对应不同的目标现状，所以必须当场保存快照。
+			// 复用上一次迁移的备份会让本轮失败时只能恢复到更早、已经过期的数据。
 			await preserveTransferSnapshot(targetFile, targetContent)
 			await atomicWriteFile(targetFile, mergedContent)
 			result.mergedFiles++

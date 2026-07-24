@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-chinese-comments`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-chinese-comments` 对应契约。
- * 核心边界：检查全部一方维护且语法支持注释的脚本，确保中文说明覆盖完整，
- * 同时允许 eslint、TypeScript、覆盖率工具等必须保持原文的机器指令。
- * 维护约束：新增脚本或说明注释时必须同步满足本守卫，不能用数据字符串冒充源码注释。
+ * 遍历全部一方维护脚本，检查中文模块说明、直译或模板化措辞以及遗留的纯英文说明注释。
+ * 脚本读取仓库真实文件，围绕“遍历全部一方维护脚本”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 
 const assert = require('node:assert/strict')
@@ -24,13 +20,32 @@ const files = execFileSync(
   .split(/\r?\n/u)
   .filter(Boolean)
   .map(fileName => fileName.replace(/\\/g, '/'))
+  .filter(fileName => fs.existsSync(path.join(repositoryRoot, fileName)))
   .filter(fileName => maintainedRoots.some(root => fileName.startsWith(root)))
   .filter(fileName => supportedExtensions.has(path.extname(fileName).toLowerCase()))
   .sort()
 
 const missingHeaders = []
 const incompleteHeaders = []
+const templateHeaders = []
+const duplicateHeaders = []
+const duplicateHeaderLines = []
 const englishComments = []
+const headersByText = new Map()
+const headerLinesByText = new Map()
+
+const rejectedHeaderPhrases = [
+  '模块说明：',
+  '实现要点：',
+  '核心边界：',
+  '主要入口：',
+  '维护约束：',
+  '具体对象为',
+  '保持输入输出、错误处理、异步时序和持久化格式稳定',
+  '注释只解释意图与约束',
+  '构造隔离夹具或模块替身',
+  '通过小型端口连接纯逻辑与 VS Code API',
+]
 
 function sourceCommentRanges(source, fileName) {
   const scriptKind = fileName.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS
@@ -62,20 +77,44 @@ function isMachineDirective(comment) {
     || /^\/\*[#@]?__PURE__\*\/$/u.test(comment.trim())
 }
 
+function moduleHeader(source, yaml) {
+  if (yaml) return /^(?:#[^\r\n]*\r?\n?)+/u.exec(source)?.[0]
+  return /^\/\*\*[\s\S]*?\*\//u.exec(source)?.[0]
+}
+
+function chineseHeaderLines(header, yaml) {
+  return header
+    .split(/\r?\n/u)
+    .map(line => yaml
+      ? line.replace(/^#\s?/u, '').trim()
+      : line.replace(/^\s*(?:\/\*\*|\*\/|\*)\s?/u, '').trim())
+    .filter(line => /\p{Script=Han}/u.test(line))
+}
+
 for (const fileName of files) {
   const absolutePath = path.join(repositoryRoot, fileName)
   const source = fs.readFileSync(absolutePath, 'utf8')
   const extension = path.extname(fileName).toLowerCase()
   const yaml = extension === '.yml' || extension === '.yaml'
-  const expectedHeader = yaml ? '# 配置说明：' : '/**\n * 模块说明：'
-  if (!source.replace(/\r\n/g, '\n').startsWith(expectedHeader)) missingHeaders.push(fileName)
-  const headerWindow = source.split(/\r?\n/u).slice(0, 12).join('\n')
-  if (
-    !headerWindow.includes('实现要点：')
-    || !headerWindow.includes('核心边界：')
-    || !headerWindow.includes('维护约束：')
-  ) {
-    incompleteHeaders.push(fileName)
+  const header = moduleHeader(source, yaml)
+  if (!header || !source.startsWith(yaml ? '#' : '/**')) {
+    missingHeaders.push(fileName)
+  } else {
+    const lines = chineseHeaderLines(header, yaml)
+    if (lines.length < 2 || lines.some(line => !/[。！？]$/u.test(line))) {
+      incompleteHeaders.push(fileName)
+    }
+    const rejected = rejectedHeaderPhrases.filter(phrase => header.includes(phrase))
+    if (rejected.length > 0) templateHeaders.push(`${fileName}:${rejected.join('、')}`)
+    const normalized = lines.join('')
+    const previous = headersByText.get(normalized)
+    if (previous) duplicateHeaders.push(`${previous} <=> ${fileName}`)
+    else headersByText.set(normalized, fileName)
+    for (const line of lines) {
+      const previousLine = headerLinesByText.get(line)
+      if (previousLine) duplicateHeaderLines.push(`${previousLine} <=> ${fileName}:${line}`)
+      else headerLinesByText.set(line, fileName)
+    }
   }
 
   if (yaml) {
@@ -99,8 +138,11 @@ assert.deepEqual(missingHeaders, [], `以下脚本缺少中文模块说明：\n$
 assert.deepEqual(
   incompleteHeaders,
   [],
-  `以下脚本的中文说明缺少实现要点、核心边界或维护约束：\n${incompleteHeaders.join('\n')}`,
+  `以下脚本的模块说明至少需要两句完整中文：\n${incompleteHeaders.join('\n')}`,
 )
+assert.deepEqual(templateHeaders, [], `以下模块说明仍在使用旧模板：\n${templateHeaders.join('\n')}`)
+assert.deepEqual(duplicateHeaders, [], `以下文件复用了相同模块说明：\n${duplicateHeaders.join('\n')}`)
+assert.deepEqual(duplicateHeaderLines, [], `以下文件复用了相同说明句：\n${duplicateHeaderLines.join('\n')}`)
 assert.deepEqual(englishComments, [], `以下说明注释仍只有英文：\n${englishComments.join('\n')}`)
 
 console.log(`中文脚本注释覆盖验证通过：${files.length} 个文件。`)

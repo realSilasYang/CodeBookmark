@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-ai-selected-bookmarks-workflow-runner`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-ai-selected-bookmarks-workflow-runner` 对应契约。
- * 核心边界：通过断言锁定“verify-ai-selected-bookmarks-workflow-runner”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`bookmark`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖选中书签优化的范围校验、最小变更、撤销记录、保存与空结果处理。
+ * 脚本在临时目录中调用编译后的 `AIService`、`Localization`、`AITaskRegistry` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -136,7 +132,7 @@ async function main() {
     assert.equal(informationMessages.at(-1), '选中的项不包含可优化的书签。')
 
     AIService.optimizeBookmarks = async () => {
-      throw new UserCancelledError('主动取消', 'Cancelled')
+      throw new UserCancelledError('util.AIService.theUserCancelledTheAiTask')
     }
     await runOptimizeSelectedBookmarks(a1, undefined, port)
     assert.match(informationMessages.at(-1), /已取消 AI 选中书签优化任务：a\.ts/)

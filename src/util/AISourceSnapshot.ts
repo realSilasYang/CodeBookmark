@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AISourceSnapshot`。
- *
- * 实现要点：集中实现 `AISourceSnapshot` 的无界面规则和边界处理，供多个上层流程复用。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`AIFileSnapshot`、`readAISourceSnapshot`、`assertAIDocumentSnapshot`、`assertAISourceSnapshot`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 读取 AI 请求使用的文档版本、文件状态与源码内容，并在提交结果前验证快照仍然新鲜。
+ * 打开文档以版本号为准，磁盘文件以统计信息为准；任一变化都会阻止过期 AI 结果落盘。
  */
 import fs = require('fs')
 import { localize } from '../i18n/Localization'
@@ -33,7 +29,7 @@ export type AIFileSnapshot = {
 
 function assertNotBinary(content: string): void {
 	if (content.slice(0, 64 * 1024).includes('\0')) {
-		throw new Error(localize('文件疑似为二进制内容，已跳过 AI 分析', 'The file appears to contain binary data, so AI analysis was skipped.'))
+		throw new Error(localize("util.AISourceSnapshot.theFileAppearsToContainBinaryDataSoAi"))
 	}
 }
 
@@ -51,7 +47,7 @@ export async function readAISourceSnapshot(
 	}
 
 	const before = await fs.promises.stat(filePath)
-	if (!before.isFile()) throw new Error(localize('路径不是普通文件', 'The path is not a regular file.'))
+	if (!before.isFile()) throw new Error(localize("util.AISourceSnapshot.thePathIsNotARegularFile"))
 	await AIService.confirmSourceSize(before.size, filePath)
 	const content = await fs.promises.readFile(filePath, 'utf8')
 	assertNotBinary(content)
@@ -60,7 +56,7 @@ export async function readAISourceSnapshot(
 	else AIService.assertSourceSize(actualBytes, filePath)
 	const after = await fs.promises.stat(filePath)
 	if (!after.isFile() || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
-		throw new Error(localize('读取 AI 源码期间文件发生变化，请重新运行。', 'The file changed while its source was being read for AI. Run the command again.'))
+		throw new Error(localize("util.AISourceSnapshot.theFileChangedWhileItsSourceWasBeingRead"))
 	}
 	return { kind: 'disk', content, size: after.size, mtimeMs: after.mtimeMs, ctimeMs: after.ctimeMs }
 }
@@ -74,7 +70,7 @@ export function assertAIDocumentSnapshot(
 	if (document.version !== version || document.getText() !== content
 		|| normalizedAbsolutePath(document.uri.fsPath) !== normalizedAbsolutePath(sourcePath)
 		|| !fs.existsSync(sourcePath)) {
-		throw new Error(localize('AI 分析期间源文件发生变化，请基于最新内容重新运行。', 'The source file changed during AI analysis. Run the command again using the latest content.'))
+		throw new Error(localize("util.AISourceSnapshot.theSourceFileChangedDuringAiAnalysisRunThe"))
 	}
 }
 
@@ -87,6 +83,6 @@ export async function assertAISourceSnapshot(filePath: string, snapshot: AIFileS
 	if (stat.isFile() && stat.size === snapshot.size
 		&& stat.mtimeMs === snapshot.mtimeMs && stat.ctimeMs === snapshot.ctimeMs) return
 	if (!stat.isFile() || await fs.promises.readFile(filePath, 'utf8') !== snapshot.content) {
-		throw new Error(localize('AI 分析期间源文件发生变化，请基于最新内容重新运行。', 'The source file changed during AI analysis. Run the command again using the latest content.'))
+		throw new Error(localize("util.AISourceSnapshot.theSourceFileChangedDuringAiAnalysisRunThe"))
 	}
 }

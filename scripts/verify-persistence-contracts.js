@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-persistence-contracts`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-persistence-contracts` 对应契约。
- * 核心边界：通过断言锁定“verify-persistence-contracts”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 扫描全部持久化入口，确保当前格式头、迁移和拒绝策略在各状态文件中一致使用。
+ * 脚本直接调用编译后的 `Bookmark`、`BookmarkSet`、`Localization`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -72,7 +69,7 @@ try {
 
   const localization = require('../out/i18n/Localization')
   localization.initializeLocalization('en')
-  assert.throws(() => Bookmark.fromJSON([]), /Invalid bookmark data/)
+  assert.throws(() => Bookmark.fromJSON([]), /Bookmark data is invalid/)
   assert.throws(() => Bookmark.fromJSON({ ...expected, params: '4,0,3,0' }), /position range/)
   assert.throws(() => Bookmark.fromJSON({ ...expected, codeMarker: { type: 'unknown' } }), /metadata/)
   localization.initializeLocalization('zh-cn')

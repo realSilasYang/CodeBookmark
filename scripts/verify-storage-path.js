@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-storage-path`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-storage-path` 对应契约。
- * 核心边界：通过断言锁定“verify-storage-path”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖默认、绝对、工作区相对和非法存储路径的解析。
+ * 脚本直接调用编译后的 `StoragePath`、`BookmarkPath`、`ScriptIdentity`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -55,13 +52,14 @@ const activationStart = provider.indexOf('private async ensureActiveStorageRoot(
 const activationEnd = provider.indexOf('\n\trefreshDecoration(', activationStart)
 const activation = provider.slice(activationStart, activationEnd)
 assert.ok(activationStart >= 0 && activationEnd > activationStart)
-assert.match(activation, /return ensureStorageRootActive\(\{/)
+assert.match(activation, /const active = await ensureStorageRootActive\(\{/)
+assert.match(activation, /if \(active\) await this\.cleanupEmptyScopeFolders\(\)[\s\S]*?return active/)
 assert.match(activation, /rememberedRoot: \(\) => this\.context\.globalState\.get<string>\(LAST_STORAGE_ROOT_KEY\)/)
 assert.match(activation, /transferRoot: async \(source, target\) => \{ await transferStorageRoot\(source, target\) \}/)
 assert.match(activation, /rememberRoot: async root => \{ await this\.context\.globalState\.update\(LAST_STORAGE_ROOT_KEY, root\) \}/)
-assert.match(activation, /当前书签存储路径无效，已继续使用上次验证成功的目录/)
-assert.match(activation, /目标书签存储目录尚未启用，已继续使用来源目录/)
-assert.match(activation, /书签存储目录已转移且原目录已清理，但记录新目录失败/)
+assert.match(activation, /providers\.CodeBookmarkViewProvider\.theCurrentBookmarkStoragePathIsInvalidContinuingWith/)
+assert.match(activation, /providers\.CodeBookmarkViewProvider\.theTargetBookmarkStorageFolderWasNotActivatedContinuing/)
+assert.match(activation, /providers\.CodeBookmarkViewProvider\.theBookmarkStorageFolderWasTransferredAndTheOld/)
 assert.doesNotMatch(activation, /if \(!ExtensionConfig\.ensureGlobalStoragePathConfigured\(\)\)/)
 assert.match(rootActivator, /const rememberedRoot = port\.rememberedRoot\(\)/)
 assert.match(rootActivator, /if \(!port\.ensureConfigured\(\)\)/)

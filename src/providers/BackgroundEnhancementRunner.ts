@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BackgroundEnhancementRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`runBackgroundEnhancements`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 在书签树已经可交互后，后台加载语言注释规则并对打开文档和工作区自动标记进行补充扫描。
+ * 增强任务失败只记录诊断，不阻塞用户已有书签的加载与导航。
  */
 interface BackgroundEnhancementPort {
 	isCurrent(scope: string | undefined, generation: number): boolean

@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-export`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-export` 对应契约。
- * 核心边界：通过断言锁定“verify-export”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查 JSON、Markdown、HTML 与纯文本导出保留层级、行号、状态、代码和可读格式。
+ * 脚本读取仓库真实文件，围绕“检查 JSON、Markdown、HTML 与纯文本导出保留层级、行号、状态、代码和可读格式”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -77,7 +74,7 @@ for (const marker of [
   'relativeSourcePath',
   '.bookmarks',
   '.codebookmark.json',
-  '当前文件夹及其子目录',
+  'commands.exportCommand.noFilesWithBookmarksWereFoundInTheCurrent',
 ]) {
   assert.match(source, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 }

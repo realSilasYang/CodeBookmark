@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-tree-data-projection`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-tree-data-projection` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-tree-data-projection”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`item`、`createHarness`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查 BookmarkSet 到树视图节点的投影、排序和子节点读取不产生磁盘副作用。
+ * 脚本直接调用编译后的 `BookmarkTreeDataProjection`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -21,6 +17,7 @@ function createHarness(rootItems = []) {
   const state = {
     roots: rootItems,
     workspace: false,
+    layoutActive: false,
     currentScopeFilePath: undefined,
     order: null,
     persisted: [],
@@ -50,6 +47,7 @@ function createHarness(rootItems = []) {
     absoluteBookmarkPath: bookmarkPath => `C:/workspace/${bookmarkPath}`,
     relativeBookmarkPath: absolutePath => absolutePath.replace('C:/workspace/', ''),
     isWorkspaceScope: () => state.workspace,
+    workspaceLayoutActive: () => state.layoutActive,
     currentScopeFilePath: () => state.currentScopeFilePath,
     workspaceOrder: () => state.order,
     setWorkspaceOrder: order => { state.order = [...order] },
@@ -85,6 +83,19 @@ assert.equal(firstFile.resourceUri, 'uri:C:/workspace/src/a.ts')
 assert.equal(workspace.projection.hasFileNode('src\\a.ts'), true)
 assert.equal(workspace.projection.fileNode('src/b.ts'), secondFile)
 assert.equal(workspace.projection.parent(firstBookmark, workspace.port), firstFile)
+
+const nestedFile = item('nested-file', 'src/nested.ts', true, [item('nested-child', 'src/nested.ts')])
+const visualContainer = item('visual-container', 'src/root.ts', false, [nestedFile])
+const layoutRootFile = item('layout-root-file', 'src/root.ts', true, [visualContainer])
+const layoutWorkspace = createHarness([layoutRootFile])
+layoutWorkspace.state.workspace = true
+layoutWorkspace.state.layoutActive = true
+assert.deepEqual(layoutWorkspace.projection.children(undefined, layoutWorkspace.port), [layoutRootFile])
+assert.deepEqual(layoutWorkspace.projection.children(visualContainer, layoutWorkspace.port), [nestedFile])
+assert.equal(layoutWorkspace.projection.parent(nestedFile, layoutWorkspace.port), visualContainer)
+assert.equal(layoutWorkspace.projection.fileNode('src/nested.ts'), nestedFile)
+assert.equal(layoutWorkspace.state.order, null)
+assert.deepEqual(layoutWorkspace.state.persisted, [])
 
 workspace.projection.clearFileNodeCache()
 assert.equal(workspace.projection.hasFileNode('src/a.ts'), false)

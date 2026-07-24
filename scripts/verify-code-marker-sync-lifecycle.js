@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-code-marker-sync-lifecycle`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-code-marker-sync-lifecycle` 对应契约。
- * 核心边界：通过断言锁定“verify-code-marker-sync-lifecycle”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`workspaceFile`、`uri`、`createHarness`、`flushAsyncWork`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 验证文档和扩展事件订阅、防抖定时器、后台扫描与停用清理。
+ * 脚本直接调用编译后的 `CodeMarkerSyncLifecycle`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const path = require('node:path')

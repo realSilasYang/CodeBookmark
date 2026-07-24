@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `AIBookmarkBuilder`。
- *
- * 实现要点：把领域输入组装为满足持久化或协议约束的结果，并保留必要身份信息。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`buildAIBookmarks`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把 AI 返回的行号、层级、标签和图标转换成可加入书签树的领域节点。
+ * 重新生成时只替换用户书签，自动 TODO/FIXME/BUG 节点仍由代码标记扫描器独立维护。
  */
 import * as vscode from 'vscode'
 import { Bookmark, CursorIndex } from '../models/Bookmark'
@@ -24,6 +20,29 @@ interface AIBookmarkBuildResult {
 	roots: Bookmark[]
 	created: number
 	skipped: number
+}
+
+export function expandGeneratedBookmarkTree(bookmarks: readonly Bookmark[]): void {
+	const expanded = new Set<Bookmark>()
+	const expandSubtree = (bookmark: Bookmark): void => {
+		for (const child of bookmark.subs) expandSubtree(child)
+		if (bookmark.subs.size === 0 || expanded.has(bookmark)) return
+		bookmark.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+		bookmark.refreshDisplayProps()
+		expanded.add(bookmark)
+	}
+	for (const bookmark of bookmarks) {
+		expandSubtree(bookmark)
+		let ancestor = bookmark.parent
+		while (ancestor) {
+			if (ancestor.subs.size > 0 && !expanded.has(ancestor)) {
+				ancestor.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+				ancestor.refreshDisplayProps()
+				expanded.add(ancestor)
+			}
+			ancestor = ancestor.parent
+		}
+	}
 }
 
 function processAIBookmark(
@@ -59,7 +78,7 @@ function processAIBookmark(
 	}
 
 	bookmark.refreshDisplayProps()
-	if (bookmark.subs.size > 0) bookmark.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+		if (bookmark.subs.size > 0) bookmark.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
 	state.created++
 	return [bookmark]
 }
@@ -72,7 +91,8 @@ export function buildAIBookmarks(
 	overwrite: boolean,
 	assignIcons: boolean,
 ): AIBookmarkBuildResult {
-	// 覆盖操作只替换用户书签；自动代码标记继续由扫描器管理，并保留其源代码行占位。
+	// “重新生成并替换”针对的是用户书签。TODO/FIXME/BUG 节点由扫描器拥有，
+	// 此处先把它们留下，稍后的插入还会避开这些已经占用的源码行。
 	const occupiedBookmarks = overwrite
 		? existingBookmarks.filter(bookmark => bookmark.isCodeMarker)
 		: existingBookmarks

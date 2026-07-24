@@ -1,13 +1,11 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-project-structure`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-project-structure` 对应契约。
- * 核心边界：通过断言锁定“verify-project-structure”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查根目录、源码、构建、测试、法律文件和生成物边界，阻止散乱或旧路径回归。
+ * 脚本读取仓库真实文件，围绕“检查根目录、源码、构建、测试、法律文件和生成物边界”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { GENERATED_NLS_PATTERN } = require('./lib/manifest-language-catalogs')
 
 const root = path.resolve(__dirname, '..')
 const rootFiles = new Set([
@@ -35,7 +33,7 @@ const rootDirectories = new Set([
   'src',
   'tests',
 ])
-const isGeneratedLocalization = name => /^package\.nls(?:\.[a-z]{2}(?:-[a-z]{2})?)?\.json$/i.test(name)
+const isGeneratedLocalization = name => GENERATED_NLS_PATTERN.test(name)
 
 const unexpectedRootEntries = fs.readdirSync(root, { withFileTypes: true })
   .filter(entry => {
@@ -66,7 +64,10 @@ const requiredPaths = [
   'scripts/icons/curated_icons.json',
   'scripts/integration/run-integration-tests.js',
   'scripts/lib/localized-manifest.js',
-  'scripts/lib/manifest-localizations.js',
+	'scripts/lib/manifest-language-catalogs.js',
+	'scripts/lib/manifest-message-keys.js',
+	'scripts/i18n/catalogs/manifest.zh-cn.json',
+	'scripts/i18n/catalogs/manifest.en.json',
   'scripts/release/build-release-notes.js',
   'scripts/release/write-sbom.js',
   'scripts/release/write-sha256sums.js',
@@ -96,6 +97,8 @@ const obsoletePaths = [
   'scripts/icon_tools',
   'scripts/localized-manifest.js',
   'scripts/manifest-localizations.js',
+	'scripts/lib/manifest-localizations.js',
+	'src/util/constants/AIPrompts.ts',
   'scripts/run-integration-tests.js',
 ]
 for (const relativePath of obsoletePaths) {

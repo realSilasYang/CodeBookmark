@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-storage-root-transfer`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-storage-root-transfer` 对应契约。
- * 核心边界：通过断言锁定“verify-storage-root-transfer”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`bookmark`、`envelope`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 在临时目录执行存储迁移，检查合并、备份、冲突和旧目录受管文件清理。
+ * 脚本在临时目录中调用编译后的 `StorageRootTransfer` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -30,6 +26,14 @@ function bookmark(id, label, scriptPath, subs = []) {
 
 function envelope(id, scriptPath, lastSeenAt, bookmarks) {
   return { script: { id, path: scriptPath, lastSeenAt }, bookmarks }
+}
+
+function workspaceLayout(scriptId, updatedAt) {
+  return {
+    format: 'codebookmark.workspace-layout', schemaVersion: 1, updatedAt,
+    entries: [{ node: { kind: 'script', scriptId }, parent: null }],
+    hiddenFiles: [], pinnedContainer: null, expansionStates: [],
+  }
 }
 
 async function main() {
@@ -86,6 +90,10 @@ async function main() {
   )))
   fs.writeFileSync(path.join(sourceScope, '_workspace_order.json'), JSON.stringify(['src/a.ts', 'src/b.ts']))
   fs.writeFileSync(path.join(targetScope, '_workspace_order.json'), JSON.stringify(['src/b.ts', 'src/c.ts']))
+  const sourceLayout = workspaceLayout('10000000-0000-9000-1000-000000000031', 200)
+  const targetLayout = workspaceLayout('10000000-0000-9000-1000-000000000032', 100)
+  fs.writeFileSync(path.join(sourceScope, '_workspace_layout.json'), JSON.stringify(sourceLayout))
+  fs.writeFileSync(path.join(targetScope, '_workspace_layout.json'), JSON.stringify(targetLayout))
   fs.writeFileSync(path.join(source, 'unrelated-root-config.json'), '{}')
   fs.writeFileSync(path.join(source, '.storage-transfer.json'), '{}')
   fs.writeFileSync(path.join(source, '.storage-transfer.json.123.456.tmp'), 'stale journal temporary file')
@@ -93,7 +101,7 @@ async function main() {
 
   try {
     const first = await transferStorageRoot(source, target)
-    assert.deepEqual(first, { copiedFiles: 1, mergedFiles: 2, conflictFiles: 0 })
+    assert.deepEqual(first, { copiedFiles: 1, mergedFiles: 2, conflictFiles: 1 })
     assert.equal(fs.existsSync(path.join(source, 'scripts')), false)
     assert.equal(fs.existsSync(path.join(source, 'scopes')), false)
     assert.equal(fs.existsSync(path.join(source, '.script-relocations')), false)
@@ -131,15 +139,21 @@ async function main() {
     assert.deepEqual(mergedOrder.order, [
       'src/b.ts', 'src/c.ts', 'src/a.ts',
     ])
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(targetScope, '_workspace_layout.json'), 'utf8')), targetLayout)
+    const layoutConflictFile = fs.readdirSync(targetScope)
+      .find(file => file.startsWith('_workspace_layout.transfer-conflict_') && file.endsWith('.json'))
+    assert.ok(layoutConflictFile)
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(targetScope, layoutConflictFile), 'utf8')), sourceLayout)
 
     const second = await transferStorageRoot(source, target)
-    assert.deepEqual(second, { copiedFiles: 0, mergedFiles: 0, conflictFiles: 0 })
+    assert.deepEqual(second, { copiedFiles: 1, mergedFiles: 2, conflictFiles: 1 })
     const mergedAgain = JSON.parse(fs.readFileSync(mergedPath, 'utf8'))
     assert.equal(mergedAgain.bookmarks.length, 5)
     const state = JSON.parse(fs.readFileSync(path.join(target, '.storage-transfer.json'), 'utf8'))
     assert.equal(state.format, 'codebookmark.storage-transfer')
     assert.equal(state.schemaVersion, 1)
     assert.equal(state.status, 'complete')
+    assert.equal(state.conflictFiles, 1)
 
     const resumeSource = path.join(sandbox, 'resume-source')
     const resumeTarget = path.join(sandbox, 'resume-target')

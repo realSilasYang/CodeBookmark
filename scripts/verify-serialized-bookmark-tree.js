@@ -1,14 +1,12 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-serialized-bookmark-tree`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-serialized-bookmark-tree` 对应契约。
- * 核心边界：通过断言锁定“verify-serialized-bookmark-tree”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 验证序列化书签树的身份重写、路径替换、内容比较和无损合并。
+ * 脚本直接调用编译后的 `SerializedBookmarkTree`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 
 const {
   mergeSerializedBookmarks,
+  mergeSerializedBookmarksWithIdMap,
   serializedBookmarkContentIdentity,
 } = require('../out/models/SerializedBookmarkTree')
 
@@ -37,10 +35,30 @@ assert.equal(deduplicated.length, 1)
 assert.equal(deduplicated[0].path, 'target.ts')
 assert.equal(deduplicated[0].subs[0].path, 'target.ts')
 
-const merged = mergeSerializedBookmarks(primary, conflict, 'target.ts')
+const deduplicatedWithMap = mergeSerializedBookmarksWithIdMap(primary, duplicate, 'target.ts')
+assert.equal(deduplicatedWithMap.idMap.get('bookmark-b'), 'bookmark-a')
+assert.equal(deduplicatedWithMap.idMap.get('child-b'), 'child-a')
+
+const mergedWithMap = mergeSerializedBookmarksWithIdMap(primary, conflict, 'target.ts')
+const merged = mergedWithMap.bookmarks
 assert.equal(merged.length, 2)
 assert.equal(merged[1].id === 'bookmark-a', false)
 assert.equal(merged[1].subs[0].id === 'child-a', false)
+assert.equal(mergedWithMap.idMap.get('bookmark-a'), merged[1].id)
+assert.equal(mergedWithMap.idMap.get('child-a'), merged[1].subs[0].id)
 assert.equal(merged[1].path, 'target.ts')
+
+const nestedOnlyConflict = [{
+  id: 'bookmark-c',
+  path: 'other.ts',
+  label: 'nested conflict',
+  subs: [{ id: 'child-a', path: 'other.ts', label: 'different child', subs: [] }],
+}]
+const nestedMerged = mergeSerializedBookmarksWithIdMap(primary, nestedOnlyConflict, 'target.ts')
+assert.equal(nestedMerged.bookmarks.length, 2)
+assert.notEqual(nestedMerged.bookmarks[1].id, 'bookmark-c')
+assert.notEqual(nestedMerged.bookmarks[1].subs[0].id, 'child-a')
+assert.equal(nestedMerged.idMap.get('bookmark-c'), nestedMerged.bookmarks[1].id)
+assert.equal(nestedMerged.idMap.get('child-a'), nestedMerged.bookmarks[1].subs[0].id)
 assert.equal(serializedBookmarkContentIdentity(primary[0]), serializedBookmarkContentIdentity(duplicate[0]))
 assert.equal(JSON.stringify({ primary, duplicate, conflict }), original)

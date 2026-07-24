@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责真实 Extension Host 集成测试，具体对象为 `index`。
- *
- * 实现要点：在真实宿主内执行用户路径，并对持久化结果、语言环境与移动恢复进行端到端断言。
- * 核心边界：测试使用可重复的输入与隔离环境验证公开行为，不依赖人工界面判断。
- * 主要入口：`markerDirectiveFixture`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 在真实 VS Code 的十三种界面语言和未知非中文回退场景中验证激活、本地化、持久化与主要书签工作流。
+ * 每一步都通过扩展公开测试 API 读取结果；清单回退、SVG 元数据等反例也在真实语言模式下执行。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs/promises')
@@ -25,6 +21,17 @@ async function waitFor(assertion, message, timeoutMs = 10_000) {
   throw new Error(`${message}: ${lastError instanceof Error ? lastError.message : String(lastError)}`)
 }
 
+async function findNamedFile(root, fileName) {
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    const fullPath = path.join(root, entry.name)
+    if (entry.isDirectory()) {
+      const nested = await findNamedFile(fullPath, fileName)
+      if (nested) return nested
+    } else if (entry.isFile() && entry.name === fileName) return fullPath
+  }
+  return undefined
+}
+
 function localizedValue(value) {
   if (typeof value === 'string') return value
   return value?.value
@@ -32,7 +39,14 @@ function localizedValue(value) {
 
 async function run() {
   const expectedLocale = process.env.CODEBOOKMARK_TEST_LOCALE
-  assert.ok(expectedLocale === 'zh-cn' || expectedLocale === 'en', 'Integration-test locale must be explicit')
+  const expectedRuntimeLanguage = process.env.CODEBOOKMARK_TEST_RUNTIME_LANGUAGE
+  const supportedLocales = [
+    'zh-cn', 'zh-hk', 'zh-tw', 'en',
+    'ja', 'vi', 'ko', 'es', 'fr', 'pt', 'ru', 'de', 'it',
+  ]
+  const fallbackLocale = 'tr'
+  assert.ok([...supportedLocales, fallbackLocale].includes(expectedLocale), 'Integration-test locale must be explicit')
+  assert.ok(supportedLocales.includes(expectedRuntimeLanguage), 'Integration-test runtime language must be explicit')
   assert.equal(
     vscode.env.language.toLocaleLowerCase(),
     expectedLocale,
@@ -40,17 +54,19 @@ async function run() {
   )
   const extension = vscode.extensions.all.find(candidate => candidate.packageJSON?.name === 'codebookmark')
   assert.ok(extension, 'CodeBookmark extension is not installed in the test host')
-  const expectedManifestText = expectedLocale === 'zh-cn'
-    ? {
-        view: '代码书签',
-        toggle: '添加/删除书签',
-        storage: '书签配置目录的绝对路径（必填，支持 ~ 和 %ENV%）',
-      }
-    : {
-        view: 'Code Bookmarks',
-        toggle: 'Add/Remove Bookmark',
-        storage: 'Absolute path to the bookmark configuration directory (required; supports ~ and %ENV%).',
-      }
+  const manifestCatalogLocale = supportedLocales.includes(expectedLocale) ? expectedLocale : 'en'
+  const manifestCatalog = JSON.parse(await fs.readFile(path.join(
+    extension.extensionPath,
+    'scripts',
+    'i18n',
+    'catalogs',
+    `manifest.${manifestCatalogLocale}.json`,
+  ), 'utf8'))
+  const expectedManifestText = {
+    view: manifestCatalog['codebookmark.common.commandCategory'],
+    toggle: manifestCatalog['codebookmark.contributes.commands.codebookmark.toggleBookmark.title'],
+    storage: manifestCatalog['codebookmark.contributes.configuration.main.properties.codebookmark.globalStoragePath.description'],
+  }
   assert.equal(localizedValue(extension.packageJSON.contributes.views.codebookmark[0].name), expectedManifestText.view)
   assert.equal(
     localizedValue(extension.packageJSON.contributes.commands.find(command => command.command === 'codebookmark.toggleBookmark')?.title),
@@ -66,7 +82,7 @@ async function run() {
   await configurationBeforeActivation.update('globalStoragePath', storageRoot, vscode.ConfigurationTarget.Global)
   const extensionApi = await extension.activate()
   assert.equal(extension.isActive, true)
-  assert.equal(extensionApi.language, expectedLocale)
+  assert.equal(extensionApi.language, expectedRuntimeLanguage)
   assert.ok(extensionApi.integration, 'Integration test API is unavailable')
 
   const commands = new Set(await vscode.commands.getCommands(true))
@@ -80,9 +96,14 @@ async function run() {
   }
 
   const configuration = vscode.workspace.getConfiguration('codebookmark')
+  assert.equal(configuration.has('language'), false)
   assert.equal(configuration.has('AI.address'), true)
   assert.equal(configuration.has('AI.APIKey'), true)
   assert.equal(configuration.has('AI.model'), true)
+  if (!['zh-cn', 'en'].includes(expectedLocale) || expectedRuntimeLanguage !== expectedLocale) {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors')
+    return
+  }
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
   assert.ok(workspaceFolder)
@@ -145,6 +166,55 @@ async function run() {
   assert.equal(persistedAfterMove.schemaVersion, 1)
   assert.equal(path.resolve(persistedAfterMove.script.path), path.resolve(externallyMovedPath))
   assert.equal(persistedAfterMove.bookmarks[0].id, bookmarkId)
+
+  const otherUri = vscode.Uri.joinPath(workspaceFolder.uri, 'other.ts')
+  await fs.writeFile(otherUri.fsPath, 'export const other = true\nexport default other\n', 'utf8')
+  const otherDocument = await vscode.workspace.openTextDocument(otherUri)
+  await vscode.window.showTextDocument(otherDocument)
+  await extensionApi.integration.addBookmark(1, 'Other file bookmark')
+  snapshot = extensionApi.integration.snapshot()
+  const firstFile = snapshot.roots.find(root => root.path === 'externally-moved.ts')
+  const otherFile = snapshot.roots.find(root => root.path === 'other.ts')
+  assert.ok(firstFile)
+  assert.ok(otherFile)
+  const otherScriptId = otherFile.scriptId
+  const otherBookmarkId = otherFile.children[0].id
+  assert.equal(firstFile.children[0].ownerScriptId, scriptId)
+  assert.equal(otherFile.children[0].ownerScriptId, otherScriptId)
+
+  await extensionApi.integration.moveNode(otherBookmarkId, firstFile.id)
+  snapshot = extensionApi.integration.snapshot()
+  const movedIntoFirst = snapshot.roots.find(root => root.path === 'externally-moved.ts')
+    .children.find(child => child.id === otherBookmarkId)
+  assert.ok(movedIntoFirst)
+  assert.equal(movedIntoFirst.ownerScriptId, otherScriptId)
+  assert.equal(movedIntoFirst.parentId, firstFile.id)
+  assert.equal(movedIntoFirst.treeDepth, 1)
+  assert.equal(snapshot.roots.find(root => root.path === 'other.ts').children.length, 0)
+
+  const otherConfiguration = JSON.parse(await fs.readFile(path.join(scriptsFolder, `${otherScriptId}.json`), 'utf8'))
+  assert.deepEqual(otherConfiguration.bookmarks.map(item => item.id), [otherBookmarkId])
+  const layoutPath = await findNamedFile(path.join(storageRoot, 'scopes'), '_workspace_layout.json')
+  assert.ok(layoutPath)
+  const persistedLayout = JSON.parse(await fs.readFile(layoutPath, 'utf8'))
+  const movedLayoutEntry = persistedLayout.entries.find(entry => entry.node.kind === 'bookmark'
+    && entry.node.scriptId === otherScriptId && entry.node.bookmarkId === otherBookmarkId)
+  assert.deepEqual(movedLayoutEntry.parent, { kind: 'script', scriptId })
+
+  await extensionApi.integration.reload()
+  snapshot = extensionApi.integration.snapshot()
+  const reloadedMoved = snapshot.roots.find(root => root.path === 'externally-moved.ts')
+    .children.find(child => child.id === otherBookmarkId)
+  assert.equal(reloadedMoved.ownerScriptId, otherScriptId)
+  assert.equal(reloadedMoved.parentId, firstFile.id)
+
+  await extensionApi.integration.undo()
+  snapshot = extensionApi.integration.snapshot()
+  assert.equal(snapshot.roots.find(root => root.path === 'externally-moved.ts').children.some(child => child.id === otherBookmarkId), false)
+  assert.equal(snapshot.roots.find(root => root.path === 'other.ts').children[0].id, otherBookmarkId)
+  await extensionApi.integration.redo()
+  snapshot = extensionApi.integration.snapshot()
+  assert.equal(snapshot.roots.find(root => root.path === 'externally-moved.ts').children.some(child => child.id === otherBookmarkId), true)
 
   const markerUri = vscode.Uri.joinPath(workspaceFolder.uri, 'marker-directives.ts')
   await fs.writeFile(markerUri.fsPath, [

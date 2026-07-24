@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-config-watcher-coordinator`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-config-watcher-coordinator` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-config-watcher-coordinator”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`createHarness`、`flushAsyncWork`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 验证配置监听器替换、事件合并、过期请求丢弃和失败分类，旧根目录回调不能污染新视图。
+ * 脚本直接调用编译后的 `BookmarkConfigWatcherCoordinator`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -48,7 +44,7 @@ function createHarness() {
     scope: 'workspace:current',
     saving: false,
     collected: [],
-    orderReader: undefined,
+    layoutReloader: undefined,
   }
   const port = {
     isDisposed: () => state.disposed,
@@ -65,13 +61,9 @@ function createHarness() {
       return true
     },
     sameDirectory: (left, right) => left.toLowerCase() === right.toLowerCase(),
-    readWorkspaceOrder: async (scope, generation) => {
-      events.push(`order:read:${scope}:${generation}`)
-      if (state.orderReader) return state.orderReader()
-      return { order: ['src/a.ts'] }
-    },
-    applyWorkspaceOrder: (snapshot, scope, generation) => {
-      events.push(`order:apply:${snapshot.order.join(',')}:${scope}:${generation}`)
+    reloadWorkspaceLayout: async () => {
+      events.push('layout:reload')
+      if (state.layoutReloader) return state.layoutReloader()
     },
     reloadExternalBookmarkFiles: async fileNames => {
       events.push(`reload:${fileNames.join(',')}`)
@@ -116,10 +108,8 @@ async function main() {
   assert.equal(changes.scheduling.timers.filter(timer => timer.delay === 500).length, 1)
   changes.scheduling.runDelay(500)
   await flushAsyncWork()
-  assert.ok(changes.events.includes('order:read:workspace:current:1'))
-  assert.ok(changes.events.includes('order:apply:src/a.ts:workspace:current:1'))
-  assert.ok(changes.events.includes('reload:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.json'))
-  assert.equal(changes.events.at(-1), 'rebase')
+  assert.ok(changes.events.includes('layout:reload'))
+  assert.equal(changes.events.some(event => event.startsWith('reload:')), false)
 
   const deferred = createHarness()
   await deferred.coordinator.setup(1, deferred.port)
@@ -153,19 +143,19 @@ async function main() {
 
   const staleOrder = createHarness()
   let releaseOrder
-  staleOrder.state.orderReader = () => new Promise(resolve => { releaseOrder = resolve })
+  staleOrder.state.layoutReloader = () => new Promise(resolve => { releaseOrder = resolve })
   await staleOrder.coordinator.setup(1, staleOrder.port)
   staleOrder.handles[1].onFileChange('_workspace_order.json')
   staleOrder.scheduling.runDelay(500)
   await flushAsyncWork()
   staleOrder.state.generation = 2
-  releaseOrder({ order: ['stale.ts'] })
+  releaseOrder()
   await flushAsyncWork()
-  assert.equal(staleOrder.events.some(event => event.startsWith('order:apply:')), false)
+  assert.equal(staleOrder.events.filter(event => event === 'layout:reload').length, 1)
 
   const delayedFailure = createHarness()
   delayedFailure.state.saving = true
-  delayedFailure.state.orderReader = async () => { throw new Error('order failed') }
+  delayedFailure.state.layoutReloader = async () => { throw new Error('layout failed') }
   await delayedFailure.coordinator.setup(1, delayedFailure.port)
   delayedFailure.handles[1].onFileChange('_workspace_order.json')
   delayedFailure.scheduling.runDelay(500)
@@ -173,7 +163,7 @@ async function main() {
   delayedFailure.state.saving = false
   delayedFailure.scheduling.runDelay(100)
   await flushAsyncWork()
-  assert.ok(delayedFailure.events.includes('failure:delayed-processing:none:order failed'))
+  assert.ok(delayedFailure.events.includes('failure:delayed-processing:none:layout failed'))
 
   const retry = createHarness()
   await retry.coordinator.setup(1, retry.port)

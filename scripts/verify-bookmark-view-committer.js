@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-view-committer`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-view-committer` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-view-committer”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`createHarness`、`prepared`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查准备好的视图快照只有在会话仍有效时才会提交，并按固定顺序发布状态。
+ * 脚本直接调用编译后的 `BookmarkViewCommitter`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { commitBookmarkView } = require('../out/providers/BookmarkViewCommitter')
@@ -33,6 +29,7 @@ function createHarness(overrides = {}) {
     },
     setCurrentScopeFilePath: value => events.push(`setPath:${value ?? 'none'}`),
     setWorkspaceOrder: value => events.push(`setOrder:${value?.join(',') ?? 'none'}`),
+    setWorkspaceLayout: value => events.push(`setLayout:${value?.entries.length ?? 'none'}`),
     setBookmarks: value => {
       events.push('setBookmarks')
       assert.equal(value, bookmarks)
@@ -57,6 +54,13 @@ function prepared(overrides = {}) {
     workspaceOrder: ['src/a.ts'],
     workspaceOrderFilePath: 'C:/workspace/_workspace_order.json',
     workspaceOrderNeedsPersist: true,
+    workspaceLayout: {
+      format: 'codebookmark.workspace-layout', schemaVersion: 1, updatedAt: 1,
+      entries: [{ node: { kind: 'script', scriptId: 'script-a' }, parent: null }],
+      hiddenFiles: [], pinnedContainer: null,
+    },
+    workspaceLayoutNeedsPersist: false,
+    workspaceLayoutWriteBlocked: false,
     contentUpdated: false,
     ...overrides,
     bookmarks,
@@ -75,6 +79,7 @@ function main() {
     'setScope:workspace:new',
     'setPath:C:/workspace/main.ts',
     'setOrder:src/a.ts',
+    'setLayout:1',
     'setBookmarks',
     'rebuild:1',
     'invalidatePathIndex',

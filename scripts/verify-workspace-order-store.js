@@ -1,16 +1,13 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-workspace-order-store`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-workspace-order-store` 对应契约。
- * 核心边界：通过断言锁定“verify-workspace-order-store”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`createHarness`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 验证工作区顺序文件的版本解析、迁移、原子写入与副本隔离。
+ * 脚本直接调用编译后的 `WorkspaceOrderStore`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const { WorkspaceOrderStore } = require('../out/repository/WorkspaceOrderStore')
 
 const orderPath = folder => path.join(folder, '_workspace_order.json')
+const layoutPath = folder => path.join(folder, '_workspace_layout.json')
 const persistedOrder = (files, folder) => {
   const value = files.get(orderPath(folder))
   assert.equal(value?.format, 'codebookmark.workspace-order')
@@ -114,6 +111,24 @@ async function main() {
   })
   assert.deepEqual(persistedOrder(harness.files, scope), ['src/other.ts'])
   assert.deepEqual(persistedOrder(harness.files, targetScope), ['src/existing.ts', 'src/new/a.ts'])
+
+  harness = createHarness()
+  harness.files.set(layoutPath(scope), { format: 'codebookmark.workspace-layout' })
+  harness.files.set(orderPath(scope), ['stale.ts'])
+  await harness.store.append(scope, 'src/a.ts')
+  await harness.store.removeTree(scope, 'stale.ts')
+  await harness.store.renameFile({
+    oldBookmarkFolder: scope, newBookmarkFolder: scope,
+    oldBookmarkPath: 'stale.ts', newBookmarkPath: 'renamed.ts',
+  })
+  await harness.store.renameDirectory({
+    oldBookmarkFolder: scope, newBookmarkFolder: scope,
+    oldBookmarkPath: 'src', newBookmarkPath: 'renamed',
+  })
+  assert.equal(await harness.store.indexOf(scope, 'stale.ts'), undefined)
+  assert.equal(harness.writes.length, 0)
+  assert.equal(harness.deletes.length, 0)
+  assert.deepEqual(harness.files.get(orderPath(scope)), ['stale.ts'])
 
   harness = createHarness()
   harness.failWrites()

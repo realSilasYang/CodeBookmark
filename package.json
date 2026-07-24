@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -17,27 +17,35 @@
   },
   "keywords": [
     "bookmark",
-    "bookmarks",
     "code bookmark",
-    "code bookmarks",
-    "code-bookmark",
+    "code navigation",
+    "sticky bookmark",
+    "bookmark manager",
+    "bookmark icons",
+    "ai bookmarks",
     "书签",
     "代码书签",
-    "源码书签",
-    "源代码书签",
     "标签",
     "代码标签",
-    "源码标签",
     "代码导航",
-    "code-navigation",
-    "sticky-bookmark",
-    "bookmark-manager",
-    "file-tracking",
-    "local-storage",
-    "bookmark-icons",
-    "ai-bookmarks",
-    "ai",
-    "vscode"
+    "代碼書籤",
+    "程式碼書籤",
+    "ブックマーク",
+    "コードブックマーク",
+    "북마크",
+    "코드 북마크",
+    "dấu trang",
+    "dấu trang mã nguồn",
+    "marcador",
+    "marcadores de código",
+    "signet",
+    "signets de code",
+    "закладка",
+    "закладки кода",
+    "lesezeichen",
+    "code-lesezeichen",
+    "segnalibro",
+    "segnalibri codice"
   ],
   "icon": "resources/bookmark_logo.png",
   "galleryBanner": {
@@ -126,7 +134,7 @@
       "activitybar": [
         {
           "id": "codebookmark",
-          "title": "%codebookmark.contributes.viewsContainers.activitybar.0.title%",
+          "title": "%codebookmark.contributes.viewsContainers.activitybar.codebookmark.title%",
           "icon": "resources/bookmark.svg"
         }
       ]
@@ -135,562 +143,562 @@
       "codebookmark": [
         {
           "id": "codebookmarkTreeView",
-          "name": "%codebookmark.contributes.views.codebookmark.0.name%",
+          "name": "%codebookmark.contributes.views.codebookmark.codebookmarkTreeView.name%",
           "icon": "resources/bookmark.svg",
-          "contextualTitle": "%codebookmark.contributes.views.codebookmark.0.contextualTitle%"
+          "contextualTitle": "%codebookmark.contributes.views.codebookmark.codebookmarkTreeView.contextualTitle%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "codebookmarkTreeView",
-        "contents": "%codebookmark.contributes.viewsWelcome.0.contents%",
+        "contents": "%codebookmark.contributes.viewsWelcome.codebookmarkTreeView-e3c10e816e.contents%",
         "when": "bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.loadFailed && codebookmark.aiAnalysisAvailable && !codebookmark.activeFileHasBookmark"
       },
       {
         "view": "codebookmarkTreeView",
-        "contents": "%codebookmark.contributes.viewsWelcome.1.contents%",
+        "contents": "%codebookmark.contributes.viewsWelcome.codebookmarkTreeView-2c26b29c7b.contents%",
         "when": "bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.loadFailed && !codebookmark.aiAnalysisAvailable"
       }
     ],
     "commands": [
       {
         "command": "codebookmark.toggleBookmark",
-        "title": "%codebookmark.contributes.commands.0.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.toggleBookmark.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.forceAddBookmark",
-        "title": "%codebookmark.contributes.commands.1.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.forceAddBookmark.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.forceDeleteBookmark",
-        "title": "%codebookmark.contributes.commands.2.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.forceDeleteBookmark.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.deleteBookmark",
-        "title": "%codebookmark.contributes.commands.3.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.deleteBookmark.title%",
         "icon": "$(trash)"
       },
       {
         "command": "codebookmark.editBookmark.editLabel",
-        "title": "%codebookmark.contributes.commands.4.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.editBookmark.editLabel.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.editBookmark.updatePosOnly",
-        "title": "%codebookmark.contributes.commands.5.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.editBookmark.updatePosOnly.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.editBookmark.updatePosAndRename",
-        "title": "%codebookmark.contributes.commands.6.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.editBookmark.updatePosAndRename.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.editBookmark.changeIcon",
-        "title": "%codebookmark.contributes.commands.7.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.editBookmark.changeIcon.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.editBookmark.restoreDefaultIcon",
-        "title": "%codebookmark.contributes.commands.8.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.editBookmark.restoreDefaultIcon.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.renameBookmark",
-        "title": "%codebookmark.contributes.commands.9.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.renameBookmark.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.pinView",
-        "title": "%codebookmark.contributes.commands.10.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.pinView.title%",
         "icon": "$(folder-opened)"
       },
       {
         "command": "codebookmark.unpinView",
-        "title": "%codebookmark.contributes.commands.11.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.unpinView.title%",
         "icon": "$(folder)"
       },
       {
         "command": "codebookmark.undo",
-        "title": "%codebookmark.contributes.commands.12.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo",
-        "title": "%codebookmark.contributes.commands.13.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.bookmark.searchInFile",
-        "title": "%codebookmark.contributes.commands.14.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.bookmark.searchInFile.title%",
         "icon": "$(search)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.toggleExpandCollapse",
-        "title": "%codebookmark.contributes.commands.15.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.toggleExpandCollapse.title%",
         "icon": "$(expand-all)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.collapseToLevel",
-        "title": "%codebookmark.contributes.commands.16.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.collapseToLevel.title%",
         "icon": "$(collapse-all)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.bookmark.sort",
-        "title": "%codebookmark.contributes.commands.17.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.bookmark.sort.title%",
         "icon": "$(list-selection)",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.openSettings",
-        "title": "%codebookmark.contributes.commands.18.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.openSettings.title%",
         "icon": "$(settings)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.openHelp",
-        "title": "%codebookmark.contributes.commands.19.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.openHelp.title%",
         "icon": "$(info)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.importBookmarkConfig",
-        "title": "%codebookmark.contributes.commands.20.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.importBookmarkConfig.title%",
         "icon": "$(file-symlink-file)",
         "enablement": "!codebookmark.activeFileHasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.manageBookmarkConfigurations",
-        "title": "%codebookmark.contributes.commands.21.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.manageBookmarkConfigurations.title%",
         "icon": "$(files)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateAppend",
-        "title": "%codebookmark.contributes.commands.22.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateAppend.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateOverwrite",
-        "title": "%codebookmark.contributes.commands.23.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateOverwrite.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateSkip",
-        "title": "%codebookmark.contributes.commands.24.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateSkip.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.optimize",
-        "title": "%codebookmark.contributes.commands.25.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.optimize.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.optimizeDirect",
-        "title": "%codebookmark.contributes.commands.26.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.optimizeDirect.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.optimizeFolderDirect",
-        "title": "%codebookmark.contributes.commands.27.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.optimizeFolderDirect.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.optimizeSelectedDirect",
-        "title": "%codebookmark.contributes.commands.28.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.optimizeSelectedDirect.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.optimizeSelected",
-        "title": "%codebookmark.contributes.commands.29.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.optimizeSelected.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateAppendFolder",
-        "title": "%codebookmark.contributes.commands.30.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateAppendFolder.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateOverwriteFolder",
-        "title": "%codebookmark.contributes.commands.31.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateOverwriteFolder.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateAppendFolderDirect",
-        "title": "%codebookmark.contributes.commands.32.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateAppendFolderDirect.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateOverwriteFolderDirect",
-        "title": "%codebookmark.contributes.commands.33.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateOverwriteFolderDirect.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateSkipFolder",
-        "title": "%codebookmark.contributes.commands.34.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateSkipFolder.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.generateSkipFolderDirect",
-        "title": "%codebookmark.contributes.commands.35.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.generateSkipFolderDirect.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.optimizeFolder",
-        "title": "%codebookmark.contributes.commands.36.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.optimizeFolder.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.optimizeContextItem",
-        "title": "%codebookmark.contributes.commands.37.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.optimizeContextItem.title%",
         "enablement": "(codebookmark.aiAnalysisAvailable && isWorkspaceTrusted)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.testConnection",
-        "title": "%codebookmark.contributes.commands.38.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.testConnection.title%",
         "icon": "$(debug-disconnect)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.ai.openSettings",
-        "title": "%codebookmark.contributes.commands.39.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.ai.openSettings.title%",
         "icon": "$(settings)",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.exportToMarkdown",
         "title": "Markdown",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.exportToHtml",
         "title": "HTML",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.exportToCsv",
         "title": "CSV",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.exportToText",
-        "title": "%codebookmark.contributes.commands.43.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.exportToText.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.exportSourceFiles",
-        "title": "%codebookmark.contributes.commands.44.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.exportSourceFiles.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.batchExportToMarkdown",
         "title": "Markdown",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.batchExportToHtml",
         "title": "HTML",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.batchExportToCsv",
         "title": "CSV",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.batchExportToText",
-        "title": "%codebookmark.contributes.commands.48.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.batchExportToText.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.batchExportSourceFiles",
-        "title": "%codebookmark.contributes.commands.49.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.batchExportSourceFiles.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.clearInvalidBookmarks",
-        "title": "%codebookmark.contributes.commands.50.title%",
-        "category": "Code Bookmarks"
+        "title": "%codebookmark.contributes.commands.codebookmark.clearInvalidBookmarks.title%",
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.modifyBookmarks",
-        "title": "%codebookmark.contributes.commands.51.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.modifyBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.reorderFiles",
-        "title": "%codebookmark.contributes.commands.52.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.reorderFiles.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.moveBookmarks",
-        "title": "%codebookmark.contributes.commands.53.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.moveBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.addBookmarks",
-        "title": "%codebookmark.contributes.commands.54.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.addBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.toggleBookmarks",
-        "title": "%codebookmark.contributes.commands.55.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.toggleBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.deleteBookmarks",
-        "title": "%codebookmark.contributes.commands.56.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.deleteBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.generateAIBookmarks",
-        "title": "%codebookmark.contributes.commands.57.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.generateAIBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.optimizeAIBookmarks",
-        "title": "%codebookmark.contributes.commands.58.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.optimizeAIBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.importBookmarks",
-        "title": "%codebookmark.contributes.commands.59.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.importBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.renameBookmarks",
-        "title": "%codebookmark.contributes.commands.60.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.renameBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.updateBookmarkPosition",
-        "title": "%codebookmark.contributes.commands.61.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.updateBookmarkPosition.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.updateBookmarkAndRename",
-        "title": "%codebookmark.contributes.commands.62.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.updateBookmarkAndRename.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.changeBookmarkIcons",
-        "title": "%codebookmark.contributes.commands.63.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.changeBookmarkIcons.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.restoreBookmarkIcons",
-        "title": "%codebookmark.contributes.commands.64.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.restoreBookmarkIcons.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.clearInvalidBookmarks",
-        "title": "%codebookmark.contributes.commands.65.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.clearInvalidBookmarks.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.setBookmarkContainer",
-        "title": "%codebookmark.contributes.commands.66.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.setBookmarkContainer.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.undo.unsetBookmarkContainer",
-        "title": "%codebookmark.contributes.commands.67.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.undo.unsetBookmarkContainer.title%",
         "icon": "$(discard)",
         "enablement": "bookmarks.var.bookmark.canUndo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.modifyBookmarks",
-        "title": "%codebookmark.contributes.commands.68.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.modifyBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.reorderFiles",
-        "title": "%codebookmark.contributes.commands.69.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.reorderFiles.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.moveBookmarks",
-        "title": "%codebookmark.contributes.commands.70.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.moveBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.addBookmarks",
-        "title": "%codebookmark.contributes.commands.71.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.addBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.toggleBookmarks",
-        "title": "%codebookmark.contributes.commands.72.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.toggleBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.deleteBookmarks",
-        "title": "%codebookmark.contributes.commands.73.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.deleteBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.generateAIBookmarks",
-        "title": "%codebookmark.contributes.commands.74.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.generateAIBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.optimizeAIBookmarks",
-        "title": "%codebookmark.contributes.commands.75.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.optimizeAIBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.importBookmarks",
-        "title": "%codebookmark.contributes.commands.76.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.importBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.renameBookmarks",
-        "title": "%codebookmark.contributes.commands.77.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.renameBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.updateBookmarkPosition",
-        "title": "%codebookmark.contributes.commands.78.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.updateBookmarkPosition.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.updateBookmarkAndRename",
-        "title": "%codebookmark.contributes.commands.79.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.updateBookmarkAndRename.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.changeBookmarkIcons",
-        "title": "%codebookmark.contributes.commands.80.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.changeBookmarkIcons.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.restoreBookmarkIcons",
-        "title": "%codebookmark.contributes.commands.81.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.restoreBookmarkIcons.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.clearInvalidBookmarks",
-        "title": "%codebookmark.contributes.commands.82.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.clearInvalidBookmarks.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.setBookmarkContainer",
-        "title": "%codebookmark.contributes.commands.83.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.setBookmarkContainer.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.redo.unsetBookmarkContainer",
-        "title": "%codebookmark.contributes.commands.84.title%",
+        "title": "%codebookmark.contributes.commands.codebookmark.redo.unsetBookmarkContainer.title%",
         "icon": "$(redo)",
         "enablement": "bookmarks.var.bookmark.canRedo",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       }
     ],
     "keybindings": [
@@ -701,30 +709,30 @@
       },
       {
         "command": "codebookmark.renameBookmark",
-        "title": "%codebookmark.contributes.keybindings.1.title%",
+        "title": "%codebookmark.contributes.keybindings.codebookmark.renameBookmark.title%",
         "key": "f2",
         "when": "listFocus && focusedView == 'codebookmarkTreeView'",
-        "category": "Code Bookmarks"
+        "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.toggleBookmark",
-        "title": "%codebookmark.contributes.keybindings.2.title%",
+        "title": "%codebookmark.contributes.keybindings.codebookmark.toggleBookmark.title%",
         "key": "ctrl+b",
-        "category": "Code Bookmarks",
+        "category": "%codebookmark.common.commandCategory%",
         "when": "editorTextFocus"
       },
       {
         "command": "codebookmark.forceAddBookmark",
-        "title": "%codebookmark.contributes.keybindings.3.title%",
+        "title": "%codebookmark.contributes.keybindings.codebookmark.forceAddBookmark.title%",
         "key": "ctrl+alt+shift+b",
-        "category": "Code Bookmarks",
+        "category": "%codebookmark.common.commandCategory%",
         "when": "editorTextFocus"
       },
       {
         "command": "codebookmark.forceDeleteBookmark",
-        "title": "%codebookmark.contributes.keybindings.4.title%",
+        "title": "%codebookmark.contributes.keybindings.codebookmark.forceDeleteBookmark.title%",
         "key": "ctrl+alt+shift+d",
-        "category": "Code Bookmarks",
+        "category": "%codebookmark.common.commandCategory%",
         "when": "editorTextFocus"
       },
       {
@@ -943,43 +951,43 @@
       "view/item/context": [
         {
           "command": "codebookmark.pinView",
-          "title": "%codebookmark.contributes.menus.view_item_context.0.title%",
+          "title": "%codebookmark.contributes.menus.view_item_context.codebookmark.pinView.title%",
           "icon": "$(folder-opened)",
-          "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom))",
+          "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom) || (viewItem == file || viewItem == fileCustom)) && !codebookmark.hasMultipleSelection",
           "group": "inline@2"
         },
         {
           "command": "codebookmark.unpinView",
-          "title": "%codebookmark.contributes.menus.view_item_context.1.title%",
+          "title": "%codebookmark.contributes.menus.view_item_context.codebookmark.unpinView.title%",
           "icon": "$(folder)",
-          "when": "(view == codebookmarkTreeView) && (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom)",
+          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom) || (viewItem == filePinned || viewItem == filePinnedCustom)) && !codebookmark.hasMultipleSelection",
           "group": "inline@2"
         },
         {
           "submenu": "codebookmark.editSubmenu",
-          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom))",
+          "when": "(view == codebookmarkTreeView) && (((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom)) || (viewItem == file || viewItem == fileCustom) || (viewItem == filePinned || viewItem == filePinnedCustom))",
           "group": "inline@3"
         },
         {
           "command": "codebookmark.deleteBookmark",
-          "title": "%codebookmark.contributes.menus.view_item_context.3.title%",
+          "title": "%codebookmark.contributes.menus.view_item_context.codebookmark.deleteBookmark.title%",
           "icon": "$(trash)",
-          "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || viewItem == bookmarkInvalid || viewItem == bookmarkPinned)",
+          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || viewItem == bookmarkPinned) || (viewItem == file || viewItem == fileCustom) || (viewItem == filePinned || viewItem == filePinnedCustom))",
           "group": "inline@4"
         },
         {
           "command": "codebookmark.editBookmark.editLabel",
-          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom))",
+          "when": "(view == codebookmarkTreeView) && (((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom)) || (viewItem == file || viewItem == fileCustom) || (viewItem == filePinned || viewItem == filePinnedCustom))",
           "group": "1_edit@1"
         },
         {
           "command": "codebookmark.editBookmark.changeIcon",
-          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom))",
+          "when": "(view == codebookmarkTreeView) && (((viewItem == bookmark || viewItem == bookmarkInvalid || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom)) || (viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom)) || (viewItem == file || viewItem == fileCustom) || (viewItem == filePinned || viewItem == filePinnedCustom))",
           "group": "1_edit@2"
         },
         {
           "command": "codebookmark.editBookmark.restoreDefaultIcon",
-          "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerCustom || viewItem == bookmarkCodeMarkerPinnedCustom)",
+          "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerCustom || viewItem == bookmarkCodeMarkerPinnedCustom) || viewItem == fileCustom || viewItem == filePinnedCustom)",
           "group": "1_edit@3"
         },
         {
@@ -1204,10 +1212,12 @@
         },
         {
           "command": "codebookmark.editBookmark.updatePosOnly",
+          "when": "!(viewItem == file || viewItem == fileCustom) && !(viewItem == filePinned || viewItem == filePinnedCustom)",
           "group": "2_position@1"
         },
         {
           "command": "codebookmark.editBookmark.updatePosAndRename",
+          "when": "!(viewItem == file || viewItem == fileCustom) && !(viewItem == filePinned || viewItem == filePinnedCustom)",
           "group": "2_position@2"
         }
       ],
@@ -1431,102 +1441,102 @@
     "submenus": [
       {
         "id": "codebookmark.editSubmenu",
-        "label": "%codebookmark.contributes.submenus.0.label%",
+        "label": "%codebookmark.contributes.submenus.codebookmark.editSubmenu.label%",
         "icon": "$(edit)"
       },
       {
         "id": "codebookmark.moreSubmenu",
-        "label": "%codebookmark.contributes.submenus.1.label%",
+        "label": "%codebookmark.contributes.submenus.codebookmark.moreSubmenu.label%",
         "icon": "$(three-bars)"
       },
       {
         "id": "codebookmark.exportSubmenu",
-        "label": "%codebookmark.contributes.submenus.2.label%",
+        "label": "%codebookmark.contributes.submenus.codebookmark.exportSubmenu.label%",
         "icon": "$(export)"
       },
       {
         "id": "codebookmark.batchExportSubmenu",
-        "label": "%codebookmark.contributes.submenus.3.label%"
+        "label": "%codebookmark.contributes.submenus.codebookmark.batchExportSubmenu.label%"
       },
       {
         "id": "codebookmark.aiSubmenu",
-        "label": "%codebookmark.contributes.submenus.4.label%",
+        "label": "%codebookmark.contributes.submenus.codebookmark.aiSubmenu.label%",
         "icon": "$(symbol-event)"
       },
       {
         "id": "codebookmark.aiGenerateSubmenu",
-        "label": "%codebookmark.contributes.submenus.5.label%"
+        "label": "%codebookmark.contributes.submenus.codebookmark.aiGenerateSubmenu.label%"
       },
       {
         "id": "codebookmark.aiGenerateWorkspaceSubmenu",
-        "label": "%codebookmark.contributes.submenus.6.label%"
+        "label": "%codebookmark.contributes.submenus.codebookmark.aiGenerateWorkspaceSubmenu.label%"
       },
       {
         "id": "codebookmark.aiGenerateFileSubmenu",
-        "label": "%codebookmark.contributes.submenus.7.label%"
+        "label": "%codebookmark.contributes.submenus.codebookmark.aiGenerateFileSubmenu.label%"
       },
       {
         "id": "codebookmark.aiGenerateFolderSubmenu",
-        "label": "%codebookmark.contributes.submenus.8.label%"
+        "label": "%codebookmark.contributes.submenus.codebookmark.aiGenerateFolderSubmenu.label%"
       },
       {
         "id": "codebookmark.aiOptimizeSubmenu",
-        "label": "%codebookmark.contributes.submenus.9.label%"
+        "label": "%codebookmark.contributes.submenus.codebookmark.aiOptimizeSubmenu.label%"
       }
     ],
     "configuration": [
       {
         "type": "object",
-        "title": "%codebookmark.contributes.configuration.0.title%",
+        "title": "%codebookmark.contributes.configuration.main.title%",
         "properties": {
           "codebookmark.globalStoragePath": {
             "order": 1,
             "type": "string",
             "default": "",
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.globalStoragePath.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.globalStoragePath.description%"
           },
           "codebookmark.defaultExpandLevel": {
             "order": 2,
             "type": "integer",
             "default": 3,
             "minimum": 0,
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.defaultExpandLevel.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.defaultExpandLevel.description%"
           },
           "codebookmark.autoSpace": {
             "order": 3,
             "type": "boolean",
             "default": true,
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.autoSpace.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.autoSpace.description%"
           },
           "codebookmark.inlineLabel": {
             "order": 4,
             "type": "boolean",
             "default": true,
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.inlineLabel.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.inlineLabel.description%"
           },
           "codebookmark.AI.address": {
             "order": 5,
             "type": "string",
             "default": "",
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.address.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.address.description%"
           },
           "codebookmark.AI.APIKey": {
             "order": 6,
             "type": "string",
             "default": "",
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.APIKey.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.APIKey.description%"
           },
           "codebookmark.AI.model": {
             "order": 7,
             "type": "string",
             "default": "",
-            "markdownDescription": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.model.markdownDescription%"
+            "markdownDescription": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.model.markdownDescription%"
           },
           "codebookmark.AI.assignIcons": {
             "order": 8,
             "type": "boolean",
             "default": true,
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.assignIcons.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.assignIcons.description%"
           },
           "codebookmark.AI.timeoutS": {
             "order": 9,
@@ -1534,21 +1544,21 @@
             "default": 60,
             "minimum": 1,
             "maximum": 600,
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.timeoutS.description%"
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.timeoutS.description%"
           },
           "codebookmark.AI.prompt": {
             "order": 10,
             "type": "string",
             "editPresentation": "multilineText",
-            "default": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.prompt.default%",
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.prompt.description%"
+            "default": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.prompt.default%",
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.prompt.description%"
           },
           "codebookmark.AI.optimizePrompt": {
             "order": 11,
             "type": "string",
             "editPresentation": "multilineText",
-            "default": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.optimizePrompt.default%",
-            "description": "%codebookmark.contributes.configuration.0.properties.codebookmark.AI.optimizePrompt.description%"
+            "default": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.optimizePrompt.default%",
+            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.optimizePrompt.description%"
           }
         }
       }
@@ -1560,7 +1570,7 @@
           "dark": "#f76f53",
           "light": "#f76f53"
         },
-        "description": "%codebookmark.contributes.colors.0.description%"
+        "description": "%codebookmark.contributes.colors.codebookmark.color.Lvl1Orange.description%"
       },
       {
         "id": "codebookmark.color.Lvl2Blue",
@@ -1568,7 +1578,7 @@
           "dark": "#24acf2",
           "light": "#24acf2"
         },
-        "description": "%codebookmark.contributes.colors.1.description%"
+        "description": "%codebookmark.contributes.colors.codebookmark.color.Lvl2Blue.description%"
       }
     ]
   }

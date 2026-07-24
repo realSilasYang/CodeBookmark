@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `ScriptRelocationJournal`。
- *
- * 实现要点：围绕脚本配置的读取、索引、迁移或恢复拆分单一职责，并由仓库统一提交副作用。
- * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
- * 主要入口：`ScriptRelocationRecord`、`createScriptRelocation`、`readPendingScriptRelocations`、`resolveRelocationRecord`、`completeScriptRelocation`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把跨文件的脚本配置迁移记录为可恢复事务，分阶段移动配置、顺序和索引。
+ * 进程中断后可从日志继续或回滚；损坏日志会保留原件，避免清理动作销毁恢复证据。
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -94,10 +90,7 @@ export async function createScriptRelocation(
 	const oldBookmarkFolder = path.relative(root, path.resolve(value.oldBookmarkFolder))
 	const newBookmarkFolder = path.relative(root, path.resolve(value.newBookmarkFolder))
 	if (!isSafeRelativeFolder(oldBookmarkFolder) || !isSafeRelativeFolder(newBookmarkFolder)) {
-		throw new Error(localize(
-			'书签转移目录必须位于当前书签存储根目录内',
-			'The bookmark transfer directory must be inside the current bookmark storage root.',
-		))
+		throw new Error(localize("repository.ScriptRelocationJournal.theBookmarkTransferDirectoryMustBeInsideTheCurrent"))
 	}
 	const record: ScriptRelocationRecord = {
 		...persistenceHeader(PersistenceFormats.scriptRelocation),

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-language-profiles`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-language-profiles` 对应契约。
- * 核心边界：通过断言锁定“verify-language-profiles”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`uri`、`captureExpectedLoggerErrors`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖 JSONC 语言配置解析、grammar 资格、文件关联、扩展重载和无高亮语言拒绝。
+ * 脚本直接调用编译后的 `CodeMarkerScanner`、`LanguageCommentProfiles`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -21,7 +17,8 @@ function uri(fsPath) {
 
 const files = new Map([
   ['/extensions/fiction/language-configuration.json', Buffer.from(`{
-    // 这里有意使用 JSONC 注释与尾随逗号，用于验证语言配置解析器的兼容能力。
+    // VS Code 的 language-configuration.json 实际允许 JSONC；夹具特意保留注释和尾随逗号，
+    // 确认解析器读取真实语言扩展配置时不会误按严格 JSON 拒绝。
     "comments": {
       "lineComment": ";;",
       "blockComment": ["{-", "-}"],

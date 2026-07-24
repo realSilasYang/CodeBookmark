@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-undo-coverage`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-undo-coverage` 对应契约。
- * 核心边界：通过断言锁定“verify-undo-coverage”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`runForceAddBookmark`、`runForceDeleteBookmark`、`runForceDeleteBookmark`、`runToggleBookmark`、`runToggleBookmark`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查所有会修改书签的命令都建立撤销记录，并在视图提交后发布正确作用域。
+ * 脚本直接调用编译后的 `UndoActions`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -22,7 +18,7 @@ const sourcePathChangeRunner = fs.readFileSync('src/providers/SourcePathChangeWo
 const bookmarkHistoryRunner = fs.readFileSync('src/providers/BookmarkHistoryWorkflowRunner.ts', 'utf8')
 const undoImplementation = provider + singleFileAIRunner + folderAIRunner + selectedBookmarksAIRunner
   + manualBookmarkRunner + bookmarkEditingRunner + bookmarkDeletionRunner + bookmarkTreeInteractionRunner + bookmarkImportRunner
-const actions = require('../out/util/UndoActions').UNDO_ACTION_LABELS
+const actions = require('../out/util/UndoActions').UNDO_ACTION_MESSAGE_KEYS
 
 const sourceMethod = (source, name, nextName) => {
   const start = source.indexOf(name)
@@ -36,8 +32,8 @@ const count = (source, pattern) => (source.match(pattern) || []).length
 assert.doesNotMatch(provider, /undoManager\.clear\(/)
 assert.equal(count(provider, /undoManager\.saveState\(/g), 1)
 assert.match(provider, /private saveUndoState\(action: UndoAction\)/)
-// 只有对应树视图和上下文迁移完成后才能发布当前撤销作用域。
-// 若在预备视图仍处于提交阶段时提前更新，撤销/重做标题会短暂切回旧作用域。
+// 撤销作用域要等新树和上下文一起提交后才能公布。若在视图仍处于准备阶段时抢先更新，
+// 命令标题会短暂引用旧文件夹的历史，用户便可能对错误的作用域执行撤销。
 assert.doesNotMatch(method('private commitPreparedBookmarkView(', 'private async publishCommittedViewTransition('), /undoManager\.setActiveScope\(/)
 assert.match(method('private async publishCommittedViewTransition(', 'async importBookmarkConfiguration('), /undoManager\.setActiveScope\(this\.currentStorageScope\)/)
 assert.match(provider, /relocateUndoPath:[\s\S]*?undoManager\.relocatePath\(/)
@@ -61,8 +57,8 @@ assert.equal(count(sourceMethod(bookmarkEditingRunner, 'export async function ru
 assert.equal(count(sourceMethod(bookmarkEditingRunner, 'export async function runUpdateBookmarkPosition(', 'export async function runUpdateBookmarkPositionAndRename('), /saveUndoState\(/g), 0)
 assert.equal(count(sourceMethod(bookmarkEditingRunner, 'export async function runUpdateBookmarkPositionAndRename(', 'export async function runChangeBookmarkIcons('), /saveUndoState\(/g), 1)
 assert.equal(count(sourceMethod(bookmarkEditingRunner, 'export async function runChangeBookmarkIcons(', 'export async function runRestoreDefaultBookmarkIcons('), /saveUndoState\(/g), 1)
-assert.equal(count(sourceMethod(bookmarkEditingRunner, 'export async function runRestoreDefaultBookmarkIcons(', 'export function runTogglePinnedBookmark('), /saveUndoState\(/g), 1)
-assert.equal(count(bookmarkEditingRunner.slice(bookmarkEditingRunner.indexOf('export function runTogglePinnedBookmark(')), /saveUndoState\(/g), 1)
+assert.equal(count(sourceMethod(bookmarkEditingRunner, 'export async function runRestoreDefaultBookmarkIcons(', 'export async function runTogglePinnedBookmark('), /saveUndoState\(/g), 1)
+assert.equal(count(bookmarkEditingRunner.slice(bookmarkEditingRunner.indexOf('export async function runTogglePinnedBookmark(')), /saveUndoState\(/g), 1)
 assert.equal(count(sourceMethod(bookmarkEditingRunner, 'function replaceBookmark(', 'export async function runRenameBookmark('), /saveUndoState\(/g), 1)
 assert.match(method('public clearInvalidBookmarks(', 'async onDeleteBookmark('), /runClearInvalidBookmarks\(/)
 assert.match(method('async onDeleteBookmark(', 'onClickPinView('), /runDeleteBookmarks\(/)
@@ -76,9 +72,8 @@ assert.equal(count(folderAIRunner, /saveUndoState\('generateAIBookmarks'\)/g), 1
 assert.equal(count(folderAIRunner, /saveUndoState\('optimizeAIBookmarks'\)/g), 1)
 assert.equal(count(folderAIRunner, /let hasSavedUndoState = false/g), 2)
 
-const drop = sourceMethod(bookmarkTreeInteractionRunner, 'async function reorderWorkspaceFiles(', 'function hasReachedDefaultExpandLevel(')
-assert.match(drop, /commitUndoState\(captured, 'reorderFiles'\)/)
-assert.equal(count(drop, /commitUndoState\(captured, 'moveBookmarks'\)/g), 1)
+const drop = sourceMethod(bookmarkTreeInteractionRunner, 'async function moveNodes(', 'export async function runBookmarkTreeDrop(')
+assert.match(drop, /commitUndoState\(captured, isFileReorder \? 'reorderFiles' : 'moveBookmarks'\)/)
 
 const importMethod = bookmarkImportRunner.slice(bookmarkImportRunner.indexOf('export async function runImportBookmarkConfiguration('))
 assert.match(importMethod, /const captured = port\.captureUndoState\(\)/)

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `ViewLoadFinalizer`。
- *
- * 实现要点：通过小型端口连接纯逻辑与 VS Code API，使状态变化顺序可独立验证。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`finalizeViewLoad`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 收尾一次视图加载：处理成功、取消和失败状态，并保证加载上下文键最终恢复。
+ * 只有当前会话可以发布错误或结束状态，旧会话的 finally 不会关闭新一轮加载提示。
  */
 interface FinalizablePreparedView {
 	contentUpdated: boolean
@@ -27,7 +23,7 @@ interface ViewLoadFinalizerPort<Prepared> {
 	reportContextFailure(error: unknown): void
 	refreshDecorations(): void
 	saveAllBookmarks(): void
-	persistWorkspaceOrder(prepared: Prepared, generation: number): void
+	persistWorkspaceOrder(prepared: Prepared, generation: number): Promise<void>
 	startConfigWatcher(generation: number): void
 	startBackgroundEnhancements(generation: number): void
 	closeConfigWatchers(): void
@@ -53,14 +49,18 @@ export async function finalizeViewLoad<Prepared extends FinalizablePreparedView,
 
 	try {
 		await port.setLoadFailedContext(loadFailure !== undefined && !preserveLoadedContext)
-		await port.setLoadedContext()
 	} catch (error) {
 		port.reportContextFailure(error)
 	}
 
 	port.refreshDecorations()
 	if (prepared?.contentUpdated) port.saveAllBookmarks()
-	if (prepared) port.persistWorkspaceOrder(prepared, generation)
+	if (prepared) await port.persistWorkspaceOrder(prepared, generation)
+	try {
+		await port.setLoadedContext()
+	} catch (error) {
+		port.reportContextFailure(error)
+	}
 
 	if (transition && storageReady) {
 		port.startConfigWatcher(generation)

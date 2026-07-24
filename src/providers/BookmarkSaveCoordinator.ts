@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkSaveCoordinator`。
- *
- * 实现要点：协调多个端口、状态与异步阶段，明确事件顺序、取消点和最终提交时机。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkSaveCoordinatorPort`、`BookmarkSaveCoordinator`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把短时间内重复到来的保存请求合并，按作用域串行写盘，并对失败请求执行有限重试。
+ * 内存快照与定时器分离管理；强制刷新会等待队列清空，供导出、切换目录和停用扩展使用。
  */
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
@@ -21,6 +17,7 @@ interface BookmarkSaveScheduling {
 
 export interface BookmarkSaveCoordinatorPort {
 	ensureStorageRoot(): string | undefined
+	canQueueFullSave(): boolean
 	currentBookmarks(): readonly Bookmark[]
 	activeFilePathInCurrentScope(): string | undefined
 	currentScopeFilePath(): string | undefined
@@ -111,10 +108,7 @@ export class BookmarkSaveCoordinator {
 		if (!allowRetry && failedKeys.size > 0) this.terminalSaveFailure = true
 		if (retryResult.exhausted) {
 			this.terminalSaveFailure = true
-			void vscode.window.showErrorMessage(localize(
-				'书签保存连续失败，已停止自动重试；请检查存储路径权限，内存中的书签仍可继续操作。',
-				'Bookmark saving failed repeatedly, so automatic retries stopped. Check storage-folder permissions; bookmarks in memory remain available.',
-			))
+			void vscode.window.showErrorMessage(localize("providers.BookmarkSaveCoordinator.bookmarkSavingFailedRepeatedlySoAutomaticRetriesStoppedCheck"))
 		}
 	}
 
@@ -181,7 +175,8 @@ export class BookmarkSaveCoordinator {
 		if (paths.length > 0) this.queueBookmarkSave(paths)
 	}
 
-	queueAll(): void {
+	queueAll(force = false): void {
+		if (!force && !this.port.canQueueFullSave()) return
 		this.queueBookmarkSave()
 	}
 
@@ -195,10 +190,7 @@ export class BookmarkSaveCoordinator {
 			this.cancelSaveTimer()
 		}
 		if (requireSuccess && this.terminalSaveFailure) {
-			throw new Error(localize(
-				'无法在转移存储目录前完整保存当前书签',
-				'Unable to save all current bookmarks before transferring the storage folder.',
-			))
+			throw new Error(localize("providers.BookmarkSaveCoordinator.unableToSaveAllCurrentBookmarksBeforeTransferringThe"))
 		}
 	}
 

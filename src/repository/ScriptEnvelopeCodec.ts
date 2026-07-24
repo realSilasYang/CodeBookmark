@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `ScriptEnvelopeCodec`。
- *
- * 实现要点：解析并校验外部或持久化数据，只向调用方返回满足当前格式契约的结构。
- * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
- * 主要入口：`BookmarkFileEnvelope`、`bookmarkItems`、`scriptMetadata`、`decodeScriptConfiguration`、`createScriptEnvelope`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 解析和创建单脚本配置信封，校验格式头、脚本元数据与书签数组。
+ * 编解码层不访问文件系统；外部 JSON 只有完整满足当前 schema 才会进入仓库。
  */
 import * as path from 'path'
 import { normalizedAbsolutePath } from '../util/AbsolutePath'
@@ -16,6 +12,7 @@ import {
 	type PersistenceHeader,
 } from '../util/PersistenceSchema'
 import { isScriptId, type SourceFingerprint } from '../util/ScriptIdentity'
+import { normalizeBookmarkIconName } from '../util/BookmarkIconName'
 import type { ScriptMetadata } from './ScriptIndex'
 
 export interface BookmarkFileEnvelope extends PersistenceHeader {
@@ -47,6 +44,18 @@ export function scriptMetadata(value: unknown): ScriptMetadata | undefined {
 	if (typeof value.script.lastSeenAt !== 'number' || !Number.isFinite(value.script.lastSeenAt) || value.script.lastSeenAt <= 0) return undefined
 	const fingerprint = value.script.fingerprint === undefined ? undefined : sourceFingerprint(value.script.fingerprint)
 	if (value.script.fingerprint !== undefined && !fingerprint) return undefined
+	let presentation: ScriptMetadata['presentation']
+	if (value.script.presentation !== undefined) {
+		if (!isJsonRecord(value.script.presentation)) return undefined
+		const label = value.script.presentation.label
+		const icon = value.script.presentation.icon
+		if (label !== undefined && (typeof label !== 'string' || label.trim() === '')) return undefined
+		if (icon !== undefined && typeof icon !== 'string') return undefined
+		presentation = {
+			label: typeof label === 'string' ? label.trim().replace(/\s+/g, ' ').slice(0, 1000) : undefined,
+			icon: typeof icon === 'string' ? normalizeBookmarkIconName(icon) : undefined,
+		}
+	}
 	return {
 		id: value.script.id,
 		path: normalizedAbsolutePath(value.script.path),
@@ -55,6 +64,7 @@ export function scriptMetadata(value: unknown): ScriptMetadata | undefined {
 		missingSince: typeof value.script.missingSince === 'number' ? value.script.missingSince : undefined,
 		orderIndex: typeof value.script.orderIndex === 'number' && Number.isInteger(value.script.orderIndex)
 			&& value.script.orderIndex >= 0 ? value.script.orderIndex : undefined,
+		presentation,
 	}
 }
 

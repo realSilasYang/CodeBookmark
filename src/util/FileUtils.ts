@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `FileUtils`。
- *
- * 实现要点：集中实现 `FileUtils` 的无界面规则和边界处理，供多个上层流程复用。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`fileUtils`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 提供 JSON 原子读写与书签粘性引擎：根据文本指纹、上下文和距离让书签跟随代码移动。
+ * 文件容器和自动标记不走通用重定位；只有内容与原位置都消失时，手动书签才会标记失效。
  */
 import * as fs from "fs"
 import * as vscode from 'vscode'
@@ -23,6 +19,7 @@ import {
 	type PreparedFingerprintContext,
 } from './FingerprintMatcher'
 import { storageRootState } from './StorageRootState'
+import { workspaceScopeFolderPath } from './WorkspaceScopeFolderLifecycle'
 import { canonicalBookmarkPath } from './BookmarkPath'
 import { localize } from '../i18n/Localization'
 
@@ -163,15 +160,12 @@ class FileUtils {
 	async readJsonFileAsync(filePath: string): Promise<unknown> {
 		try {
 			const stat = await fs.promises.stat(filePath)
-			if (stat.size > MAX_BOOKMARK_FILE_BYTES) throw new Error(localize(
-				`书签文件超过 ${MAX_BOOKMARK_FILE_BYTES} 字节`,
-				`Bookmark file exceeds ${MAX_BOOKMARK_FILE_BYTES} bytes`,
-			))
+			if (stat.size > MAX_BOOKMARK_FILE_BYTES) throw new Error(localize("util.FileUtils.bookmarkFileExceedsBytes", { MAX_BOOKMARK_FILE_BYTES }))
 			const data = await fs.promises.readFile(filePath, 'utf8')
 			fileChangeFingerprints.rememberContent(filePath, data)
 			return JSON.parse(data)
 		} catch (error) {
-			logger.error(localize(`无法读取 JSON 文件：${filePath}`, `Cannot read JSON file: ${filePath}`))
+			logger.error(localize("util.FileUtils.cannotReadJsonFile", { filePath }))
 			logger.error(error)
 			return null
 		}
@@ -182,29 +176,42 @@ class FileUtils {
 		let contentHash: string | undefined
 		try {
 			const jsonData = JSON.stringify(data, null, 2)
-			if (jsonData === undefined) throw new Error(localize('JSON 值无法序列化', 'JSON value is not serializable'))
+			if (jsonData === undefined) throw new Error(localize("util.FileUtils.jsonValueIsNotSerializable"))
 			await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
 			const preparation = await fileChangeFingerprints.prepareWrite(filePath, jsonData)
 			if (!preparation) {
-				logger.error(localize(`书签文件在写入前被外部修改：${filePath}`, `Bookmark file changed externally before write: ${filePath}`))
+				logger.error(localize("util.FileUtils.bookmarkFileChangedExternallyBeforeWrite", { filePath }))
 				return false
 			}
 			contentHash = preparation.contentHash
-			// 原子写入：先在同目录写临时文件，再通过重命名一次替换目标文件。
+			// 临时文件放在目标同目录，最后一次 rename 才让新内容对外可见；
+			// 进程在写入中途退出时，原文件仍保持完整。
 			await fs.promises.writeFile(tmpPath, jsonData, 'utf8')
 			if (!await fileChangeFingerprints.isCurrentHash(filePath, preparation.expectedDiskHash)) {
-				throw new Error(localize(`书签文件在写入期间被外部修改：${filePath}`, `Bookmark file changed externally during write: ${filePath}`))
+				throw new Error(localize("util.FileUtils.bookmarkFileChangedExternallyDuringWrite", { filePath }))
 			}
 			await fs.promises.rename(tmpPath, filePath)
 			fileChangeFingerprints.markWriteComplete(filePath, contentHash)
 			return true
 		} catch (error) {
 			if (contentHash) fileChangeFingerprints.markWriteFailed(filePath, contentHash)
-			logger.error(localize(`无法写入 JSON 文件：${filePath}`, `Cannot write JSON file: ${filePath}`))
+			logger.error(localize("util.FileUtils.cannotWriteJsonFile", { filePath }))
 			logger.error(error)
-			// 写入失败后尽力清理遗留临时文件，但不能让清理错误覆盖主错误。
+			// 清理临时文件只是收尾。若清理也失败，仍抛出最先发生的写入错误，
+			// 否则日志会把真正导致数据未保存的原因遮住。
 			try { await fs.promises.unlink(tmpPath) } catch { /* 忽略临时文件清理失败 */ }
 			return false
+		}
+	}
+
+	async deleteJsonFileAsync(filePath: string): Promise<void> {
+		fileChangeFingerprints.markDeleteIntent(filePath)
+		try {
+			await fs.promises.unlink(filePath)
+			fileChangeFingerprints.markDeleteComplete(filePath)
+		} catch (error) {
+			fileChangeFingerprints.markDeleteFailed(filePath)
+			throw error
 		}
 	}
 
@@ -231,16 +238,16 @@ class FileUtils {
 		for (const item of bookmarks) {
 			if (state.signal?.aborted) return state.relocatedCount
 			try {
-				// 文件容器节点没有语义内容指纹，粘性引擎必须跳过它们；否则空内容会被首行文本覆盖，
-				// contextValue 也会降级成普通书签，最终导致容器及全部子节点从树视图消失。
+				// 文件容器代表脚本，不代表某一行代码，因此没有可重定位的文本指纹。
+				// 若把它当普通书签处理，首行会填进空内容，contextValue 也随之降级，整棵文件子树便会消失。
 				if (item.isFile) {
 					if (item.subs.size > 0) {
 						await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
 					}
 						continue
 					}
-					// 自动 TODO/FIXME/BUG 书签由注释标记扫描器对账；标记消失后，
-					// 通用粘性引擎既不能擅自保留它们，也不能把它们改成失效手动书签。
+					// 自动标记的生灭由 CodeMarkerScanner 决定。粘性引擎若接手，已删除的 TODO 可能被保留，
+					// 或被改成普通失效书签，两种结果都会破坏下一轮扫描对账。
 					if (item.isCodeMarker) {
 						if (item.subs.size > 0) {
 							await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
@@ -248,8 +255,8 @@ class FileUtils {
 						continue
 					}
 
-					// 指定 targetPath（例如只编辑一个文件）时，仅重新锚定属于该文件的书签；
-					// 其他文件继续使用缓存状态，避免一次局部编辑触发全工作区扫描。
+					// 文档编辑只影响 targetPath 对应脚本。其他文件沿用现有位置，
+					// 否则每次敲键都会把一次局部更新放大成整个工作区的源码扫描。
 				if (targetPath !== undefined && item.path !== targetPath) {
 					if (item.subs.size > 0) {
 						await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
@@ -301,7 +308,8 @@ class FileUtils {
 							) === item.start.line
 						}
 
-						// 只有已保存上下文未在文档其他位置识别出更优重复项时，才接受当前位置的匹配行。
+						// 当前位置文本虽相同，也可能只是重复代码中的另一行。先确认上下文评分没有指向
+						// 更可信的候选，再把当前位置视为原书签仍留在原地。
 						if (currentMatches && currentCandidateIsBest) {
 							if (item.contextValue !== ContextBookmark.Bookmark) {
 								state.relocatedCount++;
@@ -309,10 +317,11 @@ class FileUtils {
 							item.contextValue = ContextBookmark.Bookmark;
 							if (this.updateBookmarkContextAnchors(item, doc)) state.relocatedCount++
 						} else {
-							// 记录位置的文本已不再匹配指纹，需要区分三种情况：整行移动（按指纹重定位）、
-							// 原位置行内编辑（刷新指纹），以及位置与内容都消失（真正失效）。
+							// 原行与旧指纹不再一致时不能立即判失效：代码可能整体移动、在原地被编辑，
+							// 也可能真的被删除。下面三个分支分别处理这三种含义。
 							const isMultiLine = trimmedItemContent.includes('\n');
-							// 先按上下文为全部精确匹配评分，再用行距打破平局，以区分相邻重复代码行。
+							// 所有文本完全相同的行先比较前后文；证据相同时才参考与旧行号的距离，
+							// 让相邻重复代码尽量回到原来的那一段。
 							let bestIndex = -1;
 							let bestScore = Number.NEGATIVE_INFINITY;
 							if (trimmedItemContent !== '') {
@@ -333,8 +342,8 @@ class FileUtils {
 							}
 
 							if (bestIndex !== -1) {
-								// 指纹仍存在，说明书签行发生了移动；重新锚定到最优候选，
-								// 使剪切、移动与重排后的书签继续精确跟随。
+								// 旧指纹在别处找到唯一最佳候选，说明代码被剪切、移动或重排；
+								// 更新行号和上下文，让后续编辑从新位置继续跟随。
 								const newStartPos = doc.positionAt(bestIndex);
 								const newEndPos = doc.positionAt(bestIndex + trimmedItemContent.length);
 								item.start.line = newStartPos.line;
@@ -346,8 +355,8 @@ class FileUtils {
 								if (this.updateBookmarkContextAnchors(item, doc)) state.relocatedCount++
 								state.relocatedCount++;
 							} else if (item.start.line < doc.lineCount && currentTrimmed !== '') {
-								// 指纹已消失，但记录行仍存在且包含文本，视为原书签行被就地编辑。
-								// 保留书签并刷新指纹；位置未变而内容变化不属于失效。
+								// 没有旧指纹候选，但原行仍有代码，最合理的解释是用户就地修改了这一行。
+								// 书签留在原位，并以新文本刷新指纹，而不是把正常编辑标成失效。
 								item.content = currentLineContent;
 								if (item.contextValue !== ContextBookmark.Bookmark) {
 									state.relocatedCount++;
@@ -355,8 +364,8 @@ class FileUtils {
 								item.contextValue = ContextBookmark.Bookmark;
 								if (this.updateBookmarkContextAnchors(item, doc)) state.relocatedCount++
 							} else {
-								// 指纹消失且记录位置也已无效（行被删除或变空），说明位置和内容都已改变，
-								// 此时才把书签标记为失效。
+								// 旧内容无处可寻，原位置也已越界或变空；位置和文本两条证据同时消失，
+								// 到这一步才确认书签失效。
 								if (item.contextValue !== ContextBookmark.BookmarkInvalid) {
 									state.relocatedCount++;
 								}
@@ -416,7 +425,7 @@ class FileUtils {
 					await this.readContentBookmarkInFile(item.subs, false, targetPath, scopeUri, state)
 				}
 			} catch (error) {
-				logger.error(localize('无法根据文件更新书签内容', 'Cannot update bookmark content from file'))
+				logger.error(localize("util.FileUtils.cannotUpdateBookmarkContentFromFile"))
 				logger.error(error)
 			}
 		}
@@ -502,11 +511,7 @@ class FileUtils {
 	getWorkspaceBookmarkFolder(workspacePath: string, storageRootOverride?: string): string | null {
 		const root = storageRootOverride ?? this.getGlobalBookmarkFolder(false)
 		if (!root || !path.isAbsolute(workspacePath)) return null
-		const hash = this.hashForWorkspace(workspacePath)
-		const workspaceName = path.basename(path.resolve(workspacePath))
-		const folder = path.join(root, 'scopes', `${workspaceName}_${hash}`)
-		if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true })
-		return folder
+		return workspaceScopeFolderPath(root, workspacePath)
 	}
 
 	getScriptStoreFolder(storageRootOverride?: string): string | null {

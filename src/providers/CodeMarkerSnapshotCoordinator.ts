@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `CodeMarkerSnapshotCoordinator`。
- *
- * 实现要点：协调多个端口、状态与异步阶段，明确事件顺序、取消点和最终提交时机。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`CodeMarkerSnapshotPort`、`CodeMarkerSnapshotCoordinator`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 把一次源码扫描结果与现有自动书签对账，新增、更新或移除对应节点。
+ * 用户书签始终保留；语言支持消失或指令变回普通说明文字时，只清理扫描器拥有的自动节点。
  */
 import type { Bookmark } from '../models/Bookmark'
 import type { BookmarkSet } from '../models/BookmarkSet'
@@ -18,6 +14,7 @@ import {
 	type CodeMarkerSyntaxProfile,
 } from '../util/CodeMarkerScanner'
 import { bookmarkPathKey } from '../util/BookmarkPath'
+import { bookmarkOwnerScriptId } from '../models/BookmarkOwnership'
 
 export interface CodeMarkerSnapshotPort<Uri> {
 	isFileUri(uri: Uri): boolean
@@ -84,7 +81,8 @@ export class CodeMarkerSnapshotCoordinator<Uri> {
 	}
 
 	fileNodeHasCodeMarkers(fileNode: Bookmark): boolean {
-		const visit = (bookmarks: readonly Bookmark[]): boolean => bookmarks.some(bookmark => bookmark.isCodeMarker
+		const visit = (bookmarks: readonly Bookmark[]): boolean => bookmarks.some(bookmark => (bookmark.isCodeMarker
+			&& bookmarkOwnerScriptId(bookmark) === fileNode.scriptId)
 			|| (bookmark.subs.size > 0 && visit(bookmark.subs.values)))
 		return visit(fileNode.subs.values)
 	}

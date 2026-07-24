@@ -1,19 +1,13 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkTreeInteractionRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BOOKMARK_TREE_MIME_TYPE`、`BookmarkTreeInteractionPort`、`sortBookmarkTreeItems`、`runBookmarkTreeDrag`、`runBookmarkTreeDrop`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 实现书签树拖放、展开收起、搜索和排序选择，统一校验节点层级与目标位置。
+ * 拖放先计算新树再提交，非法跨作用域移动或排序模式不允许的操作不会改动原树。
  */
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
 import type { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
 import { SortModeBookmark } from '../models/ViewMode'
-import { bookmarkPathKey } from '../util/BookmarkPath'
 import { Commands } from '../util/constants/Commands'
-import { ContextBookmark } from '../util/ContextValue'
 import { logger } from '../util/Logger'
 import { isTreeExpandedToLevel } from '../util/TreeExpansionState'
 import type { CapturedUndoState } from './UndoManager'
@@ -28,14 +22,11 @@ interface BookmarkTreeRevealOptions {
 
 export interface BookmarkTreeInteractionPort {
 	bookmarks(): BookmarkSet
-	workspaceOrder(): string[] | null
-	persistWorkspaceOrder(order: string[]): Promise<void>
-	absoluteBookmarkPath(bookmarkPath: string): string
 	absoluteToRelative(filePath: string): string
 	bookmarksForPath(bookmarkPath: string): Bookmark[]
 	captureUndoState(workspaceOrder?: string[] | null): CapturedUndoState
 	commitUndoState(captured: CapturedUndoState, action: 'reorderFiles' | 'moveBookmarks'): boolean
-	saveBookmarks(filePaths: string[]): void
+	commitTopology(): Promise<void>
 	refreshDecoration(): void
 	fireTreeChanged(): void
 	expansionRoots(): readonly Bookmark[]
@@ -78,116 +69,53 @@ export function sortBookmarkTreeItems(items: Bookmark[]): Bookmark[] {
 export function runBookmarkTreeDrag(source: Bookmark[], treeDataTransfer: vscode.DataTransfer): void {
 	for (const bookmark of source) {
 		if (!bookmark.isBookmarkInvalid) continue
-		logger.showWarningMessage(localize('请编辑失效的书签', 'Edit the invalid bookmark before moving it.'))
+		logger.showWarningMessage(localize("providers.BookmarkTreeInteractionRunner.editTheInvalidBookmarkBeforeMovingIt"))
 		return
 	}
 	treeDataTransfer.set(BOOKMARK_TREE_MIME_TYPE, new vscode.DataTransferItem(source))
 }
 
-async function reorderWorkspaceFiles(
-	sourceItems: Bookmark[],
-	target: Bookmark | undefined,
-	port: BookmarkTreeInteractionPort,
-): Promise<boolean> {
-	const fileSources = sourceItems.filter(bookmark => bookmark.contextValue === ContextBookmark.File)
-	if (fileSources.length === 0) return false
-	if (fileSources.length !== sourceItems.length) {
-		logger.showWarningMessage(localize('不能同时拖动文件节点和书签节点。', 'File nodes and bookmark nodes cannot be dragged together.'))
-		return true
-	}
-	const sourcePaths = [...new Set(fileSources.map(bookmark => bookmark.path))]
-	if (sourcePaths.length === 0) return true
-	if (target && !target.isFile) {
-		logger.showWarningMessage(localize('文件节点只能拖放到文件节点之间或列表空白处。', 'File nodes can only be dropped between file nodes or onto empty space in the list.'))
-		return true
-	}
-
-	let savedOrder = port.workspaceOrder() || []
-	const currentPaths = new Set<string>()
-	for (const child of port.bookmarks().values) {
-		if (child.path) currentPaths.add(child.path)
-	}
-	const currentPathsArray = Array.from(currentPaths)
-	savedOrder = savedOrder.filter(savedPath => currentPaths.has(savedPath))
-	currentPathsArray.forEach(currentPath => {
-		if (!savedOrder.includes(currentPath)) savedOrder.push(currentPath)
-	})
-	const previousOrder = [...savedOrder]
-
-	const targetPath = target?.contextValue === ContextBookmark.File ? target.path : undefined
-	const sourcePathSet = new Set(sourcePaths)
-	if (targetPath && sourcePathSet.has(targetPath)) return true
-	const orderedSourcePaths = [
-		...savedOrder.filter(savedPath => sourcePathSet.has(savedPath)),
-		...sourcePaths.filter(sourcePath => !savedOrder.includes(sourcePath)),
-	]
-
-	savedOrder = savedOrder.filter(savedPath => !sourcePathSet.has(savedPath))
-	if (targetPath) {
-		const targetIndex = savedOrder.indexOf(targetPath)
-		if (targetIndex >= 0) savedOrder.splice(targetIndex, 0, ...orderedSourcePaths)
-		else savedOrder.push(...orderedSourcePaths)
-	} else {
-		savedOrder.push(...orderedSourcePaths)
-	}
-	if (savedOrder.length === previousOrder.length
-		&& savedOrder.every((savedPath, index) => savedPath === previousOrder[index])) return true
-
-	const captured = port.captureUndoState(previousOrder)
-	await port.persistWorkspaceOrder(savedOrder)
-	port.commitUndoState(captured, 'reorderFiles')
-	port.fireTreeChanged()
-	return true
-}
-
-function selectedBookmarkGroup(sourceItems: Bookmark[], bookmarks: BookmarkSet): BookmarkSet {
+function selectedNodeGroup(sourceItems: Bookmark[], bookmarks: BookmarkSet): BookmarkSet {
 	const resolvedSources = sourceItems
 		.map(source => bookmarks.findBookmark(source))
-		.filter((source): source is Bookmark => source !== undefined && !source.isFile)
+		.filter((source): source is Bookmark => source !== undefined)
 	const uniqueSources = [...new Map(resolvedSources.map(source => [source.id, source])).values()]
 	return new BookmarkSet(uniqueSources.filter(sourceItem =>
 		!sourceItem.isChildOf(new BookmarkSet(uniqueSources.filter(other => other !== sourceItem))),
 	))
 }
 
-function moveBookmarks(
+async function moveNodes(
 	sourceItems: Bookmark[],
 	target: Bookmark | undefined,
 	port: BookmarkTreeInteractionPort,
-): void {
+): Promise<void> {
 	const bookmarks = port.bookmarks()
-	const source = selectedBookmarkGroup(sourceItems, bookmarks)
+	const source = selectedNodeGroup(sourceItems, bookmarks)
 	if (source.size === 0) return
-	const sourcePaths = new Set(source.values.map(bookmark => bookmarkPathKey(bookmark.path)))
-	if (sourcePaths.size !== 1) {
-		logger.showWarningMessage(localize('不能同时移动来自不同文件的书签。', 'Bookmarks from different files cannot be moved together.'))
-		return
-	}
 
 	const currentTarget = target ? bookmarks.findBookmark(target) : undefined
-	const sourcePath = source.values[0].path
-	let destination = currentTarget
-	if (!destination) {
-		destination = bookmarks.values.find(bookmark => bookmark.isFile && bookmark.path === sourcePath)
-	}
-	if (!destination) return
-	if (bookmarkPathKey(destination.path) !== [...sourcePaths][0]) {
-		logger.showWarningMessage(localize('暂不支持跨文件移动书签。', 'Moving bookmarks between files is not supported.'))
-		return
-	}
 	for (const bookmark of source) {
-		if (bookmark.equals(destination)) return
+		if (currentTarget && bookmark.equals(currentTarget)) return
 	}
 
 	const captured = port.captureUndoState()
-	const changed = destination.isFile || destination.isPinned
-		? bookmarks.moveGroupToNode(source, destination)
-		: bookmarks.changeIndexNode(source, destination)
+	const shouldNest = currentTarget?.isPinned === true
+		|| (currentTarget?.isFile === true && source.values.some(bookmark => !bookmark.isFile))
+	const destinationParent = shouldNest ? currentTarget : currentTarget?.parent
+	const isFileReorder = source.values.every(bookmark =>
+		bookmark.isFile && bookmark.parent === destinationParent,
+	)
+	const changed = !currentTarget || shouldNest
+		? bookmarks.moveGroupToNode(source, currentTarget)
+		: bookmarks.changeIndexNode(source, currentTarget)
 	if (!changed) return
 
-	port.commitUndoState(captured, 'moveBookmarks')
-	port.saveBookmarks([port.absoluteBookmarkPath(sourcePath)])
-	if (!destination.isFile) void runExpandFolderTreeView(destination, port)
+	port.commitUndoState(captured, isFileReorder ? 'reorderFiles' : 'moveBookmarks')
+	await port.commitTopology()
+	if (currentTarget && shouldNest) {
+		void runExpandFolderTreeView(currentTarget, port)
+	}
 	port.refreshDecoration()
 }
 
@@ -200,16 +128,12 @@ export async function runBookmarkTreeDrop(
 	if (!transferItem) return
 	if (SortModeBookmark.mode !== SortModeBookmark.Custom) {
 		SortModeBookmark.mode = SortModeBookmark.Custom
-		void vscode.window.showInformationMessage(localize(
-			'检测到拖拽操作，已自动切换回“自定义排序”模式。',
-			'Dragging detected. The view automatically switched back to Custom Order.',
-		))
+		void vscode.window.showInformationMessage(localize("providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom"))
 	}
 
 	const sourceItems = Array.isArray(transferItem.value) ? transferItem.value as Bookmark[] : []
 	if (sourceItems.length === 0) return
-	if (await reorderWorkspaceFiles(sourceItems, target, port)) return
-	moveBookmarks(sourceItems, target, port)
+	await moveNodes(sourceItems, target, port)
 }
 
 function hasReachedDefaultExpandLevel(port: BookmarkTreeInteractionPort): boolean {
@@ -223,10 +147,7 @@ function hasReachedDefaultExpandLevel(port: BookmarkTreeInteractionPort): boolea
 export function publishExpandCollapseContext(port: BookmarkTreeInteractionPort): void {
 	const expanded = hasReachedDefaultExpandLevel(port)
 	void port.setExpandCollapseContext(expanded)
-		.catch(error => logger.error(localize(
-			`更新书签展开按钮状态失败: ${errorMessage(error)}`,
-			`Failed to update the bookmark expand/collapse button state: ${errorMessage(error)}`,
-		)))
+		.catch(error => logger.error(localize("providers.BookmarkTreeInteractionRunner.failedToUpdateTheBookmarkExpandCollapseButtonState", { errorMessage: errorMessage(error) })))
 }
 
 export async function runToggleExpandCollapse(port: BookmarkTreeInteractionPort): Promise<void> {
@@ -239,7 +160,7 @@ export async function runToggleExpandCollapse(port: BookmarkTreeInteractionPort)
 		const maximumLevel = port.defaultExpandLevel()
 		const expandRecursively = async (items: Bookmark[]): Promise<void> => {
 			for (const item of items) {
-				const shouldExpand = maximumLevel === 0 || item.level === 0 || item.level < maximumLevel
+				const shouldExpand = maximumLevel === 0 || item.treeDepth < maximumLevel
 				try {
 					await port.revealTreeItem(item, { expand: shouldExpand, select: false, focus: false })
 					if (shouldExpand && item.subs.size > 0) {
@@ -275,24 +196,24 @@ export async function runExpandFolderTreeView(
 export async function runSearchBookmarksInActiveFile(port: BookmarkTreeInteractionPort): Promise<void> {
 	const editor = vscode.window.activeTextEditor
 	if (!editor) {
-		logger.showWarningMessage(localize('当前没有打开的文件', 'No file is currently open.'))
+		logger.showWarningMessage(localize("providers.BookmarkTreeInteractionRunner.noFileIsCurrentlyOpen"))
 		return
 	}
 	const bookmarkPath = port.absoluteToRelative(editor.document.uri.fsPath)
 	const bookmarks = port.bookmarksForPath(bookmarkPath)
 	if (bookmarks.length === 0) {
-		logger.showWarningMessage(localize('当前文件无书签', 'The current file has no bookmarks.'))
+		logger.showWarningMessage(localize("providers.BookmarkTreeInteractionRunner.theCurrentFileHasNoBookmarks"))
 		return
 	}
 
 	const items: (vscode.QuickPickItem & { bookmark: Bookmark })[] = bookmarks.map(bookmark => ({
 		label: `$(bookmark) ${bookmark.label}`,
-		description: localize(`第 ${bookmark.start.line + 1} 行`, `Line ${bookmark.start.line + 1}`),
+		description: localize("providers.BookmarkTreeInteractionRunner.line", { line: bookmark.start.line + 1 }),
 		detail: bookmark.content,
 		bookmark,
 	}))
 	const selected = await vscode.window.showQuickPick(items, {
-		placeHolder: localize('搜索当前文件的书签', 'Search bookmarks in the current file'),
+		placeHolder: localize("providers.BookmarkTreeInteractionRunner.searchBookmarksInTheCurrentFile"),
 		matchOnDescription: true,
 		matchOnDetail: true,
 	})
@@ -300,16 +221,16 @@ export async function runSearchBookmarksInActiveFile(port: BookmarkTreeInteracti
 }
 
 export async function runSelectBookmarkSortMode(port: BookmarkTreeInteractionPort): Promise<void> {
-	const current = localize('（当前）', '(Current)')
+	const current = localize("providers.BookmarkTreeInteractionRunner.current")
 	const options: Array<vscode.QuickPickItem & { mode: number }> = [
-		{ mode: SortModeBookmark.Custom, label: localize('自定义排序', 'Custom Order'), description: SortModeBookmark.mode === SortModeBookmark.Custom ? current : '' },
-		{ mode: SortModeBookmark.TimeAsc, label: localize('按时间升序', 'Time Ascending'), description: SortModeBookmark.mode === SortModeBookmark.TimeAsc ? current : localize('最早添加在前', 'Oldest first') },
-		{ mode: SortModeBookmark.TimeDesc, label: localize('按时间降序', 'Time Descending'), description: SortModeBookmark.mode === SortModeBookmark.TimeDesc ? current : localize('最新添加在前', 'Newest first') },
-		{ mode: SortModeBookmark.LineAsc, label: localize('按位置升序', 'Position Ascending'), description: SortModeBookmark.mode === SortModeBookmark.LineAsc ? current : localize('从上到下', 'Top to bottom') },
-		{ mode: SortModeBookmark.LineDesc, label: localize('按位置降序', 'Position Descending'), description: SortModeBookmark.mode === SortModeBookmark.LineDesc ? current : localize('从下到上', 'Bottom to top') },
+		{ mode: SortModeBookmark.Custom, label: localize("providers.BookmarkTreeInteractionRunner.customOrder"), description: SortModeBookmark.mode === SortModeBookmark.Custom ? current : '' },
+		{ mode: SortModeBookmark.TimeAsc, label: localize("providers.BookmarkTreeInteractionRunner.timeAscending"), description: SortModeBookmark.mode === SortModeBookmark.TimeAsc ? current : localize("providers.BookmarkTreeInteractionRunner.oldestFirst") },
+		{ mode: SortModeBookmark.TimeDesc, label: localize("providers.BookmarkTreeInteractionRunner.timeDescending"), description: SortModeBookmark.mode === SortModeBookmark.TimeDesc ? current : localize("providers.BookmarkTreeInteractionRunner.newestFirst") },
+		{ mode: SortModeBookmark.LineAsc, label: localize("providers.BookmarkTreeInteractionRunner.positionAscending"), description: SortModeBookmark.mode === SortModeBookmark.LineAsc ? current : localize("providers.BookmarkTreeInteractionRunner.topToBottom") },
+		{ mode: SortModeBookmark.LineDesc, label: localize("providers.BookmarkTreeInteractionRunner.positionDescending"), description: SortModeBookmark.mode === SortModeBookmark.LineDesc ? current : localize("providers.BookmarkTreeInteractionRunner.bottomToTop") },
 	]
 	const selected = await vscode.window.showQuickPick(options, {
-		placeHolder: localize('选择视图排序方式（不影响底层拖拽原始顺序）', 'Choose the view order (does not change the underlying drag order)'),
+		placeHolder: localize("providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying"),
 	})
 	if (!selected) return
 	SortModeBookmark.mode = selected.mode

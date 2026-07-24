@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `AIFolderPresenceCache`。
- *
- * 实现要点：通过小型端口连接纯逻辑与 VS Code API，使状态变化顺序可独立验证。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`AIFolderBookmarkPresence`、`bookmarkPathPresenceSignature`、`AIFolderPresenceCache`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 缓存文件夹内“有书签脚本”和“无书签脚本”的存在状态，供 AI 菜单快速决定显示哪些操作。
+ * 缓存键同时包含目录与书签路径签名，文件变化或书签集合变化都会使旧结果自然失效。
  */
 import type { Bookmark } from '../models/Bookmark'
 import { normalizedAbsolutePath } from '../util/AbsolutePath'

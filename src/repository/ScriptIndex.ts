@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责持久化、索引与迁移事务，具体对象为 `ScriptIndex`。
- *
- * 实现要点：围绕脚本配置的读取、索引、迁移或恢复拆分单一职责，并由仓库统一提交副作用。
- * 核心边界：所有磁盘状态都必须经过校验与原子化处理，不能让部分写入覆盖仍有效的用户数据。
- * 主要入口：`ScriptMetadata`、`ScriptIndexEntry`、`ScriptIndex`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 为已持久化脚本维护按 scriptId、源路径和配置路径查询的三套内存索引。
+ * 索引不决定移动策略也不执行 I/O，只保证添加、替换和删除后各查询视图保持一致。
  */
 import { absolutePathKey } from '../util/AbsolutePath'
 import type { SourceFingerprint } from '../util/ScriptIdentity'
@@ -16,6 +12,10 @@ export interface ScriptMetadata {
 	lastSeenAt: number
 	missingSince?: number
 	orderIndex?: number
+	presentation?: {
+		label?: string
+		icon?: string
+	}
 }
 
 export interface ScriptIndexEntry {
@@ -25,10 +25,8 @@ export interface ScriptIndexEntry {
 }
 
 /**
- * 为已持久化的脚本配置维护内存查找表。
- *
- * 索引有意不负责文件 I/O 或重定位策略；仓库更新、删除条目时，
- * 它只保证三种等价查找视图始终一致。
+ * 同一脚本条目同时按 scriptId、源路径和配置路径建立索引。仓库负责何时读写或重定位，
+ * 本类只保证任意一项被替换、删除后，另外两种查找方式看到的仍是同一份条目。
  */
 export class ScriptIndex {
 	private readonly entriesById = new Map<string, ScriptIndexEntry>()

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkConfigurationManagementController`。
- *
- * 实现要点：把上层意图编排为多个纯工作流，并在单一边界适配 VS Code 与持久化依赖。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkConfigurationManagementController`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 为配置管理页面提供列表、重新绑定、删除与历史残留清理操作。
+ * 控制器在执行破坏性操作前确认用户意图，并在完成后刷新仓库与页面数据。
  */
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
@@ -24,6 +20,7 @@ interface BookmarkConfigurationManagementPort {
 	finishStorageTransition(): boolean
 	cancelStorageTransition(): void
 	saveAllBookmarks(): void
+	cleanupEmptyScopeFolders(): Promise<void>
 	reloadActiveTab(forceReloadDisk: boolean): Promise<void>
 }
 
@@ -55,10 +52,7 @@ export class BookmarkConfigurationManagementController {
 	private requiredStorageRoot(): string {
 		const storageRoot = this.port.storageRoot()
 		if (!storageRoot) {
-			throw new Error(localize(
-				'尚未配置书签存储目录',
-				'The bookmark storage folder is not configured.',
-			))
+			throw new Error(localize("providers.BookmarkConfigurationManagementController.theBookmarkStorageFolderIsNotConfigured"))
 		}
 		return storageRoot
 	}
@@ -69,6 +63,7 @@ export class BookmarkConfigurationManagementController {
 		try {
 			await this.port.flushPendingSaves(true)
 			const result = await bookmarkRepository.deleteBookmarkConfigurationFiles(requests)
+			await this.port.cleanupEmptyScopeFolders()
 			if (this.port.finishStorageTransition()) {
 				this.port.saveAllBookmarks()
 				await this.port.flushPendingSaves(true)
@@ -77,16 +72,17 @@ export class BookmarkConfigurationManagementController {
 			const skipped = result.changedFiles + result.missingFiles + result.failedFiles
 			const deletedScripts = result.deletedEntries.filter(entry => entry.kind === 'script').length
 			const deletedWorkspaceOrders = result.deletedEntries.filter(entry => entry.kind === 'workspaceOrder').length
+			const deletedWorkspaceLayouts = result.deletedEntries.filter(entry => entry.kind === 'workspaceLayout').length
 			const deletedTransferJournals = result.deletedEntries.filter(entry => entry.kind === 'transferJournal').length
+			const deletedTemporaryArtifacts = result.deletedEntries.filter(entry => entry.kind === 'temporaryArtifact').length
 			const deletedKinds = [
-				deletedScripts > 0 ? localize(`书签配置 ${deletedScripts} 条（${formatBookmarkLevelSummary(result.bookmarkSummary)}）`, `${deletedScripts} bookmark configurations (${formatBookmarkLevelSummary(result.bookmarkSummary)})`) : '',
-				deletedWorkspaceOrders > 0 ? localize(`工作区排序记录 ${deletedWorkspaceOrders} 条`, `${deletedWorkspaceOrders} workspace order records`) : '',
-				deletedTransferJournals > 0 ? localize(`存储迁移记录 ${deletedTransferJournals} 条`, `${deletedTransferJournals} storage transfer journals`) : '',
-			].filter(Boolean).join(localize('；', '; ')) || localize('无', 'none')
-			const message = localize(
-				`书签存储记录清理完成：请求 ${result.requestedFiles} 条，清理 ${result.deletedFiles} 条，跳过 ${skipped} 条；${deletedKinds}。`,
-				`Bookmark storage cleanup completed: ${result.requestedFiles} requested, ${result.deletedFiles} removed, ${skipped} skipped; ${deletedKinds}.`,
-			)
+				deletedScripts > 0 ? localize("providers.BookmarkConfigurationManagementController.bookmarkConfigurations", { deletedScripts, formatBookmarkLevelSummary: formatBookmarkLevelSummary(result.bookmarkSummary) }) : '',
+				deletedWorkspaceOrders > 0 ? localize("providers.BookmarkConfigurationManagementController.workspaceOrderRecords", { deletedWorkspaceOrders }) : '',
+				deletedWorkspaceLayouts > 0 ? localize("providers.BookmarkConfigurationManagementController.workspaceLayoutRecords", { deletedWorkspaceLayouts }) : '',
+				deletedTransferJournals > 0 ? localize("providers.BookmarkConfigurationManagementController.storageTransferJournals", { deletedTransferJournals }) : '',
+				deletedTemporaryArtifacts > 0 ? localize("providers.BookmarkConfigurationManagementController.temporaryArtifacts", { deletedTemporaryArtifacts }) : '',
+			].filter(Boolean).join(localize("providers.BookmarkConfigurationManagementController.message")) || localize("providers.BookmarkConfigurationManagementController.none")
+			const message = localize("providers.BookmarkConfigurationManagementController.bookmarkStorageCleanupCompletedRequestedRemovedSkipped", { requestedFiles: result.requestedFiles, deletedFiles: result.deletedFiles, skipped, deletedKinds })
 			if (skipped > 0) void vscode.window.showWarningMessage(message)
 			else void vscode.window.showInformationMessage(message)
 		} catch (error) {
@@ -99,17 +95,11 @@ export class BookmarkConfigurationManagementController {
 
 	private async openSource(entry: BookmarkConfigurationEntry): Promise<void> {
 		if (entry.kind !== 'script') {
-			void vscode.window.showInformationMessage(localize(
-				'这条记录不对应脚本，不能打开脚本。',
-				'This record does not represent a script, so no script can be opened.',
-			))
+			void vscode.window.showInformationMessage(localize("providers.BookmarkConfigurationManagementController.thisRecordDoesNotRepresentAScriptSoNo"))
 			return
 		}
 		if (!entry.scriptPath || !entry.sourceExists) {
-			void vscode.window.showWarningMessage(localize(
-				'对应脚本不存在，无法打开。',
-				'The corresponding script does not exist and cannot be opened.',
-			))
+			void vscode.window.showWarningMessage(localize("providers.BookmarkConfigurationManagementController.theCorrespondingScriptDoesNotExistAndCannotBe"))
 			return
 		}
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(entry.scriptPath))

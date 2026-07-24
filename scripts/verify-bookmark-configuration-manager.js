@@ -1,15 +1,12 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-configuration-manager`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-configuration-manager` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-configuration-manager”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`value`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖配置管理列表、健康状态、重新绑定、删除与残留清理的界面消息和控制器行为。
+ * 脚本在临时目录中调用编译后的 `BookmarkConfigurationCatalog` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const vm = require('node:vm')
 
 const {
   listBookmarkConfigurationFiles,
@@ -24,6 +21,16 @@ function envelope(id, scriptPath, bookmarks, extra = {}) {
   return {
     script: { id, path: scriptPath, lastSeenAt: 1_800_000_000_000, ...extra },
     bookmarks,
+  }
+}
+
+function workspaceLayout(scriptId, bookmarkId) {
+  const file = { kind: 'script', scriptId }
+  const mark = { kind: 'bookmark', scriptId, bookmarkId }
+  return {
+    format: 'codebookmark.workspace-layout', schemaVersion: 1, updatedAt: 1_800_000_000_000,
+    entries: [{ node: file, parent: null }, { node: mark, parent: file }],
+    hiddenFiles: [], pinnedContainer: mark,
   }
 }
 
@@ -70,6 +77,14 @@ async function main() {
   fs.mkdirSync(secondScope, { recursive: true })
   fs.writeFileSync(path.join(firstScope, '_workspace_order.json'), JSON.stringify(['src/entry.ts', 'src/task.ts']))
   fs.writeFileSync(path.join(secondScope, '_workspace_order.json'), JSON.stringify(['background.js']))
+  fs.writeFileSync(path.join(firstScope, '_workspace_order.json.transfer-base'), JSON.stringify(['legacy.ts']))
+  const layoutScriptId = '10000000-0000-9000-1000-000000000021'
+  const layoutBookmarkId = '20000000-0000-9000-1000-000000000022'
+  const layout = workspaceLayout(layoutScriptId, layoutBookmarkId)
+  fs.writeFileSync(path.join(firstScope, '_workspace_layout.json'), JSON.stringify(layout))
+  fs.writeFileSync(path.join(firstScope, '_workspace_layout.relocation-conflict_deadbeef1234.json'), JSON.stringify(layout))
+  fs.writeFileSync(path.join(secondScope, '_workspace_layout.json.transfer-copy_deadbeef1234'), JSON.stringify(layout))
+  fs.writeFileSync(path.join(firstScope, 'batch-rename-1800000000000.txt'), '\t入口\n\t自动任务\n')
   fs.writeFileSync(path.join(storageRoot, '.storage-transfer.json'), JSON.stringify({
     status: 'complete',
     source: 'D:\\旧书签目录',
@@ -85,7 +100,7 @@ async function main() {
 
   try {
     const entries = await listBookmarkConfigurationFiles(storageRoot)
-    assert.equal(entries.length, 8)
+    assert.equal(entries.length, 13)
     assert.equal(entries.some(entry => entry.fileName === 'ignored.1.tmp'), false)
 
     const primary = entries.find(entry => entry.fileName === `${primaryId}.json`)
@@ -106,21 +121,57 @@ async function main() {
     assert.equal(entries.find(entry => entry.fileName === 'broken.json').health, 'invalid')
 
     const workspaceOrders = entries.filter(entry => entry.kind === 'workspaceOrder')
-    assert.equal(workspaceOrders.length, 2)
-    assert.equal(new Set(workspaceOrders.map(entry => entry.storagePath)).size, 2)
-    assert.equal(new Set(workspaceOrders.map(entry => entry.fileName)).size, 1)
-    const firstOrder = workspaceOrders.find(entry => entry.workspaceName === '测试工作区')
+    assert.equal(workspaceOrders.length, 3)
+    assert.equal(new Set(workspaceOrders.map(entry => entry.storagePath)).size, 3)
+    assert.equal(new Set(workspaceOrders.map(entry => entry.fileName)).size, 2)
+    const firstOrder = workspaceOrders.find(entry => entry.workspaceName === '测试工作区' && entry.role === 'workspaceOrder')
     assert.ok(firstOrder)
     assert.equal(firstOrder.role, 'workspaceOrder')
-    assert.equal(firstOrder.health, 'metadata')
+    assert.equal(firstOrder.health, 'valid')
     assert.equal(firstOrder.workspacePathHash, '0123456789abcdef')
     assert.deepEqual(firstOrder.orderedPaths, ['src/entry.ts', 'src/task.ts'])
+    const workspaceLayouts = entries.filter(entry => entry.kind === 'workspaceLayout')
+    assert.equal(workspaceLayouts.length, 3)
+    const primaryLayout = workspaceLayouts.find(entry => entry.fileName === '_workspace_layout.json')
+    const conflictLayout = workspaceLayouts.find(entry => entry.fileName.includes('.relocation-conflict_'))
+    const backupLayout = workspaceLayouts.find(entry => entry.fileName.includes('.transfer-copy_'))
+    assert.equal(primaryLayout.role, 'workspaceLayout')
+    assert.equal(primaryLayout.health, 'valid')
+    assert.equal(primaryLayout.layoutNodeCount, 2)
+    assert.equal(primaryLayout.layoutCrossFileRelationCount, 0)
+    assert.equal(primaryLayout.layoutHiddenFileCount, 0)
+    assert.equal(primaryLayout.layoutExpandedNodeCount, 0)
+    assert.equal(primaryLayout.layoutCollapsedNodeCount, 0)
+    assert.equal(primaryLayout.layoutPinnedContainer, `bookmark:${layoutScriptId}:${layoutBookmarkId}`)
+    assert.equal(conflictLayout.role, 'conflict')
+    assert.equal(conflictLayout.health, 'snapshot')
+    assert.equal(backupLayout.role, 'backup')
+    assert.equal(backupLayout.health, 'snapshot')
+    const orderBackup = entries.find(entry => entry.fileName === '_workspace_order.json.transfer-base')
+    assert.equal(orderBackup.kind, 'workspaceOrder')
+    assert.equal(orderBackup.role, 'backup')
+    assert.equal(orderBackup.health, 'snapshot')
+
+    const currentWorkspaceData = entries.filter(entry => entry.role === 'workspaceOrder' || entry.role === 'workspaceLayout')
+    const historicalCopies = entries.filter(entry => ['backup', 'conflict', 'superseded'].includes(entry.role))
+    assert.equal(currentWorkspaceData.length, 3)
+    assert.equal(currentWorkspaceData.every(entry => entry.health === 'valid'), true)
+    assert.equal(historicalCopies.length, 5)
+    assert.equal(historicalCopies.every(entry => entry.health === 'snapshot'), true)
+
+    const batchRenameDraft = entries.find(entry => entry.kind === 'temporaryArtifact')
+    assert.ok(batchRenameDraft)
+    assert.equal(batchRenameDraft.role, 'batchRenameTemporary')
+    assert.equal(batchRenameDraft.health, 'temporary')
+    assert.equal(batchRenameDraft.workspaceName, '测试工作区')
+    assert.equal(batchRenameDraft.workspacePathHash, '0123456789abcdef')
+    assert.deepEqual(batchRenameDraft.labelPreview, ['入口', '自动任务'])
 
     const transfer = entries.find(entry => entry.kind === 'transferJournal')
     assert.ok(transfer)
     assert.equal(transfer.storagePath, '.storage-transfer.json')
     assert.equal(transfer.role, 'transferJournal')
-    assert.equal(transfer.health, 'metadata')
+    assert.equal(transfer.health, 'valid')
     assert.equal(transfer.transferStatus, 'complete')
     assert.equal(transfer.transferSource, 'D:\\旧书签目录')
     assert.equal(transfer.transferTarget, storageRoot)
@@ -155,28 +206,32 @@ async function main() {
     assert.equal(fs.existsSync(backup.filePath), false)
     assert.equal(fs.existsSync(outside), true)
 
-    const metadataDeleteResult = await removeBookmarkConfigurationFiles(storageRoot, [
+    const recordDeleteResult = await removeBookmarkConfigurationFiles(storageRoot, [
       { storagePath: firstOrder.storagePath, revision: firstOrder.revision },
+      { storagePath: conflictLayout.storagePath, revision: conflictLayout.revision },
       { storagePath: transfer.storagePath, revision: transfer.revision },
+      { storagePath: batchRenameDraft.storagePath, revision: batchRenameDraft.revision },
     ], {
       deleteFile: filePath => fs.promises.unlink(filePath),
       deleteEmptyDirectory: directoryPath => fs.promises.rmdir(directoryPath),
     })
-    assert.equal(metadataDeleteResult.deletedFiles, 2)
-    assert.deepEqual(metadataDeleteResult.bookmarkSummary, { total: 0, levelCounts: [] })
+    assert.equal(recordDeleteResult.deletedFiles, 4)
+    assert.deepEqual(recordDeleteResult.bookmarkSummary, { total: 0, levelCounts: [] })
     assert.equal(fs.existsSync(firstOrder.filePath), false)
-    assert.equal(fs.existsSync(firstScope), false)
+    assert.equal(fs.existsSync(conflictLayout.filePath), false)
+    assert.equal(fs.existsSync(firstScope), true)
     assert.equal(fs.existsSync(transfer.filePath), false)
+    assert.equal(fs.existsSync(batchRenameDraft.filePath), false)
     assert.equal(fs.existsSync(workspaceOrders.find(entry => entry !== firstOrder).filePath), true)
 
-    const metadataOnlyRoot = path.join(sandbox, 'metadata-only')
-    fs.mkdirSync(metadataOnlyRoot, { recursive: true })
-    fs.writeFileSync(path.join(metadataOnlyRoot, '.storage-transfer.json'), JSON.stringify({
+    const journalOnlyRoot = path.join(sandbox, 'journal-only')
+    fs.mkdirSync(journalOnlyRoot, { recursive: true })
+    fs.writeFileSync(path.join(journalOnlyRoot, '.storage-transfer.json'), JSON.stringify({
       status: 'in_progress', source: 'source', target: 'target', copiedFiles: 0, mergedFiles: 0, conflictFiles: 0,
     }))
-    const metadataOnlyEntries = await listBookmarkConfigurationFiles(metadataOnlyRoot)
-    assert.equal(metadataOnlyEntries.length, 1)
-    assert.equal(metadataOnlyEntries[0].kind, 'transferJournal')
+    const journalOnlyEntries = await listBookmarkConfigurationFiles(journalOnlyRoot)
+    assert.equal(journalOnlyEntries.length, 1)
+    assert.equal(journalOnlyEntries[0].kind, 'transferJournal')
 
     const { loadLocalizedManifest } = require('./lib/localized-manifest')
     const manifest = loadLocalizedManifest('zh-cn')
@@ -189,7 +244,7 @@ async function main() {
     )
     assert.equal(
       englishCommands.get('codebookmark.manageBookmarkConfigurations')?.title,
-      '$(files) Manage Bookmark Configurations',
+      '$(files) Bookmark Configuration Manager',
     )
     const moreMenu = manifest.contributes.menus['codebookmark.moreSubmenu']
     const identities = moreMenu.map(item => item.command ?? item.submenu)
@@ -209,22 +264,58 @@ async function main() {
     const providerSource = fs.readFileSync('src/providers/CodeBookmarkViewProvider.ts', 'utf8')
     const controllerSource = fs.readFileSync('src/providers/BookmarkConfigurationManagementController.ts', 'utf8')
     assert.match(commandSource, /provider\.openBookmarkConfigurationManager\(\)/)
-    assert.match(panelSource, /搜索脚本路径、工作区、记录或书签标签/)
-    assert.match(panelSource, /书签配置文件管理/)
-    assert.doesNotMatch(panelSource, /管理书签配置文件/)
+    const messageListenerRegistration = panelSource.indexOf('this.panel.webview.onDidReceiveMessage(')
+    const htmlAssignment = panelSource.indexOf('this.panel.webview.html = this.html()')
+    assert.ok(messageListenerRegistration >= 0 && htmlAssignment > messageListenerRegistration,
+      'Webview message handling must be registered before HTML can post the ready message')
+    const { installModuleMocks } = require('./test-support/module-mocks')
+    const restoreModuleMocks = installModuleMocks({
+      vscode: { window: { createOutputChannel: () => ({ appendLine() {}, dispose() {} }) } },
+    })
+    let managerHtml
+    let englishManagerHtml
+    try {
+      const { BookmarkConfigurationManagerWebview } = require('../out/providers/BookmarkConfigurationManagerWebview')
+      const { initializeLocalization } = require('../out/i18n/Localization')
+      const manager = Object.create(BookmarkConfigurationManagerWebview.prototype)
+      manager.panel = { webview: { cspSource: 'vscode-webview://configuration-manager-test' } }
+      initializeLocalization('zh-cn')
+      managerHtml = manager.html()
+      initializeLocalization('en')
+      englishManagerHtml = manager.html()
+      initializeLocalization('zh-cn')
+    } finally {
+      restoreModuleMocks()
+    }
+    const embeddedScript = /<script nonce="[^"]+">([\s\S]*?)<\/script>/.exec(managerHtml)?.[1]
+    assert.ok(embeddedScript, 'configuration manager HTML must contain its client script')
+    assert.doesNotThrow(() => new vm.Script(embeddedScript),
+      'configuration manager client script must remain valid after template interpolation')
+    assert.match(managerHtml, />工作区数据</)
+    assert.match(managerHtml, /id="filter-option-workspace-data"[^>]*>当前工作区数据</)
+    assert.match(managerHtml, /id="filter-option-transfer"[^>]*>存储迁移记录</)
+    assert.match(managerHtml, /id="filter-option-temporary"[^>]*>临时残留</)
+    assert.match(englishManagerHtml, />Workspace Data</)
+    assert.match(englishManagerHtml, /id="filter-option-workspace-data"[^>]*>Current Workspace Data</)
+    assert.match(englishManagerHtml, /id="filter-option-transfer"[^>]*>Storage Transfer Journals</)
+    assert.match(englishManagerHtml, /id="filter-option-temporary"[^>]*>Temporary Files</)
+    assert.doesNotMatch(managerHtml, /历史元数据|Historical Metadata/)
+    assert.doesNotMatch(englishManagerHtml, /历史元数据|Historical Metadata/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.searchScriptPathsWorkspacesRecordsOrBookmarkLabels/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.bookmarkConfigurationManager/)
     assert.match(panelSource, /openStorageRoot/)
     assert.match(panelSource, /revealStorageRoot/)
-    assert.match(panelSource, /resultAll: localize\('当前显示 \{shown\} 条记录，共 \{total\} 条', 'Showing \{shown\} of \{total\} records'\)/)
-    assert.match(panelSource, /resultFiltered: localize\('当前显示 \{shown\} 条记录，符合条件 \{matched\} 条，共 \{total\} 条', 'Showing \{shown\} of \{matched\} matching records; \{total\} total'\)/)
+    assert.match(panelSource, /resultAll: localize\("providers\.BookmarkConfigurationManagerWebview\.showingOfRecords2"\)/)
+    assert.match(panelSource, /resultFiltered: localize\("providers\.BookmarkConfigurationManagerWebview\.showingOfMatchingRecordsTotal"\)/)
     assert.match(panelSource, /formatText\(text\.resultAll, \{ shown: formatNumber\(displayedEntries\.length\), total: formatNumber\(state\.entries\.length\) \}\)/)
-    assert.match(panelSource, /totalBookmarks: localize\('共 \{count\} 个书签', '\{count\} bookmarks'\)/)
-    assert.match(panelSource, /automaticBookmarks: localize\('自动书签 \{count\} 个', 'Automatic bookmarks: \{count\}'\)/)
-    assert.match(panelSource, /invalidBookmarks: localize\('失效或异常 \{count\} 个', 'Invalid or abnormal: \{count\}'\)/)
-    assert.match(panelSource, /打开脚本/)
-    assert.match(panelSource, /定位文件/)
-    assert.match(panelSource, /删除配置/)
-    assert.match(panelSource, /清理记录/)
-    assert.match(panelSource, /删除所选/)
+    assert.match(panelSource, /totalBookmarks: localize\("providers\.BookmarkConfigurationManagerWebview\.bookmarks3"\)/)
+    assert.match(panelSource, /automaticBookmarks: localize\("providers\.BookmarkConfigurationManagerWebview\.automaticBookmarks"\)/)
+    assert.match(panelSource, /invalidBookmarks: localize\("providers\.BookmarkConfigurationManagerWebview\.invalidOrAbnormal"\)/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.openScript/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.revealFile/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.deleteConfiguration/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.removeRecord/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.deleteSelected/)
     assert.match(panelSource, /id="delete-confirmation" class="modal-backdrop" hidden/)
     assert.match(panelSource, /role="dialog" aria-modal="true"/)
     assert.match(panelSource, /--vscode-editorWidget-background/)
@@ -262,10 +353,26 @@ async function main() {
     assert.match(panelSource, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/)
     assert.match(panelSource, /font-size: 12px; white-space: nowrap/)
     assert.match(panelSource, /white-space: nowrap/)
-    assert.match(panelSource, /绑定信息更新：/)
-    assert.match(panelSource, /工作区排序/)
-    assert.match(panelSource, /存储迁移记录/)
-    assert.match(panelSource, /历史元数据/)
+    assert.match(panelSource, /\.detail-value \{ cursor: help; \}/)
+    assert.match(panelSource, /function appendDetailedValue\(cell, className, value, detail = value\)/)
+    assert.match(panelSource, /element\.title = detail/)
+    assert.match(panelSource, /appendDetailedValue\(cell, 'preview', preview, paths\.join\(String\.fromCharCode\(10\)\)\)/)
+    assert.match(panelSource, /if \(entry\.problem\) appendDetailedValue\(scriptCell, 'preview', entry\.problem\)/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.bindingUpdated/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.workspaceOrder/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.workspaceData/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.currentWorkspaceData/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.storageTransferJournal/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.batchRenameTemporaryFile/)
+    assert.match(panelSource, /BookmarkConfigurationManagerWebview\.temporaryArtifact/)
+    assert.match(panelSource, /valid: localize\("providers\.BookmarkConfigurationManagerWebview\.validRecord"\)/)
+    assert.match(panelSource, /if \(filter === 'workspaceData'\) return isCurrentWorkspaceData\(entry\)/)
+    assert.match(panelSource, /if \(filter === 'transfer'\) return entry\.kind === 'transferJournal'/)
+    assert.match(panelSource, /filter-option-empty/)
+    assert.match(panelSource, /filter-option-temporary/)
+    assert.match(panelSource, /state\.entries\.filter\(isCurrentWorkspaceData\)\.length/)
+    assert.doesNotMatch(panelSource, /entry\.kind !== 'script'/)
+    assert.doesNotMatch(panelSource, /历史元数据|Historical Metadata|metadata/i)
     assert.match(panelSource, /entry\.storagePath/)
     assert.doesNotMatch(panelSource, /this\.entries\.set\(entry\.fileName/)
     assert.doesNotMatch(panelSource, /脚本确认：/)

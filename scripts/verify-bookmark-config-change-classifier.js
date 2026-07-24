@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-config-change-classifier`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-config-change-classifier` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-config-change-classifier”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`createSource`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 检查配置目录事件能准确区分脚本、工作区顺序、迁移记录和无关文件。
+ * 脚本直接调用编译后的 `BookmarkConfigChangeClassifier`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { classifyBookmarkConfigChanges } = require('../out/providers/BookmarkConfigChangeClassifier')
@@ -27,12 +23,12 @@ function createSource(overrides = {}) {
 }
 
 async function main() {
-  let harness = createSource({ collected: ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.json', 'ignored.txt', '_workspace_order.json'] })
+  let harness = createSource({ collected: ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.json', 'ignored.txt', '_workspace_order.json', '_workspace_layout.json'] })
   let failures = []
   let result = await classifyBookmarkConfigChanges(
     [
       ['C:/scripts', new Set([null])],
-      ['C:/workspace', new Set(['_workspace_order.json'])],
+      ['C:/workspace', new Set(['_workspace_order.json', '_workspace_layout.json'])],
       ['C:/other', new Set(['bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.json'])],
     ],
     'C:/scripts',
@@ -44,12 +40,14 @@ async function main() {
     },
   )
   assert.equal(result.orderChanged, true)
+  assert.equal(result.layoutChanged, true)
   assert.deepEqual([...result.incrementalChanges.entries()].map(([directory, names]) => [directory, [...names]]), [
     ['C:/scripts', ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.json']],
   ])
   assert.deepEqual(harness.events, [
     'collect:C:/scripts',
     'check:C:/workspace:_workspace_order.json',
+    'check:C:/workspace:_workspace_layout.json',
     'check:C:/other:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.json',
   ])
   assert.deepEqual(failures, [])
@@ -62,7 +60,7 @@ async function main() {
     harness.source,
     { sameDirectory: (left, right) => left === right, reportFailure: () => assert.fail('unexpected failure') },
   )
-  assert.deepEqual(result, { orderChanged: false, incrementalChanges: new Map() })
+  assert.deepEqual(result, { orderChanged: false, layoutChanged: false, incrementalChanges: new Map() })
 
   const expectedError = new Error('expected fingerprint failure')
   harness = createSource()

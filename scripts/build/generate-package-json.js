@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责扩展构建与产物生成，具体对象为 `generate-package-json`。
- *
- * 实现要点：从源码与稳定清单生成可发布产物，并在覆盖目标前完成确定性整理。
- * 核心边界：生成结果必须确定、可复现，并与源码清单及发布校验保持一致。
- * 主要入口：`messageKey`、`localizeManifestValue`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 从 BasePackage 生成可发布 package.json，并同步展开命令、菜单和设置的本地化占位符。
+ * 生成过程同时检查命令唯一性和语言目录完整性，让运行时清单与源码常量保持同源。
  */
 const fs = require('fs');
 const path = require('path');
@@ -12,13 +8,18 @@ const path = require('path');
 const Commands_1 = require("../../out/util/constants/Commands");
 const Colors_1 = require("../../out/util/constants/Colors");
 const basePackageJsonFile = require("../../out/util/constants/BasePackage");
+const { arraySegments, manifestMessageKey } = require('../lib/manifest-message-keys');
 const {
-  ENGLISH_MANIFEST_LOCALES,
-  translateManifestText,
-} = require('../lib/manifest-localizations');
+  GENERATED_NLS_PATTERN,
+  buildManifestLocalizationFiles,
+  discoverManifestCatalogs,
+} = require('../lib/manifest-language-catalogs');
 
 const root = path.resolve(__dirname, '../..');
 const customPackageJsonPath = path.join(root, 'package.json');
+const manifestCatalogRoot = path.join(root, 'scripts', 'i18n', 'catalogs');
+const manifestCatalogs = discoverManifestCatalogs(manifestCatalogRoot);
+const chineseCatalog = manifestCatalogs.get('zh-cn');
 
 const commands = Commands_1.Commands
 const colors = Colors_1.Colors
@@ -63,7 +64,8 @@ const sourcePackageJson = {
         ...commands.redoCommands,
       ]
         .filter((e, i, arr) => {
-          // 按命令 ID 去重并保留第一次出现的位置，保证生成菜单的顺序稳定。
+          // 同一命令可能从多个菜单分支汇入；只保留最先声明的那一项，
+          // 这样清单不会出现重复入口，人工安排的菜单顺序也不会被后续分支打乱。
           return arr.findIndex(x => x.command === e.command) === i;
         })
         .map((e) => {
@@ -106,31 +108,43 @@ const sourcePackageJson = {
   }
 };
 
-const englishMessages = {};
-const chineseMessages = {};
+const localizedMessages = new Map([...manifestCatalogs].map(([locale]) => [locale, {}]));
 const localizedKeys = new Set();
 
-function messageKey(pathSegments) {
-  return `codebookmark.${pathSegments.join('.').replace(/[^A-Za-z0-9_.-]/g, '_')}`;
+function messageKey(value, pathSegments) {
+  if (pathSegments.at(-1) === 'category' && value === '代码书签') {
+    return 'codebookmark.common.commandCategory';
+  }
+  return manifestMessageKey(pathSegments);
 }
 
 function localizeManifestValue(value, pathSegments = []) {
   if (typeof value === 'string') {
-    if (!/[\u3400-\u9fff]/u.test(value)) return value;
     if (pathSegments[0] === 'author' || pathSegments[0] === 'keywords') return value;
-    const english = translateManifestText(value);
-    if (english === undefined) {
-      throw new Error(`Missing English manifest localization at ${pathSegments.join('.')}: ${value}`);
+    const key = messageKey(value, pathSegments);
+    const chinese = chineseCatalog[key];
+    if (chinese === undefined) {
+      if (/[\u3400-\u9fff]/u.test(value)) {
+        throw new Error(`Missing manifest catalog entry at ${pathSegments.join('.')}: ${value}`);
+      }
+      return value;
     }
-    const key = messageKey(pathSegments);
-    if (localizedKeys.has(key)) throw new Error(`Duplicate manifest localization key: ${key}`);
+    if (chinese !== value) {
+      throw new Error(`Stale Chinese manifest catalog entry ${key}: expected ${JSON.stringify(value)}, received ${JSON.stringify(chinese)}`);
+    }
+    if (localizedKeys.has(key)) return `%${key}%`;
     localizedKeys.add(key);
-    englishMessages[key] = english;
-    chineseMessages[key] = value;
+    for (const [locale, catalog] of manifestCatalogs) {
+      if (catalog[key] === undefined) {
+        throw new Error('Missing manifest catalog entry ' + key + ' in manifest.' + locale + '.json');
+      }
+      localizedMessages.get(locale)[key] = catalog[key];
+    }
     return `%${key}%`;
   }
   if (Array.isArray(value)) {
-    return value.map((item, index) => localizeManifestValue(item, [...pathSegments, String(index)]));
+    const segments = arraySegments(value);
+    return value.map((item, index) => localizeManifestValue(item, [...pathSegments, segments[index]]));
   }
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value)
@@ -141,17 +155,17 @@ function localizeManifestValue(value, pathSegments = []) {
 
 const customPackageJson = localizeManifestValue(sourcePackageJson);
 
+for (const [locale, catalog] of manifestCatalogs) {
+  const unusedKeys = Object.keys(catalog).filter(key => !localizedKeys.has(key));
+  if (unusedKeys.length > 0) {
+    throw new Error('Unused manifest catalog entries in manifest.' + locale + '.json: ' + unusedKeys.join(', '));
+  }
+}
+
 const temporaryPackageJsonPath = `${customPackageJsonPath}.${process.pid}.tmp`;
-const localizationFiles = [
-  ['package.nls.json', chineseMessages],
-  ['package.nls.en.json', englishMessages],
-  ...ENGLISH_MANIFEST_LOCALES
-    .filter(locale => locale !== 'en')
-    .map(locale => [`package.nls.${locale}.json`, englishMessages]),
-  ['package.nls.zh.json', chineseMessages],
-  ['package.nls.zh-cn.json', chineseMessages],
-  ['package.nls.zh-tw.json', chineseMessages],
-];
+const generatedCatalogs = new Map([...manifestCatalogs]
+  .map(([locale]) => [locale, localizedMessages.get(locale)]));
+const localizationFiles = [...buildManifestLocalizationFiles(generatedCatalogs)];
 const temporaryLocalizationPaths = localizationFiles.map(([fileName]) =>
   [path.join(root, fileName), path.join(root, `${fileName}.${process.pid}.tmp`)]
 );
@@ -164,7 +178,7 @@ try {
   for (const [target, temporary] of temporaryLocalizationPaths) fs.renameSync(temporary, target);
   const generatedFiles = new Set(localizationFiles.map(([fileName]) => fileName));
   for (const fileName of fs.readdirSync(root)) {
-    if (/^package\.nls(?:\.[a-z]{2}(?:-[a-z]{2})?)?\.json$/i.test(fileName) && !generatedFiles.has(fileName)) {
+    if (GENERATED_NLS_PATTERN.test(fileName) && !generatedFiles.has(fileName)) {
       fs.unlinkSync(path.join(root, fileName));
     }
   }

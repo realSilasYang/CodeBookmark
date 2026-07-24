@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkConfigWatcherCoordinator`。
- *
- * 实现要点：协调多个端口、状态与异步阶段，明确事件顺序、取消点和最终提交时机。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkConfigWatcherFailureKind`、`BookmarkConfigWatcherPort`、`BookmarkConfigWatcherCoordinator`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 协调配置目录监听器的建立、替换和关闭，并把批量文件事件合并成有序刷新。
+ * 监听根目录切换或请求过期时会丢弃旧回调，防止旧目录的迟到事件覆盖当前视图。
  */
 import {
 	classifyBookmarkConfigChanges,
@@ -29,7 +25,7 @@ interface BookmarkConfigWatcherScheduling {
 	clearTimer(timer: ConfigWatcherTimer): void
 }
 
-export interface BookmarkConfigWatcherPort<OrderSnapshot> {
+export interface BookmarkConfigWatcherPort {
 	isDisposed(): boolean
 	currentGeneration(): number
 	currentScope(): string | undefined
@@ -38,9 +34,8 @@ export interface BookmarkConfigWatcherPort<OrderSnapshot> {
 	collectExternalChanges(directory: string): Promise<readonly string[]>
 	hasExternalChange(directory: string, filename: string): Promise<boolean>
 	sameDirectory(left: string, right: string): boolean
-	readWorkspaceOrder(scope: string, generation: number): Promise<OrderSnapshot>
-	applyWorkspaceOrder(snapshot: OrderSnapshot, scope: string, generation: number): void
 	reloadExternalBookmarkFiles(fileNames: readonly string[]): Promise<void>
+	reloadWorkspaceLayout(): Promise<void>
 	rebasePendingSaves(): void
 	isDirectory(directory: string): Promise<boolean>
 	rememberDirectory(directory: string): Promise<void>
@@ -57,14 +52,14 @@ const defaultScheduling: BookmarkConfigWatcherScheduling = {
 	clearTimer: timer => clearTimeout(timer),
 }
 
-export class BookmarkConfigWatcherCoordinator<OrderSnapshot> {
+export class BookmarkConfigWatcherCoordinator {
 	private readonly watcherLifecycle = new ConfigWatcherLifecycle()
 	private debounceTimer: ConfigWatcherTimer | undefined
 	private readonly retryTimers = new Set<ConfigWatcherTimer>()
 
 	constructor(private readonly scheduling: BookmarkConfigWatcherScheduling = defaultScheduling) {}
 
-	async setup(generation: number, port: BookmarkConfigWatcherPort<OrderSnapshot>): Promise<void> {
+	async setup(generation: number, port: BookmarkConfigWatcherPort): Promise<void> {
 		const { scriptFolder, workspaceFolder } = port.watchDirectories()
 		const watcherScope = port.currentScope()
 		const isCurrent = (): boolean => !port.isDisposed()
@@ -101,7 +96,7 @@ export class BookmarkConfigWatcherCoordinator<OrderSnapshot> {
 				},
 			)
 			if (!isCurrent()) return
-			await this.applyChanges(classification, watcherScope, generation, isCurrent, port)
+			await this.applyChanges(classification, port)
 		}
 
 		await this.watcherLifecycle.replace(
@@ -151,16 +146,11 @@ export class BookmarkConfigWatcherCoordinator<OrderSnapshot> {
 
 	private async applyChanges(
 		classification: BookmarkConfigChangeClassification,
-		watcherScope: string | undefined,
-		generation: number,
-		isCurrent: () => boolean,
-		port: BookmarkConfigWatcherPort<OrderSnapshot>,
+		port: BookmarkConfigWatcherPort,
 	): Promise<void> {
-		if (classification.orderChanged) {
-			const scope = watcherScope ?? 'global'
-			const snapshot = await port.readWorkspaceOrder(scope, generation)
-			if (!isCurrent()) return
-			port.applyWorkspaceOrder(snapshot, scope, generation)
+		if (classification.layoutChanged || classification.orderChanged) {
+			await port.reloadWorkspaceLayout()
+			return
 		}
 		if (classification.incrementalChanges.size === 0) return
 		const fileNames = [...new Set(

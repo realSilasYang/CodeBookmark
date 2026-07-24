@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `LanguageCommentProfiles`。
- *
- * 实现要点：集中实现 `LanguageCommentProfiles` 的无界面规则和边界处理，供多个上层流程复用。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`parseLanguageConfigurationJson`、`LanguageCommentProfileRegistry`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 读取已安装语言扩展的 grammar 与 language-configuration.json，建立语言到注释语法和文件模式的索引。
+ * 只有同时具有语法高亮与正式注释规则的语言才参与自动标记，避免仅凭扩展名猜测。
  */
 import * as path from 'path'
 import * as vscode from 'vscode'
@@ -305,7 +301,7 @@ export class LanguageCommentProfileRegistry {
 	initialize(): Promise<void> {
 		if (!this.initializePromise) {
 			this.initializePromise = this.load().catch(error => {
-				logger.error(localize(`读取 VS Code 语言注释配置失败: ${error}`, `Failed to read a VS Code language comment configuration: ${error}`))
+				logger.error(localize("util.LanguageCommentProfiles.failedToReadAVsCodeLanguageCommentConfiguration", { error }))
 			}).finally(() => {
 				this.initialized = true
 			})
@@ -379,8 +375,8 @@ export class LanguageCommentProfileRegistry {
 		}
 		await Promise.all(Array.from({ length: Math.min(8, contributions.length) }, () => worker()))
 
-		// VS Code 经常把同一种语言拆成多项贡献：一项提供配置，其他项补充文件名或扩展名。
-		// 必须收集完全部配置后再关联文件，才能让无配置条目继承同一语言 ID 下的注释规则。
+		// 同一 language ID 可能由多个扩展贡献共同组成：一项给注释配置，另一项只补文件名。
+		// 等配置全部读完再建立文件关联，后者才能共享前者已经确认的注释语法。
 		for (const { language } of contributions) {
 			if (typeof language.id !== 'string' || !language.id.trim()) continue
 			const languageId = language.id.toLowerCase()
@@ -392,7 +388,8 @@ export class LanguageCommentProfileRegistry {
 					next.discoveryExtensions.add(extension)
 					continue
 				}
-				// 少数内置语言贡献会在 extensions 字段中填写精确文件名而不是扩展名。
+				// 少数内置语言把 Makefile 这类精确文件名放进 extensions；先按扩展名解析失败后，
+				// 再把它作为文件名登记，不能因为字段用法特殊就漏掉语言关联。
 				const filename = safeFilename(rawExtension)
 				if (filename) {
 					addAssociation(next.languagesByFilename, filename, languageId)
@@ -421,15 +418,9 @@ export class LanguageCommentProfileRegistry {
 		}
 		this.state = next
 		if (failedConfigurations > 0) {
-			logger.error(localize(
-				`有 ${failedConfigurations} 个语言注释配置无法读取；对应语言将不参与自动标记识别。`,
-				`${failedConfigurations} language comment configurations could not be read; the affected languages will not participate in automatic marker detection.`,
-			))
+			logger.error(localize("util.LanguageCommentProfiles.languageCommentConfigurationsCouldNotBeReadTheAffected", { failedConfigurations }))
 		}
-		if (failedPatterns > 0) logger.error(localize(
-			`已跳过 ${failedPatterns} 个无效的语言文件匹配模式。`,
-			`Skipped ${failedPatterns} invalid language file-matching patterns.`,
-		))
+		if (failedPatterns > 0) logger.error(localize("util.LanguageCommentProfiles.skippedInvalidLanguageFileMatchingPatterns", { failedPatterns }))
 	}
 
 	profileFor(languageId: string | undefined, fileName: string): CodeMarkerSyntaxProfile | undefined {

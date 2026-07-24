@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AISourceFolderScanner`。
- *
- * 实现要点：按受控规则扫描输入并生成结构化结果，同时限制范围、容量和误匹配。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`visitAISourceFilesInFolder`、`listAISourceFilesInFolder`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 递归遍历文件夹内可发送给 AI 的源码文件，应用排除目录、扩展名和数量限制。
+ * 遍历支持取消并保持稳定顺序，批量工作流可边访问边处理，也可一次取得完整列表。
  */
 import fs = require('fs')
 import * as path from 'path'
@@ -33,18 +29,12 @@ export async function visitAISourceFilesInFolder(
 	let scriptFiles = 0
 
 	async function traverse(currentPath: string, depth: number): Promise<boolean> {
-		if (depth > limits.maxDepth) throw new Error(localize(
-			`目录层级超过 ${limits.maxDepth} 层，请缩小批量处理目录。`,
-			`The directory is deeper than ${limits.maxDepth} levels. Choose a smaller folder for batch processing.`,
-		))
+		if (depth > limits.maxDepth) throw new Error(localize("util.AISourceFolderScanner.theDirectoryIsDeeperThanLevelsChooseASmaller", { maxDepth: limits.maxDepth }))
 		const entries = await fs.promises.readdir(currentPath, { withFileTypes: true })
 		entries.sort((left, right) => left.name.localeCompare(right.name))
 		scannedEntries += entries.length
 		if (scannedEntries > limits.maxEntries) {
-			throw new Error(localize(
-				`扫描项超过 ${limits.maxEntries} 个，请缩小批量处理目录。`,
-				`The scan exceeded ${limits.maxEntries} entries. Choose a smaller folder for batch processing.`,
-			))
+			throw new Error(localize("util.AISourceFolderScanner.theScanExceededEntriesChooseASmallerFolderFor", { maxEntries: limits.maxEntries }))
 		}
 		for (const entry of entries) {
 			const fullPath = path.join(currentPath, entry.name)
@@ -54,10 +44,7 @@ export async function visitAISourceFilesInFolder(
 			} else if (entry.isFile() && isAISourceFile(entry.name)) {
 				scriptFiles++
 				if (scriptFiles > limits.maxFiles) {
-					throw new Error(localize(
-						`脚本文件超过 ${limits.maxFiles} 个，请缩小批量处理目录。`,
-						`The folder contains more than ${limits.maxFiles} script files. Choose a smaller folder for batch processing.`,
-					))
+					throw new Error(localize("util.AISourceFolderScanner.theFolderContainsMoreThanScriptFilesChooseA", { maxFiles: limits.maxFiles }))
 				}
 				if (await visitor(fullPath)) return true
 			}

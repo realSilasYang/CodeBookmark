@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkDocumentChangeCoordinator`。
- *
- * 实现要点：协调多个端口、状态与异步阶段，明确事件顺序、取消点和最终提交时机。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkDocumentChangePort`、`BookmarkDocumentChangeCoordinator`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 对编辑中的文档变化进行防抖，在稳定后运行粘性重定位和自动标记对账。
+ * 合并期间不依赖逐次行号增减，而是使用文档最终内容，避免快速编辑积累位置误差。
  */
 import { bookmarkPathKey, isSameOrDescendantBookmarkPath } from '../util/BookmarkPath'
 
@@ -99,7 +95,8 @@ export class BookmarkDocumentChangeCoordinator<Document, Uri, BookmarkState> {
 		if (viewGeneration !== port.currentViewGeneration() || !port.isCurrentScope(uri)) return
 		const bookmarkState = port.currentBookmarkState()
 
-		// 防抖可能合并中间编辑，因此重定位必须依据文档最终状态，不能依赖逐次行号运算。
+		// 防抖期间可能已经发生多轮插入和删除；回调真正执行时只相信文档最终文本，
+		// 不能把那些已被合并掉的中间事件继续折算成行号偏移。
 		const relocated = port.bookmarkCount(bookmarkPath) > 0
 			? await port.relocateBookmarks(bookmarkState, bookmarkPath, uri)
 			: 0

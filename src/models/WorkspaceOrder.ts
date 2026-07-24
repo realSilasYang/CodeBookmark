@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责书签领域模型与展示投影，具体对象为 `WorkspaceOrder`。
- *
- * 实现要点：定义书签领域数据、父子关系和展示投影，并在对象内部维护不变量。
- * 核心边界：领域对象负责维持自身不变量；序列化字段、父子关系和展示状态不得被调用方绕过。
- * 主要入口：`workspaceOrderPersistence`、`decodeWorkspaceOrderPersistence`、`appendWorkspaceOrderPath`、`removeWorkspaceOrderTree`、`removeWorkspaceOrderFile`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 以纯函数维护工作区脚本顺序，覆盖追加、插入、删除、重命名、目录移动和列表合并。
+ * 所有比较都基于规范化书签路径，防止前缀相似的文件在目录操作中被误删或误移。
  */
 import {
 	bookmarkPathKey,

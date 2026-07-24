@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIEndpointResolver`。
- *
- * 实现要点：规范化多种输入形式并生成唯一可执行结果，集中处理补全与冲突规则。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`AIProtocol`、`AIRequestTarget`、`resolveAIRequestTargets`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 识别资源 Endpoint、API Base、完整请求地址和本地服务地址，生成按优先级尝试的协议目标。
+ * 已完整填写的路径不会重复拼接；Azure、OpenAI 兼容、Anthropic、Gemini 与 Ollama 分别遵循自身 URL 规则。
  */
 import {
 	isAzureAIHostname,
@@ -53,14 +49,14 @@ const OPENAI_PROVIDER_PROFILES: OpenAIProviderProfile[] = [
 
 function parseAIAddress(value: string): URL {
 	let trimmed = value.trim()
-	if (!trimmed) throw new Error(localize('未配置 AI 接口地址。', 'The AI service address is not configured.'))
+	if (!trimmed) throw new Error(localize("util.AIEndpointResolver.theAiServiceAddressIsNotConfigured"))
 	for (const [opening, closing] of [['"', '"'], ["'", "'"], ['`', '`'], ['<', '>']]) {
 		if (trimmed.startsWith(opening) && trimmed.endsWith(closing)) {
 			trimmed = trimmed.slice(opening.length, -closing.length).trim()
 			break
 		}
 	}
-	if (!trimmed) throw new Error(localize('未配置 AI 接口地址。', 'The AI service address is not configured.'))
+	if (!trimmed) throw new Error(localize("util.AIEndpointResolver.theAiServiceAddressIsNotConfigured"))
 
 	let candidate = trimmed
 	if (candidate.startsWith('//')) candidate = `https:${candidate}`
@@ -76,13 +72,13 @@ function parseAIAddress(value: string): URL {
 	try {
 		url = new URL(candidate)
 	} catch {
-		throw new Error(localize('AI 接口地址不是有效的 URL。', 'The AI service address is not a valid URL.'))
+		throw new Error(localize("util.AIEndpointResolver.theAiServiceAddressIsNotAValidUrl"))
 	}
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(localize('AI 接口地址必须使用 http:// 或 https://。', 'The AI service address must use http:// or https://.'))
+		throw new Error(localize("util.AIEndpointResolver.theAiServiceAddressMustUseHttpOrHttps"))
 	}
 	if (url.username || url.password) {
-		throw new Error(localize('AI 接口地址不能在 URL 中包含用户名或密码。', 'The AI service URL cannot contain a username or password.'))
+		throw new Error(localize("util.AIEndpointResolver.theAiServiceUrlCannotContainAUsernameOr"))
 	}
 	url.hash = ''
 	return url
@@ -194,7 +190,7 @@ function geminiTarget(source: URL, model: string): AIRequestTarget {
 	}
 
 	const modelName = model.trim().replace(/^models\//i, '')
-	if (!modelName) throw new Error(localize('Gemini 接口需要配置模型名称。', 'Gemini requires a configured model name.'))
+	if (!modelName) throw new Error(localize("util.AIEndpointResolver.geminiRequiresAConfiguredModelName"))
 	if (!basePath) basePath = '/v1beta/models'
 	else if (/\/v\d+(?:beta\d*)?$/i.test(basePath)) basePath += '/models'
 	else if (!basePath.toLowerCase().endsWith('/models')) basePath += '/models'
@@ -217,7 +213,7 @@ function deduplicateTargets(targets: AIRequestTarget[], origin: string): AIReque
 	const seen = new Set<string>()
 	return targets.filter(target => {
 		if (target.url.origin !== origin) {
-			throw new Error(localize('AI 接口候选地址必须与用户配置保持同源。', 'AI endpoint candidates must use the same origin as the configured address.'))
+			throw new Error(localize("util.AIEndpointResolver.aiEndpointCandidatesMustUseTheSameOriginAs"))
 		}
 		const key = `${target.protocol}\n${target.url.toString()}`
 		if (seen.has(key)) return false

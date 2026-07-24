@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `PendingSaveStore`。
- *
- * 实现要点：维护可变状态及其索引，对外提供原子更新和一致快照。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`PendingSaveRequest`、`PendingSaveStore`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 保存尚未落盘的请求、重试次数和替换关系，为防抖保存提供可变但可快照的状态。
+ * 定时器和真正写盘不在这里，因而请求合并与失败重排可以脱离 VS Code 单独验证。
  */
 import type { Bookmark } from '../models/Bookmark'
 
@@ -22,8 +18,8 @@ interface FailedSaveResult {
 }
 
 /**
- * 持有保存请求的可变快照；定时器、持久化以及按作用域分组由保存协调器负责。
- * 这种拆分让重试计数与请求替换规则可以作为纯状态逻辑验证。
+ * 保存尚未执行的请求和各自重试次数。定时器与磁盘提交留给 BookmarkSaveCoordinator，
+ * 本类只回答请求如何合并、替换和取出，因而这些状态规则可以独立测试。
  */
 export class PendingSaveStore {
 	private readonly requests = new Map<string, PendingSaveRequest>()

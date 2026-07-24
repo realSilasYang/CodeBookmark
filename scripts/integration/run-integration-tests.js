@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责集成测试启动与环境隔离，具体对象为 `run-integration-tests`。
- *
- * 实现要点：创建隔离用户数据与测试工作区，并复用本机 VS Code 启动真实 Extension Host。
- * 核心边界：脚本失败时应以非零状态退出，且不得静默改写不属于本任务的用户文件。
- * 主要入口：`outputSink`、`stripKnownExternalDiagnostics`、`assertNoUnexpectedExtensionHostDiagnostics`、`isKnownExternalProjectLogDiagnostic`、`findProjectDiagnosticsInLog`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 优先复用本机 VS Code，创建隔离的用户目录和测试工作区后启动真实 Extension Host。
+ * 十三种受支持显示语言和未知非中文回退场景分开执行；宿主自身的已知诊断会被分类，项目相关错误仍会使测试失败。
  */
 const path = require('node:path')
 const os = require('node:os')
@@ -15,6 +11,12 @@ const crypto = require('node:crypto')
 const { Writable } = require('node:stream')
 const { pathToFileURL } = require('node:url')
 const { downloadAndUnzipVSCode, runTests, runVSCodeCommand } = require('@vscode/test-electron')
+
+const supportedTestLocales = Object.freeze([
+  'zh-cn', 'zh-hk', 'zh-tw', 'en',
+  'ja', 'vi', 'ko', 'es', 'fr', 'pt', 'ru', 'de', 'it',
+])
+const fallbackTestLocale = 'tr'
 
 const knownExternalDiagnosticPatterns = [
   /^(?:Warning: 'cached-data' is not in the list of known options, but still passed to Electron\/Chromium\.|警告: "cached-data"不在已知选项列表中，但仍传递给 Electron\/Chromium。)\r?\n?/gmu,
@@ -267,67 +269,104 @@ async function prepareDownloadedLanguagePack(version, extensionsPath, userDataPa
   await writeDownloadedLanguagePacksFile(extensionsPath, userDataPath)
 }
 
-function removeTemporaryDirectory(tempRoot) {
-  const remove = () => fsSync.rmSync(tempRoot, {
-    recursive: true,
-    force: true,
-    maxRetries: 3,
-    retryDelay: 100,
-  })
-  try {
-    remove()
-    return
-  } catch (initialError) {
-    if (process.platform !== 'win32' || !fsSync.existsSync(tempRoot)) throw initialError
+async function aliasInstalledLanguagePack(sourcePath, userDataPath, targetLocale) {
+  const sourceConfiguration = JSON.parse(await fs.readFile(sourcePath, 'utf8'))
+  const source = sourceConfiguration['zh-cn'] ?? Object.values(sourceConfiguration)[0]
+  if (!source?.translations?.vscode || !existingFile(source.translations.vscode)) {
+    throw new Error('无法为非中文清单回退测试找到可复用的 VS Code 核心语言包。')
   }
-
-  const username = process.env.USERNAME?.trim()
-  const principal = username
-    ? `${process.env.USERDOMAIN?.trim() ? `${process.env.USERDOMAIN.trim()}\\` : ''}${username}`
-    : undefined
-  if (principal) {
-    spawnSync('icacls.exe', [
-      tempRoot,
-      '/grant',
-      `${principal}:(OI)(CI)F`,
-      '/T',
-      '/C',
-      '/Q',
-    ], { windowsHide: true, stdio: 'ignore' })
+  const configuration = {
+    [targetLocale]: {
+      ...source,
+      hash: crypto.createHash('md5').update(targetLocale + ':' + source.hash).digest('hex'),
+      label: targetLocale + ' manifest fallback test',
+    },
   }
-  remove()
+  await fs.writeFile(
+    path.join(userDataPath, 'languagepacks.json'),
+    JSON.stringify(configuration),
+    'utf8',
+  )
 }
 
-async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVersion) {
+async function removeTemporaryDirectory(tempRoot, options = {}) {
+  // VS Code 退出后，Windows 偶尔还会短暂持有日志或缓存文件句柄。先给宿主
+  // 留出释放时间，再做总时长有上限的同步重试，避免测试成功后卡在清理阶段。
+  const initialDelayMs = options.initialDelayMs ?? 500
+  const attempts = options.attempts ?? 5
+  const retryDelayMs = options.retryDelayMs ?? 200
+  if (initialDelayMs > 0) await new Promise(resolve => setTimeout(resolve, initialDelayMs))
+  let lastError
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      fsSync.rmSync(tempRoot, {
+        recursive: true,
+        force: true,
+        maxRetries: 2,
+        retryDelay: 100,
+      })
+      return
+    } catch (error) {
+      lastError = error
+      if (process.platform !== 'win32' || !fsSync.existsSync(tempRoot)) throw error
+      if (attempt < attempts - 1) {
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs * (attempt + 1)))
+      }
+    }
+  }
+
+  throw lastError
+}
+
+async function runLocale(
+  root,
+  vscodeExecutablePath,
+  locale,
+  downloadedVSCodeVersion,
+  pendingTemporaryDirectories,
+) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), `codebookmark-integration-${locale}-`))
   const fixturePath = path.join(tempRoot, 'workspace')
   const bookmarkStoragePath = path.join(tempRoot, 'bookmark-storage')
   const userDataPath = path.join(tempRoot, 'user-data')
-  const extensionsPath = downloadedVSCodeVersion && locale === 'zh-cn'
-    ? path.join(tempRoot, 'extensions')
-    : undefined
+  const extensionsPath = path.join(tempRoot, 'extensions')
   const fixtureUri = pathToFileURL(fixturePath).href
   await fs.mkdir(fixturePath, { recursive: true })
   await fs.mkdir(bookmarkStoragePath, { recursive: true })
   await fs.mkdir(path.join(userDataPath, 'User'), { recursive: true })
+  await fs.mkdir(extensionsPath, { recursive: true })
+  // 内置 Git 扩展会为 askpass 创建仅向其沙箱 SID 授权的目录，测试进程随后
+  // 无权删除整个隔离用户目录。测试不依赖 Git，预先关闭它可保持清理权限完整。
+  await fs.writeFile(path.join(userDataPath, 'User', 'settings.json'), JSON.stringify({
+    'git.enabled': false,
+  }, null, 2), 'utf8')
   const languagePacksFile = findInstalledLanguagePacksFile()
-  if (extensionsPath) {
-    await fs.mkdir(extensionsPath, { recursive: true })
-    console.log('正在为远端中文集成测试准备 VS Code 简体中文语言包。')
+  if (downloadedVSCodeVersion && locale !== 'en') {
+    console.log(`正在为远端 ${locale} 集成测试准备可复用的 VS Code 语言包。`)
     await prepareDownloadedLanguagePack(downloadedVSCodeVersion, extensionsPath, userDataPath)
+    if (locale !== 'zh-cn') {
+      await aliasInstalledLanguagePack(
+        path.join(userDataPath, 'languagepacks.json'),
+        userDataPath,
+        locale,
+      )
+    }
   } else if (locale === 'zh-cn' && languagePacksFile) {
     await fs.copyFile(languagePacksFile, path.join(userDataPath, 'languagepacks.json'))
+  } else if (locale !== 'zh-cn' && locale !== 'en' && languagePacksFile) {
+    await aliasInstalledLanguagePack(languagePacksFile, userDataPath, locale)
+  } else if (locale !== 'zh-cn' && locale !== 'en') {
+    throw new Error(`${locale} 清单测试需要本机至少安装一个 VS Code 语言包。`)
   }
   await fs.copyFile(
     path.join(root, 'tests', 'integration', 'fixture', 'sample.ts'),
     path.join(fixturePath, 'sample.ts'),
   )
-  // 从 VS Code Extension Host 启动的命令会继承此标志；若不清理，Electron 会把
-  // 工作区参数误当成 Node.js 入口模块，而不是要打开的测试工作区。
+  // 当前进程可能继承 ELECTRON_RUN_AS_NODE。把它原样交给 VS Code 后，Electron 会
+  // 把测试工作区路径当成 Node.js 脚本入口，因此启动宿主前必须从子进程环境中移除。
   const inheritedElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE
-  const inheritedTestLocale = process.env.CODEBOOKMARK_TEST_LOCALE
+  const expectedRuntimeLanguage = supportedTestLocales.includes(locale) ? locale : 'en'
   delete process.env.ELECTRON_RUN_AS_NODE
-  process.env.CODEBOOKMARK_TEST_LOCALE = locale
   try {
     console.log(`Running Extension Host integration tests with locale ${locale}`)
     const stdoutChunks = []
@@ -340,6 +379,8 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
         extensionTestsPath: path.join(root, 'tests', 'integration', 'suite', 'index.js'),
         extensionTestsEnv: {
           CODEBOOKMARK_INTEGRATION_TEST: '1',
+          CODEBOOKMARK_TEST_LOCALE: locale,
+          CODEBOOKMARK_TEST_RUNTIME_LANGUAGE: expectedRuntimeLanguage,
           CODEBOOKMARK_TEST_STORAGE_ROOT: bookmarkStoragePath,
           VSCODE_NLS_CONFIG: JSON.stringify({
             userLocale: locale,
@@ -351,7 +392,7 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
         stderr: outputSink(stderrChunks),
         launchArgs: [
           `--user-data-dir=${userDataPath}`,
-          ...(extensionsPath ? [`--extensions-dir=${extensionsPath}`] : []),
+          `--extensions-dir=${extensionsPath}`,
           '--disable-extensions',
           '--disable-extension=vscode.git',
           '--disable-extension=vscode.git-base',
@@ -375,11 +416,10 @@ async function runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVer
   } finally {
     if (inheritedElectronRunAsNode === undefined) delete process.env.ELECTRON_RUN_AS_NODE
     else process.env.ELECTRON_RUN_AS_NODE = inheritedElectronRunAsNode
-    if (inheritedTestLocale === undefined) delete process.env.CODEBOOKMARK_TEST_LOCALE
-    else process.env.CODEBOOKMARK_TEST_LOCALE = inheritedTestLocale
     try {
-      removeTemporaryDirectory(tempRoot)
+      await removeTemporaryDirectory(tempRoot)
     } catch (error) {
+      pendingTemporaryDirectories.add(tempRoot)
       console.warn(`Unable to remove temporary integration directory ${tempRoot}: ${error.message}`)
     }
   }
@@ -392,7 +432,7 @@ async function main() {
   const executableArgument = process.argv.find(argument => argument.startsWith(executablePrefix))
   const localeArgument = process.argv.find(argument => argument.startsWith(localePrefix))
   const requestedLocale = localeArgument?.slice(localePrefix.length).toLowerCase()
-  if (requestedLocale && requestedLocale !== 'zh-cn' && requestedLocale !== 'en') {
+  if (requestedLocale && ![...supportedTestLocales, fallbackTestLocale].includes(requestedLocale)) {
     throw new Error(`不支持的集成测试语言：${requestedLocale}`)
   }
   const configuredExecutablePath = executableArgument?.slice(executablePrefix.length)
@@ -414,9 +454,25 @@ async function main() {
     throw new Error('未找到本机已安装的 VS Code。请安装 VS Code，或通过 CODEBOOKMARK_VSCODE_EXECUTABLE_PATH 指定 Code 可执行文件。')
   }
   console.log(`Using VS Code: ${vscodeExecutablePath}`)
-  const locales = requestedLocale ? [requestedLocale] : ['zh-cn', 'en']
+  const pendingTemporaryDirectories = new Set()
+  const locales = requestedLocale ? [requestedLocale] : supportedTestLocales
   for (const locale of locales) {
-    await runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVersion)
+    await runLocale(root, vscodeExecutablePath, locale, downloadedVSCodeVersion, pendingTemporaryDirectories)
+  }
+  if (!requestedLocale) {
+    await runLocale(root, vscodeExecutablePath, fallbackTestLocale, downloadedVSCodeVersion, pendingTemporaryDirectories)
+  }
+  if (pendingTemporaryDirectories.size > 0) {
+    // 所有语言宿主退出后再统一等待一次；此前仍被最后几个 Electron 子进程
+    // 占用的目录通常会在这一阶段释放。并行清理避免失败目录线性拖长测试。
+    await new Promise(resolve => setTimeout(resolve, 2_000))
+    await Promise.all([...pendingTemporaryDirectories].map(async tempRoot => {
+      try {
+        await removeTemporaryDirectory(tempRoot, { initialDelayMs: 0, attempts: 10, retryDelayMs: 250 })
+      } catch (error) {
+        console.warn(`Unable to remove temporary integration directory after final retry ${tempRoot}: ${error.message}`)
+      }
+    }))
   }
 }
 

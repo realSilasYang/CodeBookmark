@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `UndoManager`。
- *
- * 实现要点：通过小型端口连接纯逻辑与 VS Code API，使状态变化顺序可独立验证。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`CapturedUndoState`、`UndoApplyResult`、`UndoManager`、`undoManager`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 按书签作用域保存撤销与重做快照，恢复树、脚本身份和受影响文件集合。
+ * 新操作会截断重做分支；切换作用域后只发布对应历史，避免不同文件夹互相串台。
  */
 import * as vscode from 'vscode'
 import { Bookmark } from '../models/Bookmark'
@@ -13,7 +9,7 @@ import { ContextBookmark } from '../util/ContextValue'
 import { Commands } from '../util/constants/Commands'
 import { logger } from '../util/Logger'
 import { canonicalBookmarkPath, isSameOrDescendantBookmarkPath, renamedBookmarkPath } from '../util/BookmarkPath'
-import { UNDO_ACTION_LABELS, type UndoAction } from '../util/UndoActions'
+import { UNDO_ACTION_MESSAGE_KEYS, type UndoAction } from '../util/UndoActions'
 import { localize } from '../i18n/Localization'
 import {
 	isSameOrDescendantAbsolutePath,
@@ -26,6 +22,7 @@ import {
 	PersistenceFormats,
 	type PersistenceHeader,
 } from '../util/PersistenceSchema'
+import type { WorkspaceLayout } from '../models/WorkspaceLayout'
 
 interface UndoBookmarkData extends Record<string, unknown> {
 	id?: string
@@ -35,11 +32,17 @@ interface UndoBookmarkData extends Record<string, unknown> {
 	createdAt?: number
 	scriptId?: string
 	undoContextValue?: ContextBookmark
+	ownerScriptId?: string
+	fileLabelCustomized?: boolean
+	label?: string
+	iconName?: string
+	subs?: unknown[]
 }
 
 interface SerializedUndoState {
 	bookmarks: unknown[]
 	workspaceOrder: string[] | null
+	workspaceLayout: WorkspaceLayout | null
 }
 
 interface UndoEntry {
@@ -75,6 +78,7 @@ export interface CapturedUndoState {
 export interface UndoApplyResult {
 	readonly action: UndoAction
 	readonly workspaceOrder: string[] | null
+	readonly workspaceLayout: WorkspaceLayout | null
 }
 
 const UNDO_SESSION_STATE_KEY = 'codebookmark.undoSessionState'
@@ -84,7 +88,7 @@ function isUndoEntry(value: unknown): value is UndoEntry {
 	const entry = value as Partial<UndoEntry>
 	return typeof entry.state === 'string'
 		&& typeof entry.action === 'string'
-		&& entry.action in UNDO_ACTION_LABELS
+		&& entry.action in UNDO_ACTION_MESSAGE_KEYS
 		&& typeof entry.sequence === 'number'
 		&& Number.isSafeInteger(entry.sequence)
 		&& entry.sequence >= 0
@@ -138,10 +142,7 @@ export class UndoManager {
 				}
 			} catch (error) {
 				this.persistenceBlocked = true
-				logger.error(localize(
-					`撤销会话使用不受支持的持久化格式，已保留原数据且停止覆盖：${error}`,
-					`The undo session uses an unsupported persistence format. The original data was preserved and will not be overwritten: ${error}`,
-				))
+				logger.error(localize("providers.UndoManager.theUndoSessionUsesAnUnsupportedPersistenceFormatThe", { error }))
 			}
 		}
 		this.enforceGlobalLimits()
@@ -184,7 +185,7 @@ export class UndoManager {
 			.then(() => undefined)
 		this.persistencePromise = update.catch(error => {
 			this.persistenceDirty = true
-			logger.error(localize(`撤销会话持久化失败：${error}`, `Failed to persist undo session: ${error}`))
+			logger.error(localize("providers.UndoManager.failedToPersistUndoSession", { error }))
 		})
 		await this.persistencePromise
 	}
@@ -225,7 +226,7 @@ export class UndoManager {
 					vscode.commands.executeCommand('setContext', Commands.varRedoOperation, redoAction),
 				])
 			} catch (error) {
-				logger.error(localize(`更新撤销命令上下文失败：${error}`, `Failed to update undo contexts: ${error}`))
+				logger.error(localize("providers.UndoManager.failedToUpdateUndoContexts", { error }))
 			}
 			if (generation === this.contextUpdateGeneration) {
 				this.contextUpdateRunning = false
@@ -234,51 +235,70 @@ export class UndoManager {
 		}
 	}
 
-	private serialize(bookmarks: BookmarkSet, workspaceOrder: readonly string[] | null = null): string {
+	private serialize(
+		bookmarks: BookmarkSet,
+		workspaceOrder: readonly string[] | null = null,
+		workspaceLayout: WorkspaceLayout | null = null,
+	): string {
+		const serializeBookmark = (bookmark: Bookmark): Record<string, unknown> => ({
+			...bookmark.toJSONShallow(),
+			subs: bookmark.subs.values.map(serializeBookmark),
+			scriptId: bookmark.isFile ? bookmark.scriptId : undefined,
+			ownerScriptId: bookmark.ownerScriptId,
+			fileLabelCustomized: bookmark.fileLabelCustomized,
+			undoContextValue: bookmark.contextValue,
+		})
 		const state: SerializedUndoState = {
-			bookmarks: bookmarks.values.map(bookmark => ({
-				...bookmark.toJSON(),
-				// 文件节点身份不在 Bookmark.toJSON() 内持久化；撤销快照必须额外携带它，
-				// 否则下一次保存会错误创建新的脚本身份。
-				scriptId: bookmark.isFile ? bookmark.scriptId : undefined,
-				undoContextValue: bookmark.contextValue,
-			})),
+			bookmarks: bookmarks.values.map(serializeBookmark),
 			workspaceOrder: workspaceOrder ? [...workspaceOrder] : null,
+			workspaceLayout: workspaceLayout ? structuredClone(workspaceLayout) : null,
 		}
 		return JSON.stringify(state)
 	}
 
-	private restore(bookmarks: BookmarkSet, state: string): string[] | null {
+	private restore(bookmarks: BookmarkSet, state: string): { workspaceOrder: string[] | null, workspaceLayout: WorkspaceLayout | null } {
 		const data = JSON.parse(state) as unknown
-		if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error(localize('撤销状态不是对象', 'Undo state is not an object'))
+		if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error(localize("providers.UndoManager.undoStateIsNotAnObject"))
 		const serialized = data as Partial<SerializedUndoState>
-		if (!Array.isArray(serialized.bookmarks)) throw new Error(localize('撤销书签状态不是数组', 'Undo bookmarks state is not an array'))
+		if (!Array.isArray(serialized.bookmarks)) throw new Error(localize("providers.UndoManager.undoBookmarksStateIsNotAnArray"))
 		if (serialized.workspaceOrder !== null && serialized.workspaceOrder !== undefined
 			&& (!Array.isArray(serialized.workspaceOrder) || serialized.workspaceOrder.some(item => typeof item !== 'string'))) {
-			throw new Error(localize('撤销工作区顺序无效', 'Undo workspace order is invalid'))
+			throw new Error(localize("providers.UndoManager.undoWorkspaceOrderIsInvalid"))
 		}
-		const restored = serialized.bookmarks.map(item => {
-			if (typeof item !== 'object' || item === null) throw new Error(localize('撤销状态包含无效书签', 'Undo state contains an invalid bookmark'))
+		const restoreBookmark = (item: unknown, parent?: Bookmark): Bookmark => {
+			if (typeof item !== 'object' || item === null) throw new Error(localize("providers.UndoManager.undoStateContainsAnInvalidBookmark"))
 			const undoItem = item as UndoBookmarkData
-			const bookmark = Bookmark.fromJSON(undoItem)
-			if (undoItem.undoContextValue !== ContextBookmark.File) return bookmark
-
-			const fileNode = new Bookmark({
-				id: undoItem.id,
-				path: undoItem.path,
-				contextValue: ContextBookmark.File,
-				subs: bookmark.subs,
-				collapsible: undoItem.collapsibleState,
-				createdAt: undoItem.createdAt,
-				scriptId: undoItem.scriptId,
-			})
-			for (const child of fileNode.subs) child.parent = fileNode
-			return fileNode
-		})
+			const isFile = undoItem.undoContextValue === ContextBookmark.File
+				|| undoItem.undoContextValue === ContextBookmark.FileCustom
+				|| undoItem.undoContextValue === ContextBookmark.FilePinned
+				|| undoItem.undoContextValue === ContextBookmark.FilePinnedCustom
+			const bookmark = isFile
+				? new Bookmark({
+					id: undoItem.id,
+					path: undoItem.path,
+					label: undoItem.label,
+					icon: undoItem.iconName,
+					contextValue: ContextBookmark.File,
+					collapsible: undoItem.collapsibleState,
+					createdAt: undoItem.createdAt,
+					scriptId: undoItem.scriptId,
+					fileLabelCustomized: undoItem.fileLabelCustomized,
+				})
+				: Bookmark.fromJSON({ ...undoItem, subs: [] })
+			bookmark.ownerScriptId = undoItem.ownerScriptId
+			bookmark.parent = parent
+			for (const childValue of undoItem.subs ?? []) bookmark.subs.add(restoreBookmark(childValue, bookmark))
+			bookmark.refreshDisplayProps()
+			return bookmark
+		}
+		const restored = serialized.bookmarks.map(item => restoreBookmark(item))
 
 		bookmarks.clear()
 		bookmarks.addAll(restored)
-		return serialized.workspaceOrder ? [...serialized.workspaceOrder] : null
+		return {
+			workspaceOrder: serialized.workspaceOrder ? [...serialized.workspaceOrder] : null,
+			workspaceLayout: serialized.workspaceLayout ? structuredClone(serialized.workspaceLayout) : null,
+		}
 	}
 
 	private removeEntry(target: UndoEntry[], index: number): UndoEntry | undefined {
@@ -355,8 +375,9 @@ export class UndoManager {
 		bookmarks: BookmarkSet,
 		scope?: string,
 		workspaceOrder: readonly string[] | null = null,
+		workspaceLayout: WorkspaceLayout | null = null,
 	): CapturedUndoState {
-		return { state: this.serialize(bookmarks, workspaceOrder), scope: this.scopeKey(scope ?? this.activeScope) }
+		return { state: this.serialize(bookmarks, workspaceOrder, workspaceLayout), scope: this.scopeKey(scope ?? this.activeScope) }
 	}
 
 	public commitState(
@@ -364,8 +385,9 @@ export class UndoManager {
 		bookmarks: BookmarkSet,
 		action: UndoAction,
 		workspaceOrder: readonly string[] | null = null,
+		workspaceLayout: WorkspaceLayout | null = null,
 	): boolean {
-		if (captured.state === this.serialize(bookmarks, workspaceOrder)) return false
+		if (captured.state === this.serialize(bookmarks, workspaceOrder, workspaceLayout)) return false
 		this.commitCapturedState(captured, action)
 		return true
 	}
@@ -379,8 +401,9 @@ export class UndoManager {
 		action: UndoAction = 'modifyBookmarks',
 		scope?: string,
 		workspaceOrder: readonly string[] | null = null,
+		workspaceLayout: WorkspaceLayout | null = null,
 	): void {
-		this.saveSerializedState(this.serialize(bookmarks, workspaceOrder), action, this.scopeKey(scope ?? this.activeScope))
+		this.saveSerializedState(this.serialize(bookmarks, workspaceOrder, workspaceLayout), action, this.scopeKey(scope ?? this.activeScope))
 	}
 
 	private saveSerializedState(state: string, action: UndoAction, scope: string): void {
@@ -397,6 +420,12 @@ export class UndoManager {
 
 	public canRedo(scope?: string): boolean {
 		return (this.scopeHistory(this.scopeKey(scope ?? this.activeScope))?.redoHistory.length ?? 0) > 0
+	}
+
+	public historyScopes(): string[] {
+		return [...this.scopes.entries()]
+			.filter(([, stack]) => stack.history.length > 0 || stack.redoHistory.length > 0)
+			.map(([scope]) => scope)
 	}
 
 	public undoAction(scope?: string): UndoAction | undefined {
@@ -430,47 +459,53 @@ export class UndoManager {
 		currentBookmarks: BookmarkSet,
 		scope?: string,
 		workspaceOrder: readonly string[] | null = null,
+		workspaceLayout: WorkspaceLayout | null = null,
 	): UndoApplyResult | undefined {
 		const key = this.scopeKey(scope ?? this.activeScope)
 		const stack = this.scopeHistory(key)
 		const previous = stack?.history[stack.history.length - 1]
 		if (!stack || !previous) return undefined
-		const currentState = this.serialize(currentBookmarks, workspaceOrder)
+		const currentState = this.serialize(currentBookmarks, workspaceOrder, workspaceLayout)
 		const restoredOrder = this.applyState(currentBookmarks, previous.state, 'undo')
 		if (restoredOrder === undefined) return undefined
 		this.removeEntry(stack.history, stack.history.length - 1)
 		this.pushBounded(stack.redoHistory, this.createEntry(currentState, previous.action))
 		this.schedulePersistence()
 		this.updateContexts()
-		return { action: previous.action, workspaceOrder: restoredOrder }
+		return { action: previous.action, ...restoredOrder }
 	}
 
 	public redo(
 		currentBookmarks: BookmarkSet,
 		scope?: string,
 		workspaceOrder: readonly string[] | null = null,
+		workspaceLayout: WorkspaceLayout | null = null,
 	): UndoApplyResult | undefined {
 		const key = this.scopeKey(scope ?? this.activeScope)
 		const stack = this.scopeHistory(key)
 		const next = stack?.redoHistory[stack.redoHistory.length - 1]
 		if (!stack || !next) return undefined
-		const currentState = this.serialize(currentBookmarks, workspaceOrder)
+		const currentState = this.serialize(currentBookmarks, workspaceOrder, workspaceLayout)
 		const restoredOrder = this.applyState(currentBookmarks, next.state, 'redo')
 		if (restoredOrder === undefined) return undefined
 		this.removeEntry(stack.redoHistory, stack.redoHistory.length - 1)
 		this.pushBounded(stack.history, this.createEntry(currentState, next.action))
 		this.schedulePersistence()
 		this.updateContexts()
-		return { action: next.action, workspaceOrder: restoredOrder }
+		return { action: next.action, ...restoredOrder }
 	}
 
-	private applyState(currentBookmarks: BookmarkSet, state: string, operation: 'undo' | 'redo'): string[] | null | undefined {
+	private applyState(
+		currentBookmarks: BookmarkSet,
+		state: string,
+		operation: 'undo' | 'redo',
+	): { workspaceOrder: string[] | null, workspaceLayout: WorkspaceLayout | null } | undefined {
 		try {
 			return this.restore(currentBookmarks, state)
 		} catch (error) {
 			logger.error(operation === 'undo'
-				? localize('无法应用撤销书签状态', 'Failed to apply the undo bookmark state')
-				: localize('无法应用重做书签状态', 'Failed to apply the redo bookmark state'))
+				? localize("providers.UndoManager.failedToApplyTheUndoBookmarkState")
+				: localize("providers.UndoManager.failedToApplyTheRedoBookmarkState"))
 			logger.error(error)
 			return undefined
 		}

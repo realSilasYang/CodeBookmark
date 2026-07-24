@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-export-workflow`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-export-workflow` 对应契约。
- * 核心边界：通过断言锁定“verify-export-workflow”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖单文件与文件夹导出的格式选择、取消、目标路径、冲突和最终统计。
+ * 为核对单文件与文件夹导出的格式选择、取消、目标路径、冲突和最终统计，脚本在临时目录中调用编译后的 `Bookmark`、`BookmarkSet`、`ContextValue` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -18,7 +14,9 @@ const informationMessages = []
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'codebookmark-export-workflow-'))
 const sourcePath = path.join(sandbox, 'source.ts')
 const outputPath = path.join(sandbox, 'bookmarks.md')
+const batchParent = path.join(sandbox, 'batch-output')
 fs.writeFileSync(sourcePath, 'const root = true\nuse(root)\n', 'utf8')
+fs.mkdirSync(batchParent)
 
 const { vscode } = createVscodeFake({
   commands: {
@@ -30,8 +28,11 @@ const { vscode } = createVscodeFake({
   window: {
     activeTextEditor: { document: { uri: { scheme: 'file', fsPath: sourcePath } } },
     showSaveDialog: async () => ({ scheme: 'file', fsPath: outputPath }),
+    showOpenDialog: async () => [{ scheme: 'file', fsPath: batchParent }],
+    withProgress: async (_options, task) => task({ report() {} }),
     showInformationMessage: message => { informationMessages.push(message) },
   },
+  ProgressLocation: { Notification: 1 },
 })
 const restoreModules = installModuleMocks({ vscode })
 const { Bookmark, CursorIndex } = require('../out/models/Bookmark')
@@ -76,6 +77,38 @@ async function main() {
     informationMessages.at(-1),
     '书签导出完成，导出结果：共 2 个书签：一级 1 个、二级 1 个；文件：bookmarks.md。',
   )
+
+  const sourceA = path.join(sandbox, 'a.ts')
+  const sourceB = path.join(sandbox, 'b.ts')
+  fs.writeFileSync(sourceA, 'const a = true\n')
+  fs.writeFileSync(sourceB, 'const b = true\n')
+  const scriptA = '10000000-0000-9000-8000-000000000011'
+  const scriptB = '10000000-0000-9000-8000-000000000012'
+  const fileA = new Bookmark({ id: 'file-a', path: sourceA, contextValue: ContextBookmark.File, scriptId: scriptA })
+  const fileB = new Bookmark({ id: 'file-b', path: sourceB, contextValue: ContextBookmark.File, scriptId: scriptB })
+  const bookmarkA = new Bookmark({
+    id: 'bookmark-a', path: sourceA, label: 'Owned by A', ownerScriptId: scriptA,
+    start: new CursorIndex(0, 0), end: new CursorIndex(0, 5),
+  })
+  const bookmarkB = new Bookmark({
+    id: 'bookmark-b', path: sourceB, label: 'Owned by B', ownerScriptId: scriptB,
+    start: new CursorIndex(0, 0), end: new CursorIndex(0, 5),
+  })
+  fileB.subs.add(bookmarkA)
+  bookmarkA.subs.add(bookmarkB)
+  registerExportCommand(context, { codeBookmarks: new BookmarkSet([fileA, fileB]) })
+  await commands.get('codebookmark.batchExportToMarkdown')()
+
+  const batchFolder = fs.readdirSync(batchParent).map(name => path.join(batchParent, name))[0]
+  const outputA = path.join(batchFolder, 'a.ts.bookmarks.md')
+  const outputB = path.join(batchFolder, 'b.ts.bookmarks.md')
+  assert.equal(fs.existsSync(outputA), true)
+  assert.equal(fs.existsSync(outputB), true)
+  assert.match(fs.readFileSync(outputA, 'utf8'), /Owned by A/)
+  assert.doesNotMatch(fs.readFileSync(outputA, 'utf8'), /Owned by B/)
+  assert.match(fs.readFileSync(outputB, 'utf8'), /Owned by B/)
+  assert.doesNotMatch(fs.readFileSync(outputB, 'utf8'), /Owned by A/)
+  assert.match(informationMessages.at(-1), /共 2 个书签：一级 2 个/)
 }
 
 main().then(

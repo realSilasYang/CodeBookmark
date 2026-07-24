@@ -1,20 +1,82 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-localization`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-localization` 对应契约。
- * 核心边界：通过断言锁定“verify-localization”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`collectStrings`、`manifestBehaviorContract`、`collectTypeScriptFiles`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 核对稳定键目录、占位符、运行时调用、扩展清单和中英文文档，阻止双文本旧接口回归。
+ * 业务源码只能引用静态目录键；新增语言不应要求修改功能模块或增加语言条件分支。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
+const {
+  CHINESE_MANIFEST_LOCALES,
+  GENERATED_NLS_PATTERN,
+  NON_CHINESE_MANIFEST_ALIASES,
+  OFFICIAL_NON_CHINESE_MANIFEST_LOCALES,
+  buildManifestLocalizationFiles,
+  discoverManifestCatalogs,
+} = require('./lib/manifest-language-catalogs')
 
 const root = path.resolve(__dirname, '..')
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8')
 const readJson = relativePath => JSON.parse(read(relativePath))
 const cjk = /[\u3400-\u9fff]/u
+const supportedLocales = Object.freeze([
+  'zh-cn', 'zh-hk', 'zh-tw', 'en',
+  'ja', 'vi', 'ko', 'es', 'fr', 'pt', 'ru', 'de', 'it',
+])
+const cjkFreeLocales = new Set(['en', 'vi', 'ko', 'es', 'fr', 'pt', 'ru', 'de', 'it'])
+const targetLocalePatterns = Object.freeze({
+  'zh-hk': /[\u3400-\u9fff]/u,
+  'zh-tw': /[\u3400-\u9fff]/u,
+  ja: /[\u3040-\u30ff]/u,
+  ko: /[\uac00-\ud7af]/u,
+  es: /[áéíóúüñ¿¡]/iu,
+  fr: /[àâçéèêëîïôùûüÿœ]/iu,
+  pt: /[áâãàçéêíóôõú]/iu,
+  de: /[äöüß]/iu,
+  ru: /[\u0400-\u04ff]/u,
+  vi: /[ăâđêôơưàảãáạằẳẵắặầẩẫấậèẻẽéẹềểễếệìỉĩíịòỏõóọồổỗốộờởỡớợùủũúụừửữứựỳỷỹýỵ]/iu,
+  it: /[àèéìíîòóùú]/iu,
+})
+const knownMechanicalTranslationArtifacts = Object.freeze({
+  'zh-hk': /演演|網網|名稱稱|流程程|終端機機|第第一級|原始原始碼|軟體|遠端|電子郵件|發布|成長|金鑰|隱私|號誌|人工智慧|模型推論|政策治理|法規遵循|影像|錄影|租用戶|順序|監視器/u,
+  'zh-tw': /演演|網網|名稱稱|流程程|終端機機|第第一級|原始原始碼|網絡|遙距|軟件|電郵|發佈|增長|密鑰|私隱|信號量|人工智能|模型推理|政策管治|圖像|錄像|租戶|次序|監察器|相應/u,
+  es: /archivos fallaron|estado rehecho|estado deshecho/iu,
+  pt: /importó|importaron|vinculó|\bAbrao\b|substituirán|terminar importação|foram seguirá|foram voltaram|foram detetou|aa ordem|os alterações|os novas|a separador|ao diário|ao aparecer/iu,
+  it: /file non riusciti|stato ripetuto/iu,
+})
+const languageNeutralManifestKeys = new Set([
+  'codebookmark.displayName',
+  'codebookmark.contributes.commands.codebookmark.openHelp.title',
+])
+const languageNeutralRuntimeKeys = new Set([
+  'bookmarkStatistics.levelCount',
+  'common.listSeparator',
+  'commands.exportCommand.code',
+  'commands.exportCommand.code2',
+  'commands.exportCommand.message',
+  'commands.exportCommand.status',
+  'models.BookmarkTreeItemPresentation.source',
+  'providers.BookmarkConfigurationManagementController.message',
+  'providers.BookmarkConfigurationManagerWebview.message',
+  'providers.BookmarkConfigurationManagerWebview.status',
+  'providers.BookmarkDeletionWorkflowRunner.cancel',
+  'util.AIHttpTransport.requestAddress',
+  'util.Logger.error',
+  'util.Logger.info',
+  'util.PerformanceMonitor.perfDurationms',
+  'util.quickpickicon.IconPickerWebview.architecture',
+  'util.quickpickicon.IconPickerWebview.codebookmark',
+])
+
+function assertNoKnownMechanicalTranslationArtifacts(locale, messages, surface) {
+  const pattern = knownMechanicalTranslationArtifacts[locale]
+  if (!pattern) return
+  assert.doesNotMatch(
+    Object.values(messages).join('\n'),
+    pattern,
+    `${locale} ${surface} contains a known mechanical-translation artifact`,
+  )
+}
 
 function collectStrings(value, currentPath = [], output = []) {
   if (typeof value === 'string') output.push({ path: currentPath, value })
@@ -25,20 +87,95 @@ function collectStrings(value, currentPath = [], output = []) {
   return output
 }
 
+const schemaFields = [
+  'anchor', 'bookmarks', 'canAssignIcon', 'children', 'collapsibleState', 'content',
+  'contextAfter', 'contextBefore', 'createdAt', 'icon', 'iconName', 'id', 'label',
+  'line', 'lineNumber', 'new_label', 'params', 'path', 'pinned',
+]
+const technicalTokenPatterns = [
+  /https?:\/\/[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]*/gu,
+  /\(command:[^)]+\)/gu,
+  /`[^`\r\n]+`/gu,
+  /\$\([^)]+\)/gu,
+  /%[A-Za-z_][A-Za-z0-9_]*%/gu,
+  /\b(?:Ctrl|Alt|Shift|Cmd|Command|Option|Meta)(?:\+[A-Za-z0-9]+)+\b/gu,
+  new RegExp('"(?:' + schemaFields.join('|') + ')"(?=\\s*:)', 'gu'),
+]
+function technicalTokens(message) {
+  return technicalTokenPatterns.flatMap(pattern => [...message.matchAll(pattern)].map(match => {
+    const token = match[0]
+    return token.startsWith('http') ? token.replace(/[.,;:!?]+$/u, '') : token
+  })).sort()
+}
+
+function assertProtocolFields(message, requiredFields, context) {
+  for (const field of requiredFields) {
+    assert.match(
+      message,
+      new RegExp('(?:^|[^A-Za-z0-9_])' + field + '(?=$|[^A-Za-z0-9_])', 'u'),
+      `${context} must preserve protocol field ${field}`,
+    )
+  }
+}
+
+const generationProtocolFields = Object.freeze([
+  'anchor', 'bookmarks', 'children', 'collapsibleState', 'content', 'contextAfter',
+  'contextBefore', 'createdAt', 'icon', 'iconName', 'id', 'label', 'line',
+  'lineNumber', 'params', 'path', 'pinned',
+])
+const optimizationProtocolFields = Object.freeze(['icon', 'id', 'new_label'])
+
 const manifest = readJson('package.json')
 const defaultChineseMessages = readJson('package.nls.json')
 const englishMessages = readJson('package.nls.en.json')
 const genericChineseMessages = readJson('package.nls.zh.json')
 const chineseMessages = readJson('package.nls.zh-cn.json')
-const traditionalLocaleMessages = readJson('package.nls.zh-tw.json')
+const sourceManifestCatalogs = discoverManifestCatalogs(path.join(root, 'scripts', 'i18n', 'catalogs'))
+assert.deepEqual(
+  [...sourceManifestCatalogs.keys()].sort(),
+  [...supportedLocales].sort(),
+  'Manifest source catalogs must exactly cover every supported interface language',
+)
+const englishManifestSource = sourceManifestCatalogs.get('en')
+const sourceManifestKeys = Object.keys(sourceManifestCatalogs.get('zh-cn')).sort()
+assert.equal(sourceManifestKeys.length, 122, 'Every manifest source catalog must contain all 122 stable keys')
+const manifestGenerationPromptKey = 'codebookmark.contributes.configuration.main.properties.codebookmark.AI.prompt.default'
+const manifestOptimizationPromptKey = 'codebookmark.contributes.configuration.main.properties.codebookmark.AI.optimizePrompt.default'
+for (const [locale, messages] of sourceManifestCatalogs) {
+  assert.deepEqual(Object.keys(messages).sort(), sourceManifestKeys, `${locale} manifest source keys must match Chinese`)
+  assertProtocolFields(messages[manifestGenerationPromptKey], generationProtocolFields, `${locale} manifest generation prompt`)
+  assertProtocolFields(messages[manifestOptimizationPromptKey], optimizationProtocolFields, `${locale} manifest optimization prompt`)
+  if (cjkFreeLocales.has(locale)) {
+    for (const [key, message] of Object.entries(messages)) {
+      assert.doesNotMatch(message, cjk, `${locale} manifest contains Chinese text: ${key}`)
+    }
+  }
+}
+for (const locale of supportedLocales.filter(locale => !['zh-cn', 'en'].includes(locale))) {
+  const messages = sourceManifestCatalogs.get(locale)
+  assert.notDeepEqual(messages, englishManifestSource, `${locale} manifest catalog must not duplicate English`)
+  assertNoKnownMechanicalTranslationArtifacts(locale, messages, 'manifest catalog')
+  for (const key of Object.keys(englishManifestSource)) {
+    if (messages[key] === englishManifestSource[key]) {
+      assert.ok(
+        languageNeutralManifestKeys.has(key),
+        `${locale} manifest message still duplicates untranslated English: ${key}`,
+      )
+    }
+    assert.deepEqual(
+      technicalTokens(messages[key]),
+      technicalTokens(englishManifestSource[key]),
+      `Manifest technical-token mismatch: ${locale} -> ${key}`,
+    )
+    assert.doesNotMatch(messages[key], /ZXQ\d+QXZ|CBSEG\d+|CBPROTECT\w*/u, `${locale} manifest contains a translation marker`)
+  }
+}
+const expectedLocalizationFiles = buildManifestLocalizationFiles(sourceManifestCatalogs)
 const englishKeys = Object.keys(englishMessages).sort()
-const { ENGLISH_MANIFEST_LOCALES } = require('./lib/manifest-localizations')
 assert.deepEqual(Object.keys(defaultChineseMessages).sort(), englishKeys, 'Default Chinese and English NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(genericChineseMessages).sort(), englishKeys, 'Generic Chinese and English NLS catalogs must have identical keys')
 assert.deepEqual(Object.keys(chineseMessages).sort(), englishKeys, 'English and Chinese NLS catalogs must have identical keys')
-assert.deepEqual(Object.keys(traditionalLocaleMessages).sort(), englishKeys, 'Every zh locale catalog must have identical keys')
 assert.deepEqual(genericChineseMessages, chineseMessages, 'Generic zh localization must use the same default Chinese copy')
-assert.deepEqual(traditionalLocaleMessages, chineseMessages, 'All zh locales currently use the same default Chinese copy')
 assert.deepEqual(defaultChineseMessages, chineseMessages, 'The fallback manifest catalog must be complete Chinese')
 assert.ok(englishKeys.length > 100, 'Manifest localization must cover the complete contributed surface')
 for (const key of englishKeys) {
@@ -46,16 +183,22 @@ for (const key of englishKeys) {
   assert.equal(typeof chineseMessages[key], 'string')
   assert.doesNotMatch(englishMessages[key], cjk, `English NLS value contains Chinese text: ${key}`)
 }
-for (const locale of ENGLISH_MANIFEST_LOCALES.filter(locale => locale !== 'en')) {
-  const localizedMessages = readJson(`package.nls.${locale}.json`)
-  assert.deepEqual(localizedMessages, englishMessages, `${locale} must provide a complete English manifest catalog`)
+for (const [fileName, messages] of expectedLocalizationFiles) {
+  assert.deepEqual(readJson(fileName), messages, fileName + ' must match its discovered source catalog or fallback')
 }
+const generatedLocalizationFiles = fs.readdirSync(root)
+  .filter(fileName => GENERATED_NLS_PATTERN.test(fileName))
+  .sort()
+assert.deepEqual(
+  generatedLocalizationFiles,
+  [...expectedLocalizationFiles.keys()].sort(),
+  'Generated NLS files must exactly match discovered catalogs and explicit locale fallbacks',
+)
 
 const placeholderKeys = collectStrings(manifest)
   .map(entry => /^%([^%]+)%$/.exec(entry.value)?.[1])
   .filter(Boolean)
-  .sort()
-assert.deepEqual(placeholderKeys, englishKeys, 'Every generated NLS message must be referenced exactly once by package.json')
+assert.deepEqual([...new Set(placeholderKeys)].sort(), englishKeys, 'Every generated NLS message must be referenced by package.json')
 
 const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const chineseManifest = loadLocalizedManifest('zh-cn')
@@ -63,14 +206,60 @@ const englishManifest = loadLocalizedManifest('en-US')
 assert.equal(chineseManifest.displayName, '代码书签 - CodeBookmark')
 assert.equal(englishManifest.displayName, 'CodeBookmark')
 assert.match(chineseManifest.description, /粘性引擎/)
-assert.match(englishManifest.description, /sticky engine/i)
-for (const locale of ENGLISH_MANIFEST_LOCALES) {
+assert.match(englishManifest.description, /anchoring engine/i)
+const languageSetting = englishManifest.contributes.configuration
+  .flatMap(group => Object.entries(group.properties))
+  .find(([key]) => key === 'codebookmark.language')?.[1]
+assert.equal(languageSetting, undefined, 'The removed manual interface-language setting must not be contributed')
+assert.match(
+  read('src/extension.ts'),
+  /initializeLocalization\(vscode\.env\.language\)/u,
+  'Activation must initialize runtime localization directly from the VS Code display language',
+)
+for (const relativePath of [
+  'src/util/constants/Commands.ts',
+  'src/extension.ts',
+  'src/subscriptions/fileEditorSubscriber.ts',
+  'scripts/integration/run-integration-tests.js',
+  'README.md',
+  'docs/README.en.md',
+]) {
+  assert.doesNotMatch(read(relativePath), /codebookmark\.language/u, `${relativePath} retains the removed language setting`)
+}
+
+const englishFallbackLocales = OFFICIAL_NON_CHINESE_MANIFEST_LOCALES
+	.filter(locale => !sourceManifestCatalogs.has(locale) && !NON_CHINESE_MANIFEST_ALIASES[locale])
+for (const locale of [...englishFallbackLocales, 'en-US']) {
   const localizedManifest = loadLocalizedManifest(locale)
   assert.equal(localizedManifest.displayName, 'CodeBookmark', `${locale} must use the concise English title`)
   for (const entry of collectStrings(localizedManifest)) {
     if (entry.path[0] === 'author' || entry.path[0] === 'keywords') continue
     assert.doesNotMatch(entry.value, cjk, `${locale} manifest contains Chinese text at ${entry.path.join('.')}`)
   }
+}
+assert.deepEqual(
+	readJson('package.nls.pt-br.json'),
+	sourceManifestCatalogs.get('pt'),
+	'pt-BR manifest localization must use the manually reviewed Portuguese catalog',
+)
+assert.match(
+	loadLocalizedManifest('pt-BR').description,
+	/ancoragem/iu,
+	'pt-BR must resolve to the manually reviewed Portuguese manifest instead of English',
+)
+for (const locale of supportedLocales.filter(locale => !['zh-cn', 'zh-hk', 'zh-tw', 'en'].includes(locale))) {
+	const localizedManifest = loadLocalizedManifest(locale)
+  assert.equal(localizedManifest.displayName, 'CodeBookmark', `${locale} must keep the concise product title`)
+  assert.match(
+    Object.values(sourceManifestCatalogs.get(locale)).join('\n'),
+    targetLocalePatterns[locale],
+    `${locale} manifest catalog does not contain characteristic target-language text`,
+  )
+}
+for (const locale of CHINESE_MANIFEST_LOCALES) {
+  const localizedManifest = loadLocalizedManifest(locale)
+  assert.match(localizedManifest.displayName, /CodeBookmark/u, locale + ' must use the localized Chinese title')
+  assert.match(localizedManifest.displayName, cjk, locale + ' must use the localized Chinese title')
 }
 for (const entry of collectStrings(englishManifest)) {
   if (entry.path[0] === 'author' || entry.path[0] === 'keywords') continue
@@ -110,7 +299,7 @@ function manifestBehaviorContract(localizedManifest) {
         .map(([key, views]) => [key, views.map(({ id, icon }) => ({ id, icon }))])),
       viewsWelcome: localizedManifest.contributes.viewsWelcome.map(({ view, when }) => ({ view, when })),
       commands: localizedManifest.contributes.commands
-        .map(({ command, icon, enablement, category }) => ({ command, icon, enablement, category })),
+        .map(({ command, icon, enablement }) => ({ command, icon, enablement })),
       keybindings: localizedManifest.contributes.keybindings
         .map(({ command, key, mac, linux, win, when, args }) => ({ command, key, mac, linux, win, when, args })),
       menus: Object.fromEntries(Object.entries(localizedManifest.contributes.menus)
@@ -128,9 +317,143 @@ assert.deepEqual(
   manifestBehaviorContract(chineseManifest),
   'Localization must not change command IDs, menu conditions, configuration keys/types, or other manifest behavior',
 )
+for (const locale of supportedLocales.filter(locale => locale !== 'zh-cn')) {
+  assert.deepEqual(
+    manifestBehaviorContract(loadLocalizedManifest(locale)),
+    manifestBehaviorContract(chineseManifest),
+    `${locale} localization must preserve every manifest behavior field`,
+  )
+}
 
 const localization = require('../out/i18n/Localization')
 const statistics = require('../out/util/BookmarkStatistics')
+const runtimeCatalogFileNames = fs.readdirSync(path.join(root, 'src', 'i18n', 'catalogs'))
+  .filter(fileName => fileName.endsWith('.ts'))
+  .sort()
+const runtimeCatalogLocales = runtimeCatalogFileNames.map(fileName => path.basename(fileName, '.ts'))
+assert.deepEqual(
+  runtimeCatalogLocales,
+  [...supportedLocales].sort(),
+  'Runtime catalogs must exactly cover every supported interface language',
+)
+const runtimeCatalogSourcePaths = new Set(runtimeCatalogFileNames
+  .map(fileName => 'src/i18n/catalogs/' + fileName))
+const localizationSourceFile = ts.createSourceFile(
+  'src/i18n/Localization.ts',
+  read('src/i18n/Localization.ts'),
+  ts.ScriptTarget.Latest,
+  true,
+)
+let registeredRuntimeLocales
+function findCatalogRegistry(node) {
+  const initializer = ts.isVariableDeclaration(node) && node.initializer
+    && ts.isAsExpression(node.initializer) ? node.initializer.expression : node.initializer
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
+    && node.name.text === 'catalogs' && ts.isObjectLiteralExpression(initializer)) {
+    registeredRuntimeLocales = initializer.properties.map(property => {
+      if (ts.isPropertyAssignment(property)
+        && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) return property.name.text
+      throw new Error('Runtime catalog registry must use explicit locale properties')
+    })
+  }
+  ts.forEachChild(node, findCatalogRegistry)
+}
+findCatalogRegistry(localizationSourceFile)
+assert.ok(registeredRuntimeLocales, 'Localization.ts must declare the runtime catalog registry')
+assert.deepEqual(
+  registeredRuntimeLocales.sort(),
+  runtimeCatalogLocales,
+  'Every runtime catalog file must be registered, and every registered locale must have a catalog file',
+)
+const runtimeCatalogs = new Map(runtimeCatalogLocales.map(locale => {
+  const catalogModule = require('../out/i18n/catalogs/' + locale)
+  assert.deepEqual(Object.keys(catalogModule), ['messages'], locale + ' runtime catalog must export only messages')
+  return [locale, catalogModule.messages]
+}))
+const runtimeChineseMessages = runtimeCatalogs.get('zh-cn')
+const runtimeEnglishMessages = runtimeCatalogs.get('en')
+const runtimeKeys = Object.keys(runtimeChineseMessages).sort()
+assert.ok(runtimeKeys.length > 600, 'Runtime catalogs must cover the complete extension surface')
+const placeholders = message => [...message.matchAll(/\{([A-Za-z_$][\w$]*)\}/g)].map(match => match[1]).sort()
+for (const fileName of runtimeCatalogFileNames) {
+  const relativePath = 'src/i18n/catalogs/' + fileName
+  const sourceText = read(relativePath)
+  const sourceFile = ts.createSourceFile(relativePath, sourceText, ts.ScriptTarget.Latest, true)
+  const declaration = sourceFile.statements
+    .filter(ts.isVariableStatement)
+    .flatMap(statement => [...statement.declarationList.declarations])
+    .find(candidate => ts.isIdentifier(candidate.name) && candidate.name.text === 'messages')
+  assert.ok(declaration?.initializer, `${relativePath} must explicitly declare messages`)
+  let initializer = declaration.initializer
+  while (ts.isSatisfiesExpression(initializer) || ts.isAsExpression(initializer) || ts.isParenthesizedExpression(initializer)) {
+    initializer = initializer.expression
+  }
+  assert.ok(ts.isObjectLiteralExpression(initializer), `${relativePath} messages must be an object literal`)
+  assert.equal(
+    initializer.properties.filter(ts.isSpreadAssignment).length,
+    0,
+    `${relativePath} must not fill missing translations through an object spread`,
+  )
+  assert.equal(
+    initializer.properties.filter(ts.isPropertyAssignment).length,
+    runtimeKeys.length,
+    `${relativePath} must explicitly define every runtime message`,
+  )
+}
+for (const key of runtimeKeys) {
+  assert.doesNotMatch(runtimeEnglishMessages[key], cjk, 'English runtime message contains Chinese text: ' + key)
+}
+for (const [locale, messages] of runtimeCatalogs) {
+  assert.deepEqual(Object.keys(messages).sort(), runtimeKeys, locale + ' runtime catalog keys must match the default catalog')
+  assertProtocolFields(messages['ai.prompt.generation'], generationProtocolFields, `${locale} runtime generation prompt`)
+  assertProtocolFields(
+    messages['ai.prompt.generationContract'],
+    ['anchor', 'bookmarks', 'children', 'icon', 'label', 'lineNumber'],
+    `${locale} runtime generation contract`,
+  )
+  assertProtocolFields(messages['ai.prompt.optimization'], optimizationProtocolFields, `${locale} runtime optimization prompt`)
+  assertProtocolFields(
+    messages['ai.prompt.optimizationContract'],
+    [...optimizationProtocolFields, 'canAssignIcon'],
+    `${locale} runtime optimization contract`,
+  )
+  if (cjkFreeLocales.has(locale)) {
+    for (const key of runtimeKeys) {
+      assert.doesNotMatch(messages[key], cjk, `${locale} runtime message contains Chinese text: ${key}`)
+    }
+  }
+  if (!['zh-cn', 'en'].includes(locale)) {
+    assert.notDeepEqual(messages, runtimeEnglishMessages, `${locale} runtime catalog must not duplicate English`)
+    assertNoKnownMechanicalTranslationArtifacts(locale, messages, 'runtime catalog')
+    assert.match(
+      Object.values(messages).join('\n'),
+      targetLocalePatterns[locale],
+      `${locale} runtime catalog does not contain characteristic target-language text`,
+    )
+    for (const key of runtimeKeys) {
+      if (messages[key] !== runtimeEnglishMessages[key]) continue
+      assert.ok(
+        languageNeutralRuntimeKeys.has(key),
+        `${locale} runtime message still duplicates untranslated English: ${key}`,
+      )
+    }
+  }
+  for (const key of runtimeKeys) {
+    assert.deepEqual(
+      placeholders(messages[key]),
+      placeholders(runtimeChineseMessages[key]),
+      'Placeholder mismatch: ' + locale + ' -> ' + key,
+    )
+    if (!['zh-cn', 'en'].includes(locale)) {
+      assert.deepEqual(
+        technicalTokens(messages[key]),
+        technicalTokens(runtimeEnglishMessages[key]),
+        `Runtime technical-token mismatch: ${locale} -> ${key}`,
+      )
+      assert.doesNotMatch(messages[key], /ZXQ\d+QXZ|CBSEG\d+|CBPROTECT\w*/u, `${locale} runtime message contains a translation marker: ${key}`)
+    }
+  }
+}
 localization.initializeLocalization('zh-Hans')
 assert.equal(localization.currentLanguage(), 'zh-cn')
 assert.equal(localization.currentFormattingLocale(), 'zh-CN')
@@ -138,13 +461,11 @@ assert.equal(statistics.formatBookmarkLevelSummary({ total: 2, levelCounts: [1, 
 localization.initializeLocalization('en-GB')
 assert.equal(localization.currentLanguage(), 'en')
 assert.equal(localization.currentFormattingLocale(), 'en-US')
-assert.equal(statistics.formatBookmarkLevelSummary({ total: 2, levelCounts: [1, 1] }), '2 bookmarks total: Level 1: 1, Level 2: 1')
+assert.equal(statistics.formatBookmarkLevelSummary({ total: 2, levelCounts: [1, 1] }), '2 bookmarks: Level 1: 1, Level 2: 1')
 
 const allowedChineseDataFiles = new Set([
+	...runtimeCatalogSourcePaths,
   'src/util/AIIconCatalog.ts',
-  'src/util/BookmarkStatistics.ts',
-  'src/util/UndoActions.ts',
-  'src/util/constants/AIPrompts.ts',
   'src/util/constants/BasePackage.ts',
   'src/util/constants/Colors.ts',
   'src/util/constants/Commands.ts',
@@ -182,6 +503,12 @@ const visiblePropertyNames = new Set([
 ])
 const languageNeutralVisibleText = new Set(['AI', 'CSV', 'CodeBookmark', 'HTML', 'Markdown'])
 const violations = []
+const referencedRuntimeKeys = new Set()
+const typedDynamicKeyModules = new Set([
+  'src/i18n/Localization.ts',
+  'src/util/BookmarkStatistics.ts',
+  'src/util/UndoActions.ts',
+])
 for (const absolutePath of sourceFiles) {
   const relativePath = path.relative(root, absolutePath).replaceAll(path.sep, '/')
   const source = fs.readFileSync(absolutePath, 'utf8')
@@ -299,13 +626,30 @@ for (const absolutePath of sourceFiles) {
       && ts.isIdentifier(node.expression) && localizedWrappers.has(node.expression.text)
     const localized = insideLocalization || isWrapperCall
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'localize') {
-      if (node.arguments.length !== 2) violations.push(`${relativePath}:${lineOf(node)} localize() must have exactly two arguments`)
-      const englishArgument = node.arguments[1]
-      if (englishArgument && cjk.test(englishArgument.getText(sourceFile))) {
-        violations.push(`${relativePath}:${lineOf(englishArgument)} English localize() argument contains Chinese text`)
+      if (node.arguments.length < 1 || node.arguments.length > 2) {
+        violations.push(`${relativePath}:${lineOf(node)} localize() must receive a key and optional values object`)
+      }
+      const keyArgument = node.arguments[0]
+      if ((!keyArgument || !ts.isStringLiteral(keyArgument) || !(keyArgument.text in runtimeChineseMessages))
+        && !typedDynamicKeyModules.has(relativePath)) {
+        violations.push(`${relativePath}:${lineOf(node)} localize() must use a static catalog key`)
+      } else if (keyArgument && ts.isStringLiteral(keyArgument)) referencedRuntimeKeys.add(keyArgument.text)
+      if (node.arguments[1] && !ts.isObjectLiteralExpression(node.arguments[1])
+        && relativePath !== 'src/i18n/Localization.ts') {
+        violations.push(`${relativePath}:${lineOf(node.arguments[1])} localize() values must be an object literal`)
       }
       if (isModuleInitialization(node)) {
         violations.push(`${relativePath}:${lineOf(node)} localize() must not run during module initialization`)
+      }
+    }
+    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression)
+      && node.expression.text === 'UserCancelledError') {
+      const keyArgument = node.arguments?.[0]
+      if (!keyArgument || !ts.isStringLiteral(keyArgument) || !(keyArgument.text in runtimeChineseMessages)) {
+        violations.push(`${relativePath}:${lineOf(node)} UserCancelledError must use a static catalog key`)
+      } else referencedRuntimeKeys.add(keyArgument.text)
+      if ((node.arguments?.length ?? 0) > 2) {
+        violations.push(`${relativePath}:${lineOf(node)} UserCancelledError accepts only a key and optional values object`)
       }
     }
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer
@@ -335,6 +679,9 @@ for (const absolutePath of sourceFiles) {
     }
     const stringNode = ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
       || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)
+    if (stringNode && !runtimeCatalogSourcePaths.has(relativePath) && runtimeKeys.includes(node.text)) {
+      referencedRuntimeKeys.add(node.text)
+    }
     if (stringNode && cjk.test(node.text || '') && !localized) {
       const isFontFamily = relativePath === 'src/providers/CodeBookmarkViewProvider.ts'
         && node.text.includes('霞鹜文楷')
@@ -347,25 +694,16 @@ for (const absolutePath of sourceFiles) {
   visit(sourceFile)
 }
 assert.deepEqual(violations, [], violations.join('\n'))
-
-const prompts = require('../out/util/constants/AIPrompts')
-for (const [chineseName, englishName] of [
-  ['DEFAULT_AI_GENERATION_PROMPT', 'DEFAULT_AI_GENERATION_PROMPT_EN'],
-  ['DEFAULT_AI_OPTIMIZATION_PROMPT', 'DEFAULT_AI_OPTIMIZATION_PROMPT_EN'],
-  ['AI_GENERATION_ICON_RUNTIME_CONTRACT', 'AI_GENERATION_ICON_RUNTIME_CONTRACT_EN'],
-  ['AI_OPTIMIZATION_ICON_RUNTIME_CONTRACT', 'AI_OPTIMIZATION_ICON_RUNTIME_CONTRACT_EN'],
-]) {
-  assert.equal(typeof prompts[chineseName], 'string', `${chineseName} must exist`)
-  assert.equal(typeof prompts[englishName], 'string', `${englishName} must exist`)
-  assert.match(prompts[chineseName], cjk)
-  assert.doesNotMatch(prompts[englishName], cjk)
-}
-const undo = require('../out/util/UndoActions')
-assert.deepEqual(Object.keys(undo.UNDO_ACTION_LABELS_EN).sort(), Object.keys(undo.UNDO_ACTION_LABELS).sort())
-for (const label of Object.values(undo.UNDO_ACTION_LABELS_EN)) assert.doesNotMatch(label, cjk)
-const icons = require('../out/util/AIIconCatalog')
-assert.doesNotMatch(icons.AI_ICON_SELECTION_PROMPT_EN, cjk)
-assert.match(icons.AI_ICON_SELECTION_PROMPT, cjk)
+assert.deepEqual(
+  runtimeKeys.filter(key => !referencedRuntimeKeys.has(key)),
+  [],
+  'Every runtime catalog key must be referenced outside the catalogs',
+)
+assert.match(runtimeChineseMessages['ai.prompt.generation'], /lineNumber/)
+assert.match(runtimeChineseMessages['ai.prompt.generationContract'], /icon/)
+assert.doesNotMatch(runtimeEnglishMessages['ai.prompt.generationContract'], cjk)
+assert.doesNotMatch(read('src/util/UndoActions.ts'), /_EN\b|currentLanguage\(/)
+assert.doesNotMatch(read('src/util/AIIconCatalog.ts'), /_EN\b|AI_ICON_SELECTION_PROMPT/)
 
 const documentPairs = [
   ['README.md', 'docs/README.en.md'],
@@ -398,7 +736,14 @@ const englishVersions = [...read('docs/CHANGELOG.en.md').matchAll(/^## 🎉 Vers
 assert.deepEqual(englishVersions, chineseVersions, 'Chinese and English changelogs must cover the same versions')
 assert.match(read('docs/README.en.md'), /^# User Guide$/m)
 assert.match(read('docs/README.en.md'), /^# Developer Guide$/m)
-assert.match(read('docs/README.en.md'), /Runtime Chinese\/English language selection/)
+assert.match(read('docs/README.en.md'), /Stable-key runtime language catalogs/)
+assert.match(read('docs/README.en.md'), /localize\('stable\.key', \{ namedValue \}\)/)
+assert.match(read('scripts/integration/run-integration-tests.js'), /const fallbackTestLocale = 'tr'/)
+assert.match(
+  read('scripts/integration/run-integration-tests.js'),
+  /runLocale\(root, vscodeExecutablePath, fallbackTestLocale, downloadedVSCodeVersion, pendingTemporaryDirectories\)/,
+)
+assert.match(read('tests/integration/suite/index.js'), /manifestCatalogLocale = supportedLocales\.includes\(expectedLocale\) \? expectedLocale : 'en'/)
 
 localization.initializeLocalization('zh-cn')
-console.log('Complete Chinese/English localization contract verified.')
+console.log('Complete stable-key localization contract verified.')

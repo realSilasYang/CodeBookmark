@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责扩展构建与产物生成，具体对象为 `bundle-extension`。
- *
- * 实现要点：从源码与稳定清单生成可发布产物，并在覆盖目标前完成确定性整理。
- * 核心边界：生成结果必须确定、可复现，并与源码清单及发布校验保持一致。
- * 主要入口：`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 使用 esbuild 把扩展运行时收束为单一 CommonJS 入口，同时保留 source map 供本地诊断。
+ * 构建结束后核对模块数量与警告，防止遗漏入口或静默生成不完整的 VSIX。
  */
 const path = require('node:path')
 const { build, formatMessages } = require('esbuild')

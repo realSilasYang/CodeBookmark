@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIHttpTransport`。
- *
- * 实现要点：执行受限网络传输并校验响应大小、状态和取消信号。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`AIHttpStatusError`、`postAIJson`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 发送带超时和取消信号的 JSON POST，请求完成前限制响应体大小并统一转换 HTTP 错误。
+ * 传输层不解释模型业务字段，只保证网络状态、编码和资源上限对上层可预测。
  */
 import * as http from 'http'
 import * as https from 'https'
@@ -28,6 +24,10 @@ interface AIHttpRequest {
 	token?: vscode.CancellationToken
 }
 
+function localizedRequestAddress(requestUrl: string | undefined): string {
+	return requestUrl ? localize('util.AIHttpTransport.requestAddress', { requestUrl }) : ''
+}
+
 export class AIHttpStatusError extends Error {
 	constructor(
 		readonly statusCode: number,
@@ -35,10 +35,11 @@ export class AIHttpStatusError extends Error {
 		readonly requestUrl?: string,
 		readonly serviceErrorCode?: string,
 	) {
-		super(localize(
-			`AI 接口返回错误 [${statusCode}]${requestUrl ? `（${requestUrl}）` : ''}: ${responsePreview}`,
-			`AI service returned an error [${statusCode}]${requestUrl ? ` (${requestUrl})` : ''}: ${responsePreview}`,
-		))
+		super(localize("util.AIHttpTransport.aiServiceReturnedAnError", {
+			statusCode,
+			requestAddress: localizedRequestAddress(requestUrl),
+			responsePreview,
+		}))
 		this.name = 'AIHttpStatusError'
 	}
 }
@@ -67,10 +68,7 @@ function safeRequestUrl(url: URL): string {
 export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 	const payloadBytes = Buffer.byteLength(request.payload)
 	if (payloadBytes > AI_REQUEST_MAX_BYTES) {
-		throw new Error(localize(
-			`AI 请求大小为 ${formatByteSize(payloadBytes)}，超过 ${formatByteSize(AI_REQUEST_MAX_BYTES)} 的发送上限。`,
-			`The AI request is ${formatByteSize(payloadBytes)}, which exceeds the ${formatByteSize(AI_REQUEST_MAX_BYTES)} send limit.`,
-		))
+		throw new Error(localize("util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit", { formatByteSize: formatByteSize(payloadBytes), formatByteSize2: formatByteSize(AI_REQUEST_MAX_BYTES) }))
 	}
 
 	const timeoutMs = request.timeoutS * 1000
@@ -102,14 +100,11 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 				let responseApproval: Thenable<boolean> | undefined
 				let isFirstChunk = true
 
-				response.on('error', error => finish(reject, new Error(localize(`AI 响应接收失败: ${error.message}`, `Failed to receive the AI response: ${error.message}`))))
-				response.on('aborted', () => finish(reject, new Error(localize('AI 响应在接收完成前被中断。', 'The AI response was interrupted before it was fully received.'))))
+				response.on('error', error => finish(reject, new Error(localize("util.AIHttpTransport.failedToReceiveTheAiResponse", { message: error.message }))))
+				response.on('aborted', () => finish(reject, new Error(localize("util.AIHttpTransport.theAiResponseWasInterruptedBeforeItWasFully"))))
 				const declaredLength = Number(response.headers['content-length'])
 				if (Number.isFinite(declaredLength) && declaredLength > AI_RESPONSE_MAX_BYTES) {
-					const error = new Error(localize(
-						`AI 响应声明大小为 ${formatByteSize(declaredLength)}，超过 ${formatByteSize(AI_RESPONSE_MAX_BYTES)} 的接收上限。`,
-						`The AI response declares a size of ${formatByteSize(declaredLength)}, above the ${formatByteSize(AI_RESPONSE_MAX_BYTES)} receive limit.`,
-					))
+					const error = new Error(localize("util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe", { formatByteSize: formatByteSize(declaredLength), formatByteSize2: formatByteSize(AI_RESPONSE_MAX_BYTES) }))
 					finish(reject, error)
 					response.destroy(error)
 					return
@@ -117,10 +112,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 
 				response.on('data', (chunk: Buffer) => {
 					if (receivedBytes + chunk.length > AI_RESPONSE_MAX_BYTES) {
-						const error = new Error(localize(
-							`AI 响应超过 ${formatByteSize(AI_RESPONSE_MAX_BYTES)} 的接收上限。`,
-							`The AI response exceeds the ${formatByteSize(AI_RESPONSE_MAX_BYTES)} receive limit.`,
-						))
+						const error = new Error(localize("util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit", { formatByteSize: formatByteSize(AI_RESPONSE_MAX_BYTES) }))
 						finish(reject, error)
 						response.destroy(error)
 						return
@@ -128,7 +120,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 					receivedBytes += chunk.length
 					if (isFirstChunk) {
 						isFirstChunk = false
-						request.onProgress?.(localize('已收到大模型首字节响应，正在持续接收数据流...', 'Received the first response byte. Continuing to receive data…'))
+						request.onProgress?.(localize("util.AIHttpTransport.receivedTheFirstResponseByteContinuingToReceiveData"))
 					}
 					chunks.push(chunk)
 
@@ -136,14 +128,11 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 						response.pause()
 						clientRequest.setTimeout(0)
 						const actions = [
-							{ title: localize('继续接收', 'Continue Receiving'), action: 'continue' as const },
-							{ title: localize('取消', 'Cancel'), action: 'cancel' as const },
+							{ title: localize("util.AIHttpTransport.continueReceiving"), action: 'continue' as const },
+							{ title: localize("util.AIHttpTransport.cancel"), action: 'cancel' as const },
 						]
 						const approval = vscode.window.showWarningMessage(
-							localize(
-								`AI 响应已达到 ${formatByteSize(receivedBytes)}，超过 ${formatByteSize(AI_RESPONSE_WARNING_BYTES)} 提醒阈值，并且可能继续增长。继续接收会占用更多内存，且异常响应可能无法解析。`,
-								`The AI response has reached ${formatByteSize(receivedBytes)}, above the ${formatByteSize(AI_RESPONSE_WARNING_BYTES)} warning threshold, and may continue growing. Continuing uses more memory, and an abnormal response may not be parseable.`,
-							),
+							localize("util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold", { formatByteSize: formatByteSize(receivedBytes), formatByteSize2: formatByteSize(AI_RESPONSE_WARNING_BYTES) }),
 							{ modal: true },
 							...actions,
 						).then(choice => choice?.action === 'continue')
@@ -157,10 +146,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 								response.resume()
 								return
 							}
-							const error = new UserCancelledError(
-								'用户主动取消了超大 AI 响应接收',
-								'The user cancelled receiving the oversized AI response.',
-							)
+							const error = new UserCancelledError("util.AIHttpTransport.theUserCancelledReceivingTheOversizedAiResponse")
 							finish(reject, error)
 							response.destroy(error)
 						}, error => {
@@ -178,7 +164,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 							try {
 								finish(resolve, JSON.parse(data) as unknown)
 							} catch {
-								finish(reject, new Error(localize('无法解析 AI 响应数据', 'Unable to parse the AI response data.')))
+								finish(reject, new Error(localize("util.AIHttpTransport.unableToParseTheAiResponseData")))
 							}
 							return
 						}
@@ -194,34 +180,28 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 
 			clientRequest.on('error', error => finish(reject, error instanceof UserCancelledError
 				? error
-				: new Error(localize(`网络请求失败: ${error.message}`, `Network request failed: ${error.message}`))))
+				: new Error(localize("util.AIHttpTransport.networkRequestFailed", { message: error.message }))))
 			if (request.token) {
 				cancellationDisposable = request.token.onCancellationRequested(() => {
-					clientRequest.destroy(new UserCancelledError('用户主动取消了 AI 任务', 'The user cancelled the AI task.'))
+					clientRequest.destroy(new UserCancelledError("util.AIHttpTransport.theUserCancelledTheAiTask"))
 				})
 				if (request.token.isCancellationRequested) {
-					clientRequest.destroy(new UserCancelledError('用户主动取消了 AI 任务', 'The user cancelled the AI task.'))
+					clientRequest.destroy(new UserCancelledError("util.AIHttpTransport.theUserCancelledTheAiTask"))
 				}
 			}
 
 			clientRequest.setTimeout(timeoutMs, () => {
-				clientRequest.destroy(new Error(localize(`AI 请求超时（${request.timeoutS} 秒）`, `The AI request timed out after ${request.timeoutS} seconds.`)))
+				clientRequest.destroy(new Error(localize("util.AIHttpTransport.theAiRequestTimedOutAfterSeconds", { timeoutS: request.timeoutS })))
 			})
 			totalTimeout = setTimeout(() => {
-				clientRequest.destroy(new Error(localize(`AI 请求总时长超过 ${request.timeoutS} 秒`, `The AI request exceeded ${request.timeoutS} seconds in total.`)))
+				clientRequest.destroy(new Error(localize("util.AIHttpTransport.theAiRequestExceededSecondsInTotal", { timeoutS: request.timeoutS })))
 			}, timeoutMs)
 
-			request.onProgress?.(localize(
-				'正在发起网络连接，等待大模型推理响应（这可能需要几秒到十几秒）……',
-				'Connecting and waiting for the AI response (this may take several seconds)…',
-			))
+			request.onProgress?.(localize("util.AIHttpTransport.connectingAndWaitingForTheAiResponseThisMay"))
 			clientRequest.write(request.payload)
 			clientRequest.end()
 		} catch (error) {
-			finish(reject, new Error(localize(
-				`请求构建失败: ${error instanceof Error ? error.message : String(error)}`,
-				`Failed to construct the request: ${error instanceof Error ? error.message : String(error)}`,
-			)))
+			finish(reject, new Error(localize("util.AIHttpTransport.failedToConstructTheRequest", { errorMessage: error instanceof Error ? error.message : String(error) })))
 		}
 	})
 }

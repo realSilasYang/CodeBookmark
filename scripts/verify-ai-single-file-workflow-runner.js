@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-ai-single-file-workflow-runner`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-ai-single-file-workflow-runner` 对应契约。
- * 核心边界：通过断言锁定“verify-ai-single-file-workflow-runner”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖单文件生成、追加、替换和优化，以及请求期间源文件或存储作用域变化时的拒绝提交。
+ * 为核对单文件生成、追加、替换和优化，以及请求期间源文件或存储作用域变化时的拒绝提交，脚本在临时目录中调用编译后的 `AIService`、`AITaskRegistry`、`AIWorkflowGuard` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -96,6 +92,7 @@ async function main() {
         events.push('add')
         bookmarks.push(bookmark)
       },
+      persistGeneratedExpansion: async storageScope => events.push(`persist-expansion:${storageScope}`),
       saveUndoState: action => events.push(`undo:${action}`),
       saveBookmarks: filePaths => events.push(`save:${filePaths.join(',')}`),
       refreshDecoration: () => events.push('refresh'),
@@ -113,7 +110,9 @@ async function main() {
       'add',
       `save:${filePath}`,
       'refresh',
+      `persist-expansion:${scope}`,
     ])
+    assert.equal(bookmarks[0].collapsibleState, vscode.TreeItemCollapsibleState.Expanded)
     assert.equal(informationMessages.at(-1), 'AI 分析完成，生成结果：共 2 个书签：一级 1 个、二级 1 个。')
     assert.equal(taskRegistry.isFileRunning(taskRegistry.fileTaskKey(scope, pathRel)), false)
     assert.ok(statusMessages.every(status => status.disposed))

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责扩展配置读取与约束，具体对象为 `ExtensionConfig`。
- *
- * 实现要点：缓存并规范化设置值，在配置变化时集中失效，避免调用方自行解释原始配置。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`ExtensionConfig`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 统一读取、规范化并缓存 CodeBookmark 设置，向调用方提供类型明确的配置值。
+ * 配置变化时只失效相关缓存，地址、超时和提示词的默认值也在这一层集中确定。
  */
 import * as vscode from 'vscode';
 import * as fs from 'fs';
@@ -112,15 +108,14 @@ export class ExtensionConfig {
 
 	static ensureAIConfigured(): boolean {
 		const missing: string[] = []
-		if (!this.aiAddress) missing.push(localize('接口地址', 'API address'))
-		if (!this.aiModel) missing.push(localize('模型名称', 'model name'))
+		if (!this.aiAddress) missing.push(localize("config.ExtensionConfig.apiAddress"))
+		if (!this.aiModel) missing.push(localize("config.ExtensionConfig.modelName"))
 		if (missing.length === 0) return true
 
 		void vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.AI')
-		void vscode.window.showErrorMessage(localize(
-			`请先补全 AI 配置：${missing.join('、')}。`,
-			`Complete the AI settings first: ${missing.join(', ')}.`,
-		))
+		void vscode.window.showErrorMessage(localize("config.ExtensionConfig.completeTheAiSettingsFirst", {
+			missingFields: missing.join(localize('common.listSeparator')),
+		}))
 		return false
 	}
 
@@ -128,27 +123,18 @@ export class ExtensionConfig {
 		let folder = ExtensionConfig.globalStoragePath;
 		if (!folder || folder.trim() === '') {
 			void vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.globalStoragePath');
-			void vscode.window.showErrorMessage(localize(
-				'请先配置全局书签存储路径；该设置不能为空。',
-				'Configure the global bookmark storage path first; this setting cannot be empty.',
-			));
+			void vscode.window.showErrorMessage(localize("config.ExtensionConfig.configureTheGlobalBookmarkStoragePathFirstThisSetting"));
 			return false;
 		}
 
 		try {
 			folder = ExtensionConfig.resolveStoragePath();
 		} catch (error) {
-			void vscode.window.showErrorMessage(localize(
-				`书签存储路径无效：${error instanceof Error ? error.message : String(error)}`,
-				`The bookmark storage path is invalid: ${error instanceof Error ? error.message : String(error)}`,
-			))
+			void vscode.window.showErrorMessage(localize("config.ExtensionConfig.theBookmarkStoragePathIsInvalid", { errorMessage: error instanceof Error ? error.message : String(error) }))
 			return false
 		}
 		if (!path.isAbsolute(folder)) {
-			void vscode.window.showErrorMessage(localize(
-				`书签存储路径必须是绝对路径：${folder}`,
-				`The bookmark storage path must be absolute: ${folder}`,
-			))
+			void vscode.window.showErrorMessage(localize("config.ExtensionConfig.theBookmarkStoragePathMustBeAbsolute", { folder }))
 			return false
 		}
 		if (folder === this.validatedStoragePath) return true;
@@ -157,10 +143,7 @@ export class ExtensionConfig {
 			try {
 				fs.mkdirSync(folder, { recursive: true });
 			} catch {
-				vscode.window.showErrorMessage(localize(
-					`无法创建书签配置文件夹：${folder}。请检查路径是否合法以及是否具有访问权限。`,
-					`Unable to create the bookmark configuration folder: ${folder}. Check that the path is valid and accessible.`,
-				));
+				vscode.window.showErrorMessage(localize("config.ExtensionConfig.unableToCreateTheBookmarkConfigurationFolderCheckThat", { folder }));
 				return false;
 			}
 		}
@@ -168,18 +151,12 @@ export class ExtensionConfig {
 		try {
 			const stat = fs.statSync(folder);
 			if (!stat.isDirectory()) {
-				vscode.window.showErrorMessage(localize(
-					`书签配置路径必须是文件夹，不能是文件：${folder}`,
-					`The bookmark configuration path must be a folder, not a file: ${folder}`,
-				));
+				vscode.window.showErrorMessage(localize("config.ExtensionConfig.theBookmarkConfigurationPathMustBeAFolderNot", { folder }));
 				return false;
 			}
 			fs.accessSync(folder, fs.constants.W_OK | fs.constants.R_OK);
 		} catch {
-			vscode.window.showErrorMessage(localize(
-				`指定的书签配置文件夹无读写权限或不可用：${folder}`,
-				`The selected bookmark configuration folder is unavailable or does not allow reading and writing: ${folder}`,
-			));
+			vscode.window.showErrorMessage(localize("config.ExtensionConfig.theSelectedBookmarkConfigurationFolderIsUnavailableOrDoes", { folder }));
 			return false;
 		}
 

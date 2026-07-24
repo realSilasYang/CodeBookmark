@@ -1,9 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-ai-icons`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-ai-icons` 对应契约。
- * 核心边界：通过断言锁定“verify-ai-icons”相关行为，任何失败都表示实现偏离既有契约。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 逐项核对 AI 图标白名单、语义样例、冲突规则与完整资源哈希，含糊概念必须回退默认图标。
+ * 脚本直接调用编译后的 `AIIconCatalog`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
@@ -15,9 +12,8 @@ const {
   resolveAIIconNameForSemantic,
 } = require('../out/util/AIIconCatalog')
 
-// 每个入选资源及其正向语义示例都必须经过显式复核。
-// 下方全库哈希会在图标或概念发生新增、删除、重命名时使验证失败，
-// 迫使维护者重新完成全量审查，而不是让白名单悄然漂移。
+// 白名单中的每个图标和正向语义样例都经过人工复核。完整哈希刻意锁住这份审查结果：
+// 图标或概念一旦增删改名，测试会要求重新检查整库，而不是默认接受一项看似无害的变化。
 const expectedCatalog = [
   ['entry', 'fun_rocket_fluent.svg', '初始化扩展入口'],
   ['algorithm', 'arch_brain_fluent.svg', 'Punycode 解码算法'],

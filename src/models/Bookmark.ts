@@ -1,15 +1,12 @@
 /**
- * 模块说明：本文件负责书签领域模型与展示投影，具体对象为 `Bookmark`。
- *
- * 实现要点：定义书签领域数据、父子关系和展示投影，并在对象内部维护不变量。
- * 核心边界：领域对象负责维持自身不变量；序列化字段、父子关系和展示状态不得被调用方绕过。
- * 主要入口：`CursorIndex`、`Bookmark`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 定义书签节点、光标位置和父子关系，是树形编辑与持久化之间共享的领域对象。
+ * 节点自身只序列化本地字段；脚本身份、源路径和格式版本由外层信封负责。
  */
 import * as vscode from 'vscode'
 import { normalizeBookmarkIconName } from '../util/BookmarkIconName'
 import { canonicalBookmarkPath } from '../util/BookmarkPath'
 import { Commands } from '../util/constants/Commands'
+import { localize } from '../i18n/Localization'
 import { Helper } from '../util/Helper'
 import { createBookmarkId, createScriptId } from '../util/ScriptIdentity'
 
@@ -67,6 +64,8 @@ export class Bookmark extends vscode.TreeItem {
 	public createdAt: number
 	public parent?: Bookmark
 	public scriptId?: string
+	public ownerScriptId?: string
+	public fileLabelCustomized: boolean
 	public codeMarker?: CodeMarkerMetadata
 
 	constructor(param?: {
@@ -87,13 +86,15 @@ export class Bookmark extends vscode.TreeItem {
 		end?: CursorIndex
 		createdAt?: number
 		scriptId?: string
+		ownerScriptId?: string
+		fileLabelCustomized?: boolean
 		codeMarker?: CodeMarkerMetadata
 	}) {
 		const collapsible = Bookmark._handleCollapsible(param)
 		const labelText = bookmarkLabelText(param?.label).trim().replace(/\s+/g, ' ').slice(0, 1000)
 		if (param?.contextValue === ContextBookmark.File) {
 			const filePath = param.path ?? ''
-			super(path.basename(filePath), collapsible)
+			super(labelText || path.basename(filePath), collapsible)
 		} else if (param?.contextValue === ContextBookmark.BookmarkInvalid) {
 			const label = Helper.formatLabelSpacing(labelText)
 			super({ label, highlights: [[0, label.length]] }, collapsible)
@@ -116,6 +117,8 @@ export class Bookmark extends vscode.TreeItem {
 		this.end = param?.end ?? new CursorIndex(0, 0)
 		this.parent = param?.parent
 		this.scriptId = param?.scriptId
+		this.ownerScriptId = param?.ownerScriptId
+		this.fileLabelCustomized = param?.fileLabelCustomized ?? false
 		this.codeMarker = param?.codeMarker
 		this.icon = normalizeBookmarkIconName(param?.icon)
 		this.path = param?.path ?? ''
@@ -126,7 +129,7 @@ export class Bookmark extends vscode.TreeItem {
 		if (!this.isBookmarkInvalid) {
 			this.command = {
 				command: Commands.openBookmark,
-				title: 'Open Bookmark',
+				title: localize('models.Bookmark.openBookmark'),
 				arguments: [this]
 			}
 		}
@@ -169,8 +172,17 @@ export class Bookmark extends vscode.TreeItem {
 		this.displaySignature = refreshBookmarkTreeItem(this, this.displaySignature)
 	}
 
-	// 只序列化当前书签节点的本地字段；文件身份等仓库级信息由外层持久化结构补充。
+	// Bookmark 只知道自身及子节点。scriptId、源路径和格式头属于脚本信封，
+	// 若在这里一并写出，会让普通子书签也携带并不属于它们的仓库身份。
 	public toJSON(): BookmarkJSON {
+		return this.toJSONWithChildren(Array.from(this.subs).map(sub => sub.toJSON()))
+	}
+
+	public toJSONShallow(): BookmarkJSON {
+		return this.toJSONWithChildren([])
+	}
+
+	private toJSONWithChildren(subs: BookmarkJSON[]): BookmarkJSON {
 		return {
 			id: this.id,
 			createdAt: this.createdAt,
@@ -183,7 +195,7 @@ export class Bookmark extends vscode.TreeItem {
 			contextAfter: this.contextAfter,
 			iconName: this.icon,
 			isInvalid: this.contextValue === ContextBookmark.BookmarkInvalid,
-			subs: Array.from(this.subs).map(sub => sub.toJSON()),
+			subs,
 			params: `${this.start.line},${this.start.column},${this.end.line},${this.end.column}`,
 			codeMarker: this.codeMarker,
 		}
@@ -221,9 +233,10 @@ export class Bookmark extends vscode.TreeItem {
 		const scriptId = createScriptId()
 		const canonicalPath = canonicalBookmarkPath(this.path)
 		this.path = canonicalPath
+		this.ownerScriptId = scriptId
 		return new Bookmark({
 			id: `file_${scriptId}`,
-			label: canonicalPath,
+			label: path.basename(canonicalPath),
 			path: canonicalPath,
 			scriptId,
 			contextValue: ContextBookmark.File,
@@ -253,6 +266,16 @@ export class Bookmark extends vscode.TreeItem {
 
 	get isFile(): boolean {
 		return this.contextValue === ContextBookmark.File
+	}
+
+	get treeDepth(): number {
+		let depth = 0
+		let current = this.parent
+		while (current) {
+			depth++
+			current = current.parent
+		}
+		return depth
 	}
 	get isBookmarkInvalid(): boolean {
 		return this.contextValue === ContextBookmark.BookmarkInvalid

@@ -1,13 +1,9 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `TreeExpansionState`。
- *
- * 实现要点：封装状态读取、迁移和更新不变量，避免多个调用方直接操作底层表示。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`isTreeExpandedToLevel`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 判断目标层级要求展开的所有分支是否已经打开，用于决定工具栏应显示“展开”还是“收起”。
+ * 目标层级以下的分支无需检查；层级为零时表示要求整棵树完全展开。
  */
 interface ExpansionStateNode {
-	readonly level: number
+	readonly treeDepth: number
 	readonly collapsibleState?: number
 	readonly subs: {
 		readonly size: number
@@ -16,8 +12,8 @@ interface ExpansionStateNode {
 }
 
 /**
- * 仅当展示目标层级所需的全部可展开分支都已打开时返回 true。
- * 更深分支无需展开；defaultExpandLevel 为 0 时例外，表示整棵树必须全部展开。
+ * 判断为了看见目标层级而必须打开的分支是否都已展开。目标以下的深层分支无需计入；
+ * defaultExpandLevel 为 0 是“全部展开”模式，此时整棵树的可展开节点都要检查。
  */
 export function isTreeExpandedToLevel(
 	roots: Iterable<ExpansionStateNode>,
@@ -32,7 +28,7 @@ export function isTreeExpandedToLevel(
 	const visit = (nodes: Iterable<ExpansionStateNode>): boolean => {
 		for (const node of nodes) {
 			if (node.subs.size === 0) continue
-			const required = targetLevel === 0 || node.level === 0 || node.level < targetLevel
+			const required = targetLevel === 0 || node.treeDepth < targetLevel
 			if (!required) continue
 			hasRequiredBranch = true
 			if (node.collapsibleState !== expandedState || !visit(node.subs.values)) return false

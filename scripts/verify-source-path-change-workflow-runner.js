@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-source-path-change-workflow-runner`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-source-path-change-workflow-runner` 对应契约。
- * 核心边界：通过断言锁定“verify-source-path-change-workflow-runner”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`scopeForPath`、`relativePath`、`createTree`、`createHarness`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖源文件重命名、目录移动、删除墓碑和仓库重绑定结果向内存树的同步。
+ * 脚本直接调用编译后的 `AbsolutePath`、`BookmarkPath`、`SourcePathChangeWorkflowRunner`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -43,25 +39,47 @@ function relativePath(absolutePath) {
 }
 
 function createTree(fileNodes, events) {
+  const normalize = (node, parent) => {
+    node.parent = parent
+    const children = node.subs?.values ?? node.children ?? []
+    node.subs = { values: children.map(child => normalize(child, node)) }
+    return node
+  }
+  const visit = (values, callback) => {
+    for (const node of values) {
+      callback(node)
+      visit(node.subs.values, callback)
+    }
+  }
   const tree = {
-    values: fileNodes,
-    containsPath: bookmarkPath => tree.values.some(node => isSameOrDescendantBookmarkPath(node.path, bookmarkPath)),
+    values: fileNodes.map(node => normalize(node, undefined)),
+    containsPath: bookmarkPath => {
+      let found = false
+      visit(tree.values, node => { if (isSameOrDescendantBookmarkPath(node.path, bookmarkPath)) found = true })
+      return found
+    },
     renamePath: (oldBookmarkPath, newBookmarkPath) => {
       events.push(`tree:rename:${oldBookmarkPath}:${newBookmarkPath}`)
-      for (const node of tree.values) {
+      visit(tree.values, node => {
         if (isSameOrDescendantBookmarkPath(node.path, oldBookmarkPath)) {
           node.path = renamedBookmarkPath(node.path, oldBookmarkPath, newBookmarkPath)
         }
-      }
+      })
     },
     mergeDuplicateFileNodes: preferredIds => {
       events.push(`tree:merge:${preferredIds ? [...preferredIds].sort().join(',') : 'all'}`)
     },
     deleteWithPath: bookmarkPath => {
       events.push(`tree:delete:${bookmarkPath}`)
-      const previousLength = tree.values.length
-      tree.values = tree.values.filter(node => !isSameOrDescendantBookmarkPath(node.path, bookmarkPath))
-      return tree.values.length !== previousLength
+      let changed = false
+      const remove = (values, parent) => values.flatMap(node => {
+        node.subs.values = remove(node.subs.values, node)
+        if (!isSameOrDescendantBookmarkPath(node.path, bookmarkPath)) return [node]
+        changed = true
+        return node.subs.values.map(child => { child.parent = parent; return child })
+      })
+      tree.values = remove(tree.values, undefined)
+      return changed
     },
   }
   return tree
@@ -109,6 +127,7 @@ function createHarness(options = {}) {
     clearFileNodeCache: () => { events.push('fileCache:clear') },
     fireTreeChanged: () => { events.push('tree:fire') },
     sourceFilesChanged: () => { events.push('sources:changed') },
+    cleanupEmptyScopeFolders: async () => {},
   }
   return {
     events,

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkImportWorkflowRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkImportWorkflowPort`、`runImportBookmarkConfiguration`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 校验并导入单个配置文件或整个配置目录，处理目标冲突、身份重写和作用域切换。
+ * 所有候选先完成扫描与确认，再交给仓库提交，避免导入到一半留下不一致目录。
  */
 import fs = require('fs')
 import * as path from 'path'
@@ -43,8 +39,8 @@ async function chooseImportWorkspaceFolder(): Promise<vscode.WorkspaceFolder | u
 			workspaceFolder: folder,
 		})),
 		{
-			title: localize('选择要导入书签配置的工作区根目录', 'Choose a Workspace Root for the Bookmark Configuration Import'),
-			placeHolder: localize('多根工作区需要先选择目标根目录', 'Choose the destination root in a multi-root workspace'),
+			title: localize("providers.BookmarkImportWorkflowRunner.chooseAWorkspaceRootForTheBookmarkConfigurationImport"),
+			placeHolder: localize("providers.BookmarkImportWorkflowRunner.chooseTheDestinationRootInAMultiRootWorkspace"),
 		},
 	)
 	return selected?.workspaceFolder
@@ -58,10 +54,7 @@ export async function runImportBookmarkConfiguration(port: BookmarkImportWorkflo
 		: undefined
 	const workspaceFolder = editorWorkspaceFolder ?? (!hasLocalEditor ? await chooseImportWorkspaceFolder() : undefined)
 	if (!hasLocalEditor && !workspaceFolder) {
-		void vscode.window.showInformationMessage(localize(
-			'请先打开要绑定书签配置的本地脚本，或打开一个工作区后导入配置文件夹。',
-			'Open the local script to bind, or open a workspace before importing a configuration folder.',
-		))
+		void vscode.window.showInformationMessage(localize("providers.BookmarkImportWorkflowRunner.openTheLocalScriptToBindOrOpenA"))
 		return
 	}
 	if (hasLocalEditor) await port.ensureEditorScope(editor)
@@ -70,7 +63,7 @@ export async function runImportBookmarkConfiguration(port: BookmarkImportWorkflo
 	if (absolutePath) {
 		const bookmarkPath = port.absoluteToRelative(absolutePath)
 		if (port.bookmarksForPath(bookmarkPath).length > 0) {
-			void vscode.window.showInformationMessage(localize('当前脚本已经存在书签，无需导入配置。', 'The current script already has bookmarks, so no configuration needs to be imported.'))
+			void vscode.window.showInformationMessage(localize("providers.BookmarkImportWorkflowRunner.theCurrentScriptAlreadyHasBookmarksSoNoConfiguration"))
 			return
 		}
 	}
@@ -79,12 +72,12 @@ export async function runImportBookmarkConfiguration(port: BookmarkImportWorkflo
 		canSelectFiles: true,
 		canSelectFolders: workspaceFolder !== undefined,
 		canSelectMany: false,
-		openLabel: localize('导入并绑定', 'Import and Bind'),
+		openLabel: localize("providers.BookmarkImportWorkflowRunner.importAndBind"),
 		title: workspaceFolder
-			? localize('选择书签配置文件或配置文件夹', 'Choose a Bookmark Configuration File or Folder')
-			: localize(`为 ${path.basename(absolutePath!)} 导入书签配置`, `Import Bookmark Configuration for ${path.basename(absolutePath!)}`),
+			? localize("providers.BookmarkImportWorkflowRunner.chooseABookmarkConfigurationFileOrFolder")
+			: localize("providers.BookmarkImportWorkflowRunner.importBookmarkConfigurationFor", { fileName: path.basename(absolutePath!) }),
 		defaultUri: workspaceFolder?.uri,
-		filters: { [localize('CodeBookmark 配置', 'CodeBookmark Configuration')]: ['json'] },
+		filters: { [localize("providers.BookmarkImportWorkflowRunner.codebookmarkConfiguration")]: ['json'] },
 	})
 	if (!selected?.[0]) return
 
@@ -92,18 +85,12 @@ export async function runImportBookmarkConfiguration(port: BookmarkImportWorkflo
 	try {
 		selectedStat = await fs.promises.stat(selected[0].fsPath)
 	} catch (error) {
-		throw new Error(localize(
-			`无法读取所选配置路径：${errorMessage(error)}`,
-			`Unable to read the selected configuration path: ${errorMessage(error)}`,
-		), { cause: error })
+		throw new Error(localize("providers.BookmarkImportWorkflowRunner.unableToReadTheSelectedConfigurationPath", { errorMessage: errorMessage(error) }), { cause: error })
 	}
 	const scopeUri = editor?.document.uri ?? workspaceFolder?.uri
 	if (selectedStat.isDirectory()) {
 		if (!workspaceFolder) {
-			void vscode.window.showInformationMessage(localize(
-				'只有工作区模式支持导入整个书签配置文件夹。',
-				'An entire bookmark configuration folder can only be imported in workspace mode.',
-			))
+			void vscode.window.showInformationMessage(localize("providers.BookmarkImportWorkflowRunner.anEntireBookmarkConfigurationFolderCanOnlyBeImported"))
 			return
 		}
 		const expectedScope = port.storageScopeForUri(scopeUri)
@@ -113,46 +100,31 @@ export async function runImportBookmarkConfiguration(port: BookmarkImportWorkflo
 			if (!imported.cancelled && imported.imported > 0) {
 				port.commitImportUndo(captured)
 				if (port.storageScopeForUri(scopeUri) !== expectedScope) {
-					throw new Error(localize(
-						'导入完成前工作区作用域发生变化，请重新加载工作区确认结果。',
-						'The workspace scope changed before the import completed. Reload the workspace to confirm the result.',
-					))
+					throw new Error(localize("providers.BookmarkImportWorkflowRunner.theWorkspaceScopeChangedBeforeTheImportCompletedReload"))
 				}
 				await port.refresh(editor, expectedScope)
 			}
 			return imported
 		})
 		if (result.cancelled) {
-			void vscode.window.showInformationMessage(localize('已取消导入书签配置文件夹。', 'Bookmark configuration folder import was cancelled.'))
+			void vscode.window.showInformationMessage(localize("providers.BookmarkImportWorkflowRunner.bookmarkConfigurationFolderImportWasCancelled"))
 			return
 		}
 		if (result.imported === 0) {
-			if (result.total === 0) throw new Error(localize(
-				'所选文件夹中没有找到可导入的书签配置文件。',
-				'No importable bookmark configuration files were found in the selected folder.',
-			))
-			throw new Error(localize(
-				`文件夹中的配置均未导入（跳过 ${result.skipped} 个，失败 ${result.failed} 个）。`,
-				`No configurations in the folder were imported (${result.skipped} skipped, ${result.failed} failed).`,
-			))
+			if (result.total === 0) throw new Error(localize("providers.BookmarkImportWorkflowRunner.noImportableBookmarkConfigurationFilesWereFoundInThe"))
+			throw new Error(localize("providers.BookmarkImportWorkflowRunner.noConfigurationsInTheFolderWereImportedSkippedFailed", { skipped: result.skipped, failed: result.failed }))
 		}
 		const skippedText = result.skipped + result.failed > 0
-			? localize(`（跳过 ${result.skipped} 个，失败 ${result.failed} 个）`, ` (${result.skipped} skipped, ${result.failed} failed)`)
+			? localize("providers.BookmarkImportWorkflowRunner.skippedFailed", { skipped: result.skipped, failed: result.failed })
 			: ''
 		void vscode.window.showInformationMessage(
-			localize(
-				`已从配置文件夹导入 ${result.imported} 个脚本的书签配置${skippedText}；导入结果：${formatBookmarkLevelSummary(result.bookmarkSummary)}。`,
-				`Imported bookmark configurations for ${result.imported} scripts from the folder${skippedText}. Imported: ${formatBookmarkLevelSummary(result.bookmarkSummary)}.`,
-			),
+			localize("providers.BookmarkImportWorkflowRunner.importedBookmarkConfigurationsForScriptsFromTheFolderImported", { imported: result.imported, skippedText, formatBookmarkLevelSummary: formatBookmarkLevelSummary(result.bookmarkSummary) }),
 		)
 		return
 	}
 
 	if (!absolutePath || !editor) {
-		void vscode.window.showInformationMessage(localize(
-			'导入单个配置文件前，请先打开要绑定的本地脚本；工作区模式可直接选择配置文件夹。',
-			'Open the local script to bind before importing a single configuration file. In workspace mode, you can select a configuration folder directly.',
-		))
+		void vscode.window.showInformationMessage(localize("providers.BookmarkImportWorkflowRunner.openTheLocalScriptToBindBeforeImportingA"))
 		return
 	}
 	const expectedScope = port.storageScopeForUri(editor.document.uri)
@@ -161,18 +133,12 @@ export async function runImportBookmarkConfiguration(port: BookmarkImportWorkflo
 		const imported = await port.importFile(selected[0].fsPath, absolutePath)
 		port.commitImportUndo(captured)
 		if (port.storageScopeForUri(editor.document.uri) !== expectedScope) {
-			throw new Error(localize(
-				'导入完成前活动脚本作用域发生变化，请重新打开目标脚本确认结果。',
-				'The active script scope changed before the import completed. Reopen the target script to confirm the result.',
-			))
+			throw new Error(localize("providers.BookmarkImportWorkflowRunner.theActiveScriptScopeChangedBeforeTheImportCompleted"))
 		}
 		await port.refresh(editor, expectedScope)
 		return imported
 	})
 	void vscode.window.showInformationMessage(
-		localize(
-			`已导入并绑定书签配置：${path.basename(absolutePath)}；导入结果：${formatBookmarkLevelSummary(summarizeBookmarkTrees(importedFileNode.subs))}。`,
-			`Imported and bound the bookmark configuration for ${path.basename(absolutePath)}. Imported: ${formatBookmarkLevelSummary(summarizeBookmarkTrees(importedFileNode.subs))}.`,
-		),
+		localize("providers.BookmarkImportWorkflowRunner.importedAndBoundTheBookmarkConfigurationForImported", { fileName: path.basename(absolutePath), formatBookmarkLevelSummary: formatBookmarkLevelSummary(summarizeBookmarkTrees(importedFileNode.subs)) }),
 	)
 }

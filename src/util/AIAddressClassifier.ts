@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIAddressClassifier`。
- *
- * 实现要点：把原始输入归入互斥类别，为后续策略选择提供稳定判断。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`isLocalAIHostname`、`isAzureAIHostname`、`isVertexAIHostname`、`isOllamaHostname`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 按主机名识别本地服务、Azure、Vertex AI 和 Ollama，为地址补全与协议选择提供事实标签。
+ * 判断只看规范化 hostname，不根据路径片段猜测供应商，减少相似域名造成的误路由。
  */
 function normalizedHostname(hostname: string): string {
 	return hostname.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')

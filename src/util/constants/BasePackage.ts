@@ -1,18 +1,14 @@
 /**
- * 模块说明：本文件负责跨模块常量与稳定标识符，具体对象为 `BasePackage`。
- *
- * 实现要点：集中维护跨运行时与生成脚本共享的稳定常量，避免字符串和顺序发生漂移。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`basePackage`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 作为扩展清单的源码真值，集中声明版本、身份、设置、命令、菜单和本地化原文。
+ * package.json 由构建脚本生成；直接编辑生成清单会在下一次编译时被覆盖。
  */
 import { RESTRICTED_WORKSPACE_CONFIGURATION_KEYS } from '../WorkspaceCapabilities'
 
 export const basePackage = {
 	"name": "codebookmark",
 	"displayName": "代码书签 - CodeBookmark",
-	"description": "为代码智能导航而生，符合你的直觉。粘性引擎让书签持续绑定脚本，随代码编辑、文件改名和目录移动自动追随，无需反复校准；配置本地保存，AI 辅助生成书签、优化标签并匹配丰富图标，让关键逻辑一眼可见、随时直达。",
-	"version": "3.0.2",
+	"description": "为代码智能导航而生，符合你的直觉。粘性引擎持续绑定脚本，支持 AI 辅助、丰富图标和本地保存。Code bookmarks with sticky tracking, AI assistance, icons, and local storage. 代碼書籤・程式碼書籤・コードブックマーク・코드 북마크・Dấu trang mã nguồn・Marcadores de código・Signets de code・Закладки кода・Code-Lesezeichen・Segnalibri per codice。",
+	"version": "3.1.0",
 	"publisher": "realSilasYang",
 	"author": "阳熙来",
 	"private": true,
@@ -27,27 +23,35 @@ export const basePackage = {
 	},
 	"keywords": [
 		"bookmark",
-		"bookmarks",
 		"code bookmark",
-		"code bookmarks",
-		"code-bookmark",
+		"code navigation",
+		"sticky bookmark",
+		"bookmark manager",
+		"bookmark icons",
+		"ai bookmarks",
 		"书签",
 		"代码书签",
-		"源码书签",
-		"源代码书签",
 		"标签",
 		"代码标签",
-		"源码标签",
 		"代码导航",
-		"code-navigation",
-		"sticky-bookmark",
-		"bookmark-manager",
-		"file-tracking",
-		"local-storage",
-		"bookmark-icons",
-		"ai-bookmarks",
-		"ai",
-		"vscode"
+		"代碼書籤",
+		"程式碼書籤",
+		"ブックマーク",
+		"コードブックマーク",
+		"북마크",
+		"코드 북마크",
+		"dấu trang",
+		"dấu trang mã nguồn",
+		"marcador",
+		"marcadores de código",
+		"signet",
+		"signets de code",
+		"закладка",
+		"закладки кода",
+		"lesezeichen",
+		"code-lesezeichen",
+		"segnalibro",
+		"segnalibri codice"
 	],
 	"icon": "resources/bookmark_logo.png",
 	"galleryBanner": {

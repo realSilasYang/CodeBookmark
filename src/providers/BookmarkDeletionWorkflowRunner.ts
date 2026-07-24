@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `BookmarkDeletionWorkflowRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`BookmarkDeletionWorkflowPort`、`hasInvalidBookmarks`、`runClearInvalidBookmarks`、`runDeleteBookmarks`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 实现删除选中书签、清理失效书签和删除整棵子树，并返回精确的分级统计。
+ * 真正修改前由调用方完成确认；工作流负责生成撤销快照、保存受影响文件和刷新视图。
  */
 import * as vscode from 'vscode'
 import { Bookmark } from '../models/Bookmark'
@@ -26,6 +22,8 @@ export interface BookmarkDeletionWorkflowPort {
 	saveUndoState(action: BookmarkDeletionUndoAction): void
 	saveBookmarks(filePaths: string[]): void
 	refreshDecoration(): void
+	hideFileNode(scriptId: string): void
+	commitTopology(): Promise<void>
 }
 
 function collectInvalidBookmarks(bookmarks: BookmarkSet): Bookmark[] {
@@ -78,20 +76,64 @@ export function runClearInvalidBookmarks(port: BookmarkDeletionWorkflowPort): vo
 type DeletionMode = 'delete' | 'keepChildren'
 
 async function confirmDeletion(targets: Bookmark[]): Promise<DeletionMode | undefined> {
+	const fileCount = summarizeFileNodes(targets)
 	const prompt = targets.length > 1
-		? localize(
-			`选中了 ${targets.length} 项，其中包含带子书签的文件夹，确定要删除吗？`,
-			`${targets.length} items are selected, including folders with child bookmarks. Delete them?`,
-		)
-		: localize('确定要删除包含子书签的文件夹吗？', 'Delete the folder that contains child bookmarks?')
+		? localize("providers.BookmarkDeletionWorkflowRunner.itemsAreSelectedIncludingContainersWithChildrenDeletingThe", { targetsCount: targets.length, fileCount })
+		: localize("providers.BookmarkDeletionWorkflowRunner.deleteTheCurrentSubtreeItsRegularBookmarksWillBe", { fileCount })
 	const choices = [
-		{ title: localize('是', 'Delete'), mode: 'delete' as const },
-		{ title: localize('保留子书签，仅删除当前项', 'Keep Children and Delete This Item'), mode: 'keepChildren' as const },
-		{ title: localize('否', 'Cancel'), mode: 'cancel' as const },
+		{ title: localize("providers.BookmarkDeletionWorkflowRunner.delete"), mode: 'delete' as const },
+		{ title: localize("providers.BookmarkDeletionWorkflowRunner.keepChildrenAndDeleteThisItem"), mode: 'keepChildren' as const },
+		{ title: localize("providers.BookmarkDeletionWorkflowRunner.cancel"), mode: 'cancel' as const },
 	]
 	const confirm = await vscode.window.showInformationMessage(prompt, ...choices)
 	if (!confirm || confirm.mode === 'cancel') return undefined
 	return confirm.mode
+}
+
+function summarizeFileNodes(targets: readonly Bookmark[]): number {
+	const seen = new Set<Bookmark>()
+	const visit = (bookmark: Bookmark): void => {
+		if (seen.has(bookmark)) return
+		seen.add(bookmark)
+		for (const child of bookmark.subs) visit(child)
+	}
+	for (const target of targets) visit(target)
+	return [...seen].filter(bookmark => bookmark.isFile).length
+}
+
+function preserveProtectedMarkers(targets: readonly Bookmark[], port: BookmarkDeletionWorkflowPort): void {
+	const bookmarks = port.bookmarks()
+	const promote = (bookmark: Bookmark, fallbackParent: Bookmark | undefined): void => {
+		for (const child of [...bookmark.subs.values]) {
+			if (child.isCodeMarker) {
+				bookmark.subs.fastDelete(child)
+				child.parent = fallbackParent
+				if (fallbackParent) fallbackParent.subs.add(child)
+				else bookmarks.add(child)
+				continue
+			}
+			promote(child, fallbackParent)
+		}
+	}
+	for (const target of targets) {
+		const parent = target.parent
+		if (target.isCodeMarker) {
+			const container = parent?.subs ?? bookmarks
+			container.fastDelete(target)
+			target.parent = parent
+			container.add(target)
+			continue
+		}
+		promote(target, parent)
+	}
+}
+
+function hideFileNodes(targets: readonly Bookmark[], port: BookmarkDeletionWorkflowPort): void {
+	const visit = (bookmark: Bookmark): void => {
+		if (bookmark.isFile && bookmark.scriptId) port.hideFileNode(bookmark.scriptId)
+		for (const child of bookmark.subs) visit(child)
+	}
+	for (const target of targets) visit(target)
 }
 
 export async function runDeleteBookmarks(
@@ -107,10 +149,9 @@ export async function runDeleteBookmarks(
 		!target.isChildOf(new BookmarkSet(uniqueTargets.filter(other => other !== target))),
 	)
 	if (targets.length === 0) return
-
-	const protectedTargets = targets.filter(target => port.bookmarkContainsCodeMarker(target))
-	if (protectedTargets.length > 0) port.warnProtectedCodeMarkers(protectedTargets.length)
-	targets = targets.filter(target => !port.bookmarkContainsCodeMarker(target))
+	const directlyProtected = targets.filter(target => target.isCodeMarker)
+	if (directlyProtected.length > 0) port.warnProtectedCodeMarkers(directlyProtected.length)
+	targets = targets.filter(target => !target.isCodeMarker)
 	if (targets.length === 0) return
 
 	const hasAnySubs = targets.some(target => target.subs.size > 0)
@@ -127,10 +168,20 @@ export async function runDeleteBookmarks(
 		: summarizeBookmarkTrees(targets)
 	const changedPaths = targets.map(target => port.absoluteBookmarkPath(target.path))
 	port.saveUndoState('deleteBookmarks')
+	if (confirmMode === 'delete') {
+		const protectedCount = targets.filter(target => port.bookmarkContainsCodeMarker(target)).length
+		if (protectedCount > 0) {
+			port.warnProtectedCodeMarkers(protectedCount)
+			preserveProtectedMarkers(targets, port)
+		}
+		hideFileNodes(targets, port)
+	}
 	for (const target of targets) {
 		if (target.subs.size > 0 && confirmMode === 'keepChildren') {
+			if (target.isFile && target.scriptId) port.hideFileNode(target.scriptId)
 			if (moveChildrenToParentWhenDelete(target, port)) hasChanges = true
 		} else {
+			if (target.isFile && target.scriptId) port.hideFileNode(target.scriptId)
 			port.deleteBookmark(target.id)
 			hasChanges = true
 		}
@@ -138,12 +189,10 @@ export async function runDeleteBookmarks(
 
 	if (!hasChanges) return
 	port.saveBookmarks(changedPaths)
+	await port.commitTopology()
 	port.refreshDecoration()
 	if (targets.length > 1) {
 		const summary = formatBookmarkLevelSummary(deletedSummary)
-		logger.showMessage(localize(
-			`批量删除完成，删除结果：${summary}。`,
-			`Batch deletion completed. Deleted: ${summary}.`,
-		))
+		logger.showMessage(localize("providers.BookmarkDeletionWorkflowRunner.batchDeletionCompletedDeleted", { summary }))
 	}
 }

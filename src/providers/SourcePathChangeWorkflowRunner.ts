@@ -1,13 +1,10 @@
 /**
- * 模块说明：本文件负责视图状态、工作流与 VS Code 适配，具体对象为 `SourcePathChangeWorkflowRunner`。
- *
- * 实现要点：执行一次边界清晰的工作流，通过端口注入副作用以便独立验证每条分支。
- * 核心边界：通过端口或协调器隔离可变状态与 VS Code API，确保异步流程可取消、可测试且不跨作用域串扰。
- * 主要入口：`SourcePathChangeWorkflowPort`、`applyRepositoryRelocations`、`runRenamedSourcePath`、`runDeletedSourcePath`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 处理源文件与目录的重命名、删除事件，把仓库重定位结果同步到书签树和工作区顺序。
+ * 文件系统可能只报告删除或迟到创建；工作流保留墓碑与恢复入口，而不是立即丢弃绑定身份。
  */
 import path = require('path')
 import type { BookmarkSet } from '../models/BookmarkSet'
+import { allBookmarks } from '../models/BookmarkOwnership'
 import type { ScriptRelocationChange } from '../repository/BookmarkRepository'
 import {
 	isSameOrDescendantAbsolutePath,
@@ -48,6 +45,7 @@ export interface SourcePathChangeWorkflowPort {
 	clearFileNodeCache(): void
 	fireTreeChanged(): void
 	sourceFilesChanged(): void
+	cleanupEmptyScopeFolders(): Promise<void>
 }
 
 function relocateWorkspaceOrderCache(
@@ -132,7 +130,7 @@ export async function applyRepositoryRelocations(
 		if (oldScope !== port.currentStorageScope() || newScope !== port.currentStorageScope()) continue
 
 		const bookmarks = port.bookmarks()
-		const matching = bookmarks.values.filter(bookmark => bookmark.isFile
+		const matching = allBookmarks(bookmarks).filter(bookmark => bookmark.isFile
 			&& isSameOrDescendantAbsolutePath(port.absoluteBookmarkPath(bookmark.path), oldAbsolutePath))
 		for (const fileNode of matching) {
 			const currentAbsolutePath = port.absoluteBookmarkPath(fileNode.path)
@@ -144,6 +142,7 @@ export async function applyRepositoryRelocations(
 			changed = true
 		}
 	}
+	await port.cleanupEmptyScopeFolders()
 	if (reloadScope) {
 		await port.refresh(reloadScope)
 		return
@@ -167,6 +166,7 @@ export async function runRenamedSourcePath(
 		newAbsolutePath,
 		port,
 	)
+	await port.cleanupEmptyScopeFolders()
 	const currentStorageScope = port.currentStorageScope()
 	const currentScopeFilePath = port.currentScopeFilePath()
 	const standaloneScopeAffected = currentStorageScope?.startsWith('file:')
@@ -177,7 +177,7 @@ export async function runRenamedSourcePath(
 		const nextScope = port.storageScopeForAbsolutePath(nextRepresentative)
 		if (nextScope.startsWith('file:')) {
 			const bookmarks = port.bookmarks()
-			const movedScriptIds = new Set(bookmarks.values
+			const movedScriptIds = new Set(allBookmarks(bookmarks)
 				.filter(bookmark => bookmark.scriptId && isSameOrDescendantBookmarkPath(bookmark.path, oldBookmarkPath))
 				.map(bookmark => bookmark.scriptId as string))
 			if (bookmarks.containsPath(oldBookmarkPath)) {
@@ -214,7 +214,7 @@ export async function runRenamedSourcePath(
 		return
 	}
 	if (!bookmarks.containsPath(oldBookmarkPath)) return
-	const movedScriptIds = new Set(bookmarks.values
+	const movedScriptIds = new Set(allBookmarks(bookmarks)
 		.filter(bookmark => bookmark.scriptId && isSameOrDescendantBookmarkPath(bookmark.path, oldBookmarkPath))
 		.map(bookmark => bookmark.scriptId as string))
 	bookmarks.renamePath(oldBookmarkPath, newBookmarkPath)

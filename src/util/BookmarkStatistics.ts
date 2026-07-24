@@ -1,12 +1,8 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `BookmarkStatistics`。
- *
- * 实现要点：集中实现 `BookmarkStatistics` 的无界面规则和边界处理，供多个上层流程复用。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`BookmarkLevelSummary`、`summarizeBookmarkLevels`、`summarizeBookmarks`、`summarizeBookmarkTrees`、`mergeBookmarkLevelSummaries`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 统计书签总数及各层级数量，并合并多个脚本或文件夹操作的结果。
+ * 格式化函数生成中英文完成提示，让批量操作准确说明新增、更新或删除了多少层级节点。
  */
-import { currentLanguage } from '../i18n/Localization'
+import { localize, type LocalizationKey } from '../i18n/Localization'
 
 interface BookmarkStatisticsNode {
 	readonly isFile?: boolean
@@ -83,19 +79,24 @@ export function mergeBookmarkLevelSummaries(
 }
 
 function levelLabel(level: number): string {
-	if (currentLanguage() === 'en') return `Level ${level}`
-	const chineseNumbers = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
-	return level <= chineseNumbers.length ? `${chineseNumbers[level - 1]}级` : `第 ${level} 级`
+	const namedLevelKeys: readonly LocalizationKey[] = [
+		'bookmarkStatistics.level1', 'bookmarkStatistics.level2', 'bookmarkStatistics.level3',
+		'bookmarkStatistics.level4', 'bookmarkStatistics.level5', 'bookmarkStatistics.level6',
+		'bookmarkStatistics.level7', 'bookmarkStatistics.level8', 'bookmarkStatistics.level9',
+		'bookmarkStatistics.level10',
+	]
+	const namedKey = namedLevelKeys[level - 1]
+	return namedKey ? localize(namedKey) : localize('bookmarkStatistics.level', { level })
 }
 
 export function formatBookmarkLevelSummary(summary: BookmarkLevelSummary): string {
-	if (currentLanguage() === 'en') {
-		const bookmarkNoun = summary.total === 1 ? 'bookmark' : 'bookmarks'
-		if (summary.total === 0) return `0 ${bookmarkNoun} total`
-		const levels = summary.levelCounts.map((count, index) => `${levelLabel(index + 1)}: ${count}`)
-		return `${summary.total} ${bookmarkNoun} total: ${levels.join(', ')}`
-	}
-	if (summary.total === 0) return '共 0 个书签'
-	const levels = summary.levelCounts.map((count, index) => `${levelLabel(index + 1)} ${count} 个`)
-	return `共 ${summary.total} 个书签：${levels.join('、')}`
+	if (summary.total === 0) return localize('bookmarkStatistics.empty')
+	const levels = summary.levelCounts.map((count, index) =>
+		localize('bookmarkStatistics.levelCount', { level: levelLabel(index + 1), count }))
+	return localize(summary.total === 1
+		? 'bookmarkStatistics.summarySingle'
+		: 'bookmarkStatistics.summaryMultiple', {
+		total: summary.total,
+		levels: levels.join(localize('common.listSeparator')),
+	})
 }

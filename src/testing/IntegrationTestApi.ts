@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责集成测试专用公开接口，具体对象为 `IntegrationTestApi`。
- *
- * 实现要点：把真实提供器操作包装为稳定测试 API，并只返回可断言的不可变快照。
- * 核心边界：仅向受控测试环境暴露稳定快照和操作入口，生产运行时不得依赖这些接口。
- * 主要入口：`CodeBookmarkIntegrationTestApi`、`createIntegrationTestApi`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 仅在测试环境暴露稳定的集成测试接口，用真实提供器完成刷新、添加、撤销、移动恢复和标记同步。
+ * 接口返回去除 VS Code 对象后的快照，测试可以断言公开行为而不直接访问内部可变状态。
  */
 import * as vscode from 'vscode'
 import type { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
@@ -17,6 +13,8 @@ export interface CodeBookmarkIntegrationTestApi {
 	deleteBookmarksAtLine(line: number): Promise<void>
 	undo(): Promise<void>
 	redo(): Promise<void>
+	moveNode(sourceId: string, targetId: string): Promise<void>
+	reload(): Promise<void>
 	flush(): Promise<void>
 	snapshot(): IntegrationBookmarkSnapshot
 }
@@ -73,6 +71,14 @@ export function createIntegrationTestApi(
 		},
 		async redo(): Promise<void> {
 			await provider.redo()
+			await provider.flushPendingSaves(true)
+		},
+		async moveNode(sourceId: string, targetId: string): Promise<void> {
+			await provider.integrationTestMoveNode(sourceId, targetId)
+			await provider.flushPendingSaves(true)
+		},
+		async reload(): Promise<void> {
+			await provider.refresh(undefined, undefined, true)
 			await provider.flushPendingSaves(true)
 		},
 		async flush(): Promise<void> {

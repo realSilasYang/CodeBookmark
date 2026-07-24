@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-user-visible-text`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-user-visible-text` 对应契约。
- * 核心边界：通过断言锁定“verify-user-visible-text”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`visibleText`、`sourceFiles`、`callName`、`propertyName`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 扫描用户可见字符串的括号、AI 大小写、菜单命名和中英文入口，阻止不一致文案。
+ * 脚本读取仓库真实文件，围绕“扫描用户可见字符串的括号、AI 大小写、菜单命名和中英文入口”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -29,6 +25,7 @@ const manifestText = [
   ...Object.values(manifest.contributes.views ?? {})
     .flatMap(views => views.map(view => view.name)),
 ]
+assert.doesNotMatch(manifestText.join('\n'), /当前文件的新书签容器|新书签容器/)
 for (const group of manifest.contributes.configuration) {
   if (group.title) manifestText.push(group.title)
   for (const setting of Object.values(group.properties)) {

@@ -1,19 +1,11 @@
 /**
- * 模块说明：本文件负责构建脚本共享基础设施，具体对象为 `localized-manifest`。
- *
- * 实现要点：集中复用清单本地化与生成规则，避免多个构建入口产生不一致结果。
- * 核心边界：脚本失败时应以非零状态退出，且不得静默改写不属于本任务的用户文件。
- * 主要入口：`isChineseLanguage`、`resolveLocalizedValue`、`localizationFile`、`loadLocalizedManifest`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 读取生成后的扩展清单，并按指定语言解析 %key% 形式的本地化字段。
+ * 它供验证脚本复用，与 VS Code 的中文默认回退和非中文英文目录规则保持一致。
  */
 const fs = require('node:fs')
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '../..')
-
-function isChineseLanguage(language) {
-  return language === undefined || language === '' || /^zh(?:[-_]|$)/i.test(language)
-}
 
 function resolveLocalizedValue(value, messages) {
   if (typeof value === 'string') {
@@ -52,4 +44,4 @@ function loadLocalizedManifest(language = 'zh-cn') {
   return resolveLocalizedValue(manifest, messages)
 }
 
-module.exports = { isChineseLanguage, loadLocalizedManifest, resolveLocalizedValue }
+module.exports = { loadLocalizedManifest, resolveLocalizedValue }

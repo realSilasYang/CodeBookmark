@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责无界面基础能力与纯逻辑工具，具体对象为 `AIIconCatalog`。
- *
- * 实现要点：维护经过审计的静态条目与查找元数据，使展示和语义匹配保持稳定。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`AI_BOOKMARK_ICON_OPTIONS`、`resolveAIIconNameForSemantic`、`AI_ICON_SELECTION_PROMPT`、`AI_ICON_SELECTION_PROMPT_EN`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 维护 AI 可选择的图标白名单、明确语义、冲突优先级和模型提示文本。
+ * 标签必须提供足够直接的概念证据；同优先级冲突或语义含糊时返回默认图标，不强行匹配。
  */
 interface AIIconDefinition {
 	readonly key: string
@@ -26,7 +22,7 @@ const expirationEvidence = /过期|失效|陈旧数据|\b(expire|expired|expirat
 const infrastructureProductEvidence = /\b(docker|kubernetes|k8s|pod|helm|aws|amazon web services|azure|gcp|google cloud|terraform)\b/iu
 
 const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
-	// 代码结构与导航语义。
+	// 表达代码组织和阅读路径，例如模块、分支、入口与跳转。
 	{ key: 'entry', iconName: 'fun_rocket_fluent.svg', description: '程序入口、启动、初始化', evidence: [/入口|启动|初始化|激活扩展|程序主函数|\b(entry ?point|startup|bootstrap|initialize|initialization|activate|activation|main)\b/iu] },
 	{ key: 'algorithm', iconName: 'arch_brain_fluent.svg', description: '明确命名的算法、编解码、散列、排序或压缩', evidence: [/算法|编解码|散列|哈希|排序算法|压缩算法|解压算法|\b(algorithm|punycode|base64|sha\d*|md5|dijkstra|quicksort|mergesort|compression|decompression)\b/iu], conflicts: [/图像|图片|音频|声音|语音|视频|录像|\b(image|audio|sound|voice|video|media)\b/iu] },
 	{ key: 'flow', iconName: 'arch_flow_chart_flat_color.svg', description: '工作流、生命周期、处理管线、状态机', evidence: [/工作流|生命周期|处理管线|状态机|阶段编排|\b(workflow|lifecycle|pipeline|state machine|orchestration)\b/iu] },
@@ -40,7 +36,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'parsing', iconName: 'ui_microscope_fluent.svg', description: '解析器、词法分析、语法分析、分词', evidence: [/解析器|词法分析|语法分析|分词器|\b(parser|tokenizer|lexer|lexical analysis|syntax analysis|parse tree)\b/iu] },
 	{ key: 'serialization', iconName: 'ui_document_purple.svg', description: '序列化、反序列化、编组与解组', evidence: [/序列化|反序列化|编组|解组|\b(serialization|deserialization|serialize|deserialize|marshal|unmarshal)\b/iu] },
 
-	// 数据、文件、通信与集成语义。
+	// 表达数据形态、文件操作、消息通信和外部系统集成。
 	{ key: 'data', iconName: 'arch_database_blue.svg', description: '数据库、数据模型、持久化、数据仓储', evidence: [/数据库|数据模型|持久化|数据仓储|数据库查询|\b(database|data model|repository|persistence|entity|orm|sql)\b/iu], conflicts: [databaseTechnologyEvidence] },
 	{ key: 'storage', iconName: 'arch_data_backup_flat_color.svg', description: '存储、缓存、备份、落盘', evidence: [/存储|缓存|备份|落盘|保存状态|\b(storage|cache|caching|backup|save state|persist to disk)\b/iu], conflicts: [expirationEvidence, databaseTechnologyEvidence] },
 	{ key: 'recovery', iconName: 'arch_data_recovery_flat_color.svg', description: '恢复、回滚、撤销、容错、故障转移', evidence: [/恢复|回滚|撤销|容错|故障转移|\b(recovery|rollback|restore|undo|failover|fallback)\b/iu] },
@@ -54,7 +50,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'export', iconName: 'ui_outbox_tray_fluent.svg', description: '数据导出、输出交付、出站发送', evidence: [/数据导出|批量导出|导出配置|输出交付|出站发送|\b(data export|batch export|outbound delivery|emit output)\b/iu] },
 	{ key: 'link', iconName: 'arch_globe_showing_asia_australia_fluent.svg', description: 'URL、URI、链接、网址、域名、查询参数', evidence: [/链接|网址|域名|查询参数|\b(url|uri|href|hyperlink|domain name|query string|query parameter)\b/iu] },
 
-	// 运行时、交付与运维语义。
+	// 表达运行、构建、发布、部署和日常运维状态。
 	{ key: 'configuration', iconName: 'arch_settings_flat_color.svg', description: '配置文件、设置项、环境变量、首选项', evidence: [/配置文件|加载配置|应用设置|设置项|环境变量|首选项|\b(configuration file|load config|application settings?|preferences?|environment variable|env var)\b/iu], conflicts: [filterEvidence, transferEvidence, /\bterraform\b/iu] },
 	{ key: 'cloud', iconName: 'arch_cloud_flat_color.svg', description: '通用云服务、云端资源、云计算', evidence: [/云服务|云端资源|云计算|\b(cloud service|cloud resource|cloud computing)\b/iu], conflicts: [cloudProviderEvidence] },
 	{ key: 'deployment', iconName: 'arch_deploy_red.svg', description: '部署、发布上线、灰度发布', evidence: [/部署|发布上线|灰度发布|滚动发布|\b(deploy|deployment|rollout|release to production)\b/iu], conflicts: [infrastructureProductEvidence] },
@@ -67,7 +63,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'maintenance', iconName: 'arch_hammer_and_wrench_fluent.svg', description: '维护、重构、技术债治理', evidence: [/维护|重构|技术债|代码整治|\b(maintenance|refactor|refactoring|technical debt)\b/iu] },
 	{ key: 'git', iconName: 'brand_file_type_git_vscode.svg', description: 'Git、提交、合并、变基、版本控制', evidence: [/版本控制|提交变更|合并分支|变基|\b(git|commit|merge|rebase|cherry pick|version control)\b/iu], conflicts: [/\b(github|gitlab)\b/iu] },
 
-	// 搜索、质量保障与可观测性语义。
+	// 表达搜索、测试、质量检查、日志和性能观测。
 	{ key: 'search', iconName: 'ui_search_flat_color.svg', description: '搜索、查找、定位、全文检索', evidence: [/搜索|查找|定位|全文检索|\b(search|lookup|find|locate|index lookup)\b/iu] },
 	{ key: 'filter', iconName: 'status_prohibited_fluent.svg', description: '过滤、筛选、允许或拒绝列表、排除规则', evidence: [filterEvidence] },
 	{ key: 'validation', iconName: 'status_test_green.svg', description: '结构验证、合法性校验、断言、测试', evidence: [/结构验证|合法性校验|数据校验|断言|单元测试|集成测试|质量检查|\b(validation|validate|assert|unit test|integration test|invariant|schema check|type check)\b/iu], conflicts: [authenticationEvidence] },
@@ -84,7 +80,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'expiration', iconName: 'status_expired_flat_color.svg', description: '过期、失效、TTL、陈旧数据', evidence: [expirationEvidence] },
 	{ key: 'approval', iconName: 'status_approval_flat_color.svg', description: '审批、审核通过、批准', evidence: [/审批|审核通过|批准|准入审核|\b(approval|approved|review approval)\b/iu] },
 
-	// 安全、隐私与同步语义。
+	// 表达权限、安全、隐私、备份和同步。
 	{ key: 'security', iconName: 'fun_shield_fluent.svg', description: '安全边界、权限、授权、访问控制', evidence: [/安全边界|权限|授权|防护|访问控制|\b(security boundary|permission|authorization|access control)\b/iu], conflicts: [authenticationEvidence, encryptionEvidence, privacyEvidence] },
 	{ key: 'authentication', iconName: 'arch_key_flat_color.svg', description: '认证、鉴权、登录、密钥、令牌、凭据', evidence: [authenticationEvidence] },
 	{ key: 'encryption', iconName: 'arch_data_encryption_flat_color.svg', description: '加密、解密、密码学、密文', evidence: [encryptionEvidence] },
@@ -92,7 +88,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'locking', iconName: 'arch_lock_flat_color.svg', description: '互斥锁、读写锁、信号量、临界区、死锁', evidence: [/互斥锁|读写锁|信号量|临界区|死锁|加锁|\b(mutex|semaphore|read write lock|critical section|deadlock|lock acquisition)\b/iu] },
 	{ key: 'unlocking', iconName: 'arch_unlock_flat_color.svg', description: '解锁、释放锁、解除冻结', evidence: [/解锁|释放锁|解除冻结|\b(unlock|release lock|lock release)\b/iu] },
 
-	// 产品功能与内容领域语义。
+	// 表达用户功能、内容类型和常见业务领域。
 	{ key: 'ai', iconName: 'fun_robot_fluent.svg', description: '人工智能、大模型、模型推理、提示词、智能体', evidence: [/人工智能|大模型|模型推理|提示词|智能体|机器学习|\b(ai|llm|inference|prompt|embedding|agent|machine learning|chat completion)\b/iu] },
 	{ key: 'calculation', iconName: 'ui_calculator_fluent.svg', description: '数学计算、公式、算术、计费', evidence: [/数学计算|公式计算|算术|计费|金额计算|\b(calculate|calculation|formula|arithmetic|billing calculation)\b/iu] },
 	{ key: 'policy', iconName: 'arch_balance_scale_fluent.svg', description: '策略治理、合规、政策、审计规则', evidence: [/策略治理|合规|政策|审计规则|\b(policy|compliance|governance|audit rule)\b/iu] },
@@ -103,7 +99,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'user', iconName: 'ui_manager_flat_color.svg', description: '用户、账户、个人资料、租户', evidence: [/用户|账户|个人资料|租户|客户身份|\b(user|account|profile|customer|tenant)\b/iu] },
 	{ key: 'location', iconName: 'ui_location_red.svg', description: '位置、地理定位、坐标、经纬度、GPS', evidence: [/地理定位|坐标|经纬度|位置服务|\b(location|geolocation|coordinates|latitude|longitude|gps)\b/iu] },
 
-	// 数据引擎与基础设施产品；仅接受明确产品名称。
+	// 数据引擎和基础设施使用品牌图标时，标签里必须明确出现产品名。
 	{ key: 'mongodb', iconName: 'arch_file_type_mongo_vscode.svg', description: 'MongoDB、Mongo 数据访问', evidence: [/\b(mongodb?|mongo database)\b/iu] },
 	{ key: 'mysql', iconName: 'arch_file_type_mysql_vscode.svg', description: 'MySQL 数据访问', evidence: [/\bmysql\b/iu] },
 	{ key: 'sqlite', iconName: 'arch_file_type_sqlite_vscode.svg', description: 'SQLite 数据访问', evidence: [/\bsqlite\b/iu] },
@@ -118,7 +114,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'gitlab', iconName: 'brand_gitlab_logo.svg', description: 'GitLab 仓库、Merge Request、CI', evidence: [/\bgitlab\b|GitLab 仓库|Merge Request/iu] },
 	{ key: 'terraform', iconName: 'brand_terraform_icon_logo.svg', description: 'Terraform、基础设施即代码', evidence: [/基础设施即代码|\b(terraform|infrastructure as code|iac)\b/iu] },
 
-	// 编程语言、框架与平台；只接受明确名称，避免用普通词强行匹配技术图标。
+	// 编程语言、框架和平台同样要求明确名称；“组件”“服务”等泛词不能借用品牌图标。
 	{ key: 'typescript', iconName: 'brand_typescript.svg', description: 'TypeScript、TS 类型系统', evidence: [/\btypescript\b|TypeScript 类型|TS 类型系统/iu] },
 	{ key: 'javascript', iconName: 'brand_javascript.svg', description: 'JavaScript、ECMAScript', evidence: [/\b(javascript|ecmascript)\b/iu] },
 	{ key: 'python', iconName: 'brand_python_logo.svg', description: 'Python', evidence: [/\bpython\b/iu] },
@@ -141,108 +137,6 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'windows', iconName: 'brand_windows.svg', description: 'Windows、Win32', evidence: [/\b(windows|win32)\b/iu] },
 	{ key: 'linux', iconName: 'brand_linux.svg', description: 'Linux', evidence: [/\blinux\b/iu] },
 ]
-
-const AI_ICON_DESCRIPTIONS_EN: Readonly<Record<string, string>> = {
-	entry: 'program entry point, startup, or initialization',
-	algorithm: 'explicitly named algorithm, codec, hash, sort, or compression logic',
-	flow: 'workflow, lifecycle, processing pipeline, or state machine',
-	branch: 'conditional branch, route dispatch, or strategy selection',
-	architecture: 'software architecture, framework core, or core engine',
-	hierarchy: 'tree or hierarchical structure, AST, or DOM tree',
-	target: 'target resolution, target selection, or precise hit',
-	hook: 'hook, interceptor, or middleware',
-	factory: 'factory pattern, object factory, or factory method',
-	extension: 'plugin, extension point, or extension registration',
-	parsing: 'parser, tokenizer, lexer, or syntax analysis',
-	serialization: 'serialization, deserialization, marshaling, or unmarshaling',
-	data: 'database, data model, persistence, or data repository',
-	storage: 'storage, cache, backup, or persisting state to disk',
-	recovery: 'recovery, rollback, restore, undo, failover, or fallback',
-	network: 'network connection, remote request, socket, or RPC',
-	api: 'API endpoint or contract, REST, GraphQL, OpenAPI, or Swagger',
-	io: 'standard input/output, inter-process communication, or system integration',
-	file: 'file I/O, file parsing, directory scan, or file system',
-	clipboard: 'clipboard, copy, or paste',
-	email: 'email, mailbox, SMTP, or IMAP',
-	import: 'data or configuration import, ingestion, or inbound receipt',
-	export: 'data or configuration export, outbound delivery, or emitted output',
-	link: 'URL, URI, link, domain name, or query parameter',
-	configuration: 'configuration file, setting, environment variable, or preference',
-	cloud: 'generic cloud service, cloud resource, or cloud computing',
-	deployment: 'deployment, production release, rollout, or staged release',
-	build: 'project build, compilation, packaging, or bundling',
-	terminal: 'terminal, command line, console, shell, or CLI',
-	schedule: 'scheduled task, calendar job, scheduler, or cron',
-	async: 'asynchronous orchestration, concurrency, retry, polling, or task queue; async/await alone is insufficient',
-	dependency: 'dependency, dependency injection, binding, or module wiring',
-	template: 'template, scaffold, preset, or boilerplate generator',
-	maintenance: 'maintenance, refactoring, or technical-debt cleanup',
-	git: 'Git, commit, merge, rebase, cherry-pick, or version control',
-	search: 'search, lookup, find, locate, or full-text retrieval',
-	filter: 'filtering, allow/deny list, or exclusion rule',
-	validation: 'structural validation, assertion, schema or type check, or test',
-	error: 'error, exception, fault, or failure handling',
-	crash: 'crash, panic, outage, or fatal error',
-	warning: 'warning, risk, degradation, or deprecation',
-	debug: 'debugging, logging, diagnostics, tracing, or telemetry',
-	performance: 'performance, timing, timeout, latency, benchmark, or profiling',
-	analytics: 'metrics, statistics, analytics report, dashboard, or chart',
-	trend_up: 'upward or growth trend, or increasing metric',
-	trend_down: 'downward or declining trend, or decreasing metric',
-	experiment: 'experiment, trial, laboratory work, or A/B test',
-	repair: 'patch, hotfix, temporary fix, or workaround',
-	expiration: 'expiration, invalidation, TTL, or stale data',
-	approval: 'approval, approved review, or admission review',
-	security: 'security boundary, permission, authorization, or access control',
-	authentication: 'authentication, sign-in, API key, token, credential, OAuth, or JWT',
-	encryption: 'encryption, decryption, cipher, ciphertext, or cryptography',
-	privacy: 'privacy, data protection, redaction, masking, PII, or GDPR',
-	locking: 'mutex, read/write lock, semaphore, critical section, or deadlock',
-	unlocking: 'unlocking, releasing a lock, or unfreezing',
-	ai: 'artificial intelligence, LLM, inference, prompt, agent, embedding, or machine learning',
-	calculation: 'mathematical calculation, formula, arithmetic, billing, or amount calculation',
-	policy: 'policy, compliance, governance, or audit rule',
-	documentation: 'documentation, README, manual, user guide, developer guide, or API docs',
-	image: 'image, bitmap, canvas, photo, thumbnail, or gallery',
-	audio: 'audio, sound, voice, speech, or recording',
-	video: 'video, movie, media stream, or video codec',
-	user: 'user, account, profile, customer, or tenant identity',
-	location: 'location, geolocation, coordinates, latitude/longitude, or GPS',
-	mongodb: 'MongoDB or Mongo data access',
-	mysql: 'MySQL data access',
-	sqlite: 'SQLite data access',
-	postgresql: 'PostgreSQL or Postgres data access',
-	redis: 'Redis caching or data access',
-	container: 'Docker, container image/runtime, or Dockerfile',
-	orchestration: 'Kubernetes, K8s, Pod, Helm, or container orchestration',
-	aws: 'AWS or Amazon Web Services',
-	azure: 'Microsoft Azure',
-	gcp: 'Google Cloud or GCP',
-	github: 'GitHub repository, Issue, Pull Request, or Actions',
-	gitlab: 'GitLab repository, Merge Request, or CI',
-	terraform: 'Terraform or infrastructure as code',
-	typescript: 'TypeScript or its type system',
-	javascript: 'JavaScript or ECMAScript',
-	python: 'Python',
-	java: 'Java or JVM',
-	golang: 'Go language or Golang',
-	rust: 'Rust',
-	cpp: 'C++ or CPP',
-	csharp: 'C#, CSharp, or .NET',
-	php: 'PHP',
-	ruby: 'Ruby',
-	nodejs: 'Node.js or NodeJS',
-	react: 'React, JSX, or TSX',
-	vue: 'Vue or Vue.js',
-	angular: 'Angular',
-	svelte: 'Svelte or SvelteKit',
-	eslint: 'ESLint or linting rules',
-	jest: 'Jest tests',
-	android: 'Android',
-	apple: 'iOS, macOS, iPadOS, watchOS, or Apple platform',
-	windows: 'Windows or Win32',
-	linux: 'Linux',
-}
 
 export const AI_BOOKMARK_ICON_OPTIONS = AI_ICON_DEFINITIONS.map(({ key, iconName, description }) => ({
 	key,
@@ -318,13 +212,3 @@ export function resolveAIIconNameForSemantic(
 	if (mostSpecific.length !== 1 || mostSpecific[0].key !== requestedDefinition.key) return undefined
 	return requestedDefinition.iconName
 }
-
-export const AI_ICON_SELECTION_PROMPT = [
-	'icon 是可选字段。只有书签标签直接出现下列领域语义时，才输出对应的 icon；源码锚点只能帮助理解和排除冲突，不能单独作为选图依据。普通函数、模块、参数处理、数据转换和说明性代码一律省略 icon。选择顺序为具体产品或技术、明确领域、通用动作，例如 PostgreSQL 使用 postgresql 而不是 data，API Key 使用 authentication 而不是 validation。同一优先级存在多个候选时省略 icon。仅有 async/await 不能选择 async。URL、URI、域名及查询参数应选择 link，不能选择 authentication。匹配程度不高、存在歧义或无法可靠判断时不要输出 icon；插件会再次校验，不匹配时使用默认图标。可选语义键如下：',
-	...AI_BOOKMARK_ICON_OPTIONS.map(option => `- ${option.key}：${option.description}`),
-].join('\n')
-
-export const AI_ICON_SELECTION_PROMPT_EN = [
-	'The icon field is optional. Include an icon only when the bookmark label directly expresses one of the domain meanings below. The source anchor may only clarify meaning or reject conflicts; it cannot authorize an icon by itself. Omit icon for ordinary functions, modules, parameter handling, data transformations, and explanatory code. Prefer a specific product or technology over a clear domain, and a clear domain over a generic action: for example, use postgresql rather than data for PostgreSQL, and authentication rather than validation for an API key. Omit icon when multiple same-priority candidates apply. async/await alone does not justify async. URLs, URIs, domain names, and query parameters use link, not authentication. When confidence is not high, the meaning is ambiguous, or no key reliably applies, omit icon so the extension uses its default icon. Available semantic keys:',
-	...AI_BOOKMARK_ICON_OPTIONS.map(option => `- ${option.key}: ${AI_ICON_DESCRIPTIONS_EN[option.key]}`),
-].join('\n')

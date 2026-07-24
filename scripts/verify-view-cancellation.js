@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-view-cancellation`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-view-cancellation` 对应契约。
- * 核心边界：通过断言锁定“verify-view-cancellation”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 模拟连续切换视图，验证旧加载收到取消且不能提交、报错或结束新加载状态。
+ * 为核对连续切换视图，验证旧加载收到取消且不能提交、报错或结束新加载状态，脚本在临时目录中调用编译后的 `BookmarkRepository` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')

@@ -1,14 +1,10 @@
 /**
- * 模块说明：本文件负责跨模块常量与稳定标识符，具体对象为 `Commands`。
- *
- * 实现要点：集中声明稳定命令标识、菜单位置和可用条件，供清单生成与运行时共用。
- * 核心边界：保持输入输出、错误处理、异步时序和持久化格式稳定，避免注释整理改变任何运行行为。
- * 主要入口：`Commands`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 集中声明扩展命令 ID、上下文键和菜单分组，供运行时注册与清单生成共同引用。
+ * 这些字符串构成公开兼容面；改名会影响快捷键、菜单 when 条件和用户已有绑定。
  */
 import { ContextBookmark } from '../ContextValue'
-import { DEFAULT_AI_GENERATION_PROMPT, DEFAULT_AI_OPTIMIZATION_PROMPT } from './AIPrompts'
-import { UNDO_ACTION_LABELS } from '../UndoActions'
+import { messages as defaultMessages } from '../../i18n/catalogs/zh-cn'
+import { UNDO_ACTION_MESSAGE_KEYS } from '../UndoActions'
 
 export class Commands {
 	static readonly nameExtension = 'codebookmark'
@@ -32,6 +28,7 @@ export class Commands {
 	static readonly varBookmarkLoaded = 'bookmarks.var.bookmark.loaded'
 	static readonly varBookmarkLoadFailed = 'bookmarks.var.bookmark.loadFailed'
 	static readonly varIsExpanded = 'codebookmark.var.isExpanded'
+	static readonly varHasMultipleSelection = 'codebookmark.hasMultipleSelection'
 
 	static get codeBookmarkViewName() { return Commands.nameExtension + 'TreeView' }
 
@@ -44,6 +41,11 @@ export class Commands {
 	static editableBookmarkOnTree = `(${this.bookmarkOnTree} || ${this.pinnedBookmarkOnTree})`
 	static deletableBookmarkOnTree = `(viewItem == ${ContextBookmark.Bookmark} || viewItem == ${ContextBookmark.BookmarkInvalid} || viewItem == ${ContextBookmark.BookmarkPinned})`
 	static restoreDefaultIconOnTree = `(viewItem == ${ContextBookmark.Bookmark} || viewItem == ${ContextBookmark.BookmarkPinned} || viewItem == ${ContextBookmark.CodeMarkerCustom} || viewItem == ${ContextBookmark.CodeMarkerPinnedCustom})`
+	static fileOnTree = `(viewItem == ${ContextBookmark.File} || viewItem == ${ContextBookmark.FileCustom})`
+	static pinnedFileOnTree = `(viewItem == ${ContextBookmark.FilePinned} || viewItem == ${ContextBookmark.FilePinnedCustom})`
+	static editableTreeNode = `(${this.editableBookmarkOnTree} || ${this.fileOnTree} || ${this.pinnedFileOnTree})`
+	static deletableTreeNode = `(${this.deletableBookmarkOnTree} || ${this.fileOnTree} || ${this.pinnedFileOnTree})`
+	static customIconTreeNode = `(${this.restoreDefaultIconOnTree} || viewItem == ${ContextBookmark.FileCustom} || viewItem == ${ContextBookmark.FilePinnedCustom})`
 
 	static indexStatusBarButton = {
 		undo: 1,
@@ -53,113 +55,113 @@ export class Commands {
 		toggleExpand: 5
 	}
 
-	static undoCommands = Object.entries(UNDO_ACTION_LABELS).map(([action, label]) => ({
+	static undoCommands = Object.entries(UNDO_ACTION_MESSAGE_KEYS).map(([action, messageKey]) => ({
 		command: `${Commands.nameExtension}.undo.${action}`,
-		title: `撤销：${label}`,
+		title: `撤销：${defaultMessages[messageKey]}`,
 		icon: '$(discard)',
 		when: `${Commands.viewCodeBookmarkView} && ${Commands.varUndoOperation} == ${action}`,
 		enablement: Commands.varCanUndo,
-		category: 'Code Bookmarks',
+		category: '代码书签',
 		group: `navigation@${Commands.indexStatusBarButton.undo}`,
 	}))
 
-	static redoCommands = Object.entries(UNDO_ACTION_LABELS).map(([action, label]) => ({
+	static redoCommands = Object.entries(UNDO_ACTION_MESSAGE_KEYS).map(([action, messageKey]) => ({
 		command: `${Commands.nameExtension}.redo.${action}`,
-		title: `重做：${label}`,
+		title: `重做：${defaultMessages[messageKey]}`,
 		icon: '$(redo)',
 		when: `${Commands.viewCodeBookmarkView} && ${Commands.varRedoOperation} == ${action}`,
 		enablement: Commands.varCanRedo,
-		category: 'Code Bookmarks',
+		category: '代码书签',
 		group: `navigation@${Commands.indexStatusBarButton.redo}`,
 	}))
 
 	static bookmarkCommands = {
-		// 编辑器键盘快捷命令。
+		// 直接作用于活动编辑器和当前光标的命令。
 		toggleBookmark: {
 			'command': Commands.nameExtension + '.toggleBookmark',
 			'title': '添加/删除书签',
 			'key': 'ctrl+b',
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 			'when': 'editorTextFocus',
 		},
 		forceAddBookmark: {
 			'command': Commands.nameExtension + '.forceAddBookmark',
 			'title': '强制添加书签',
 			'key': 'ctrl+alt+shift+b',
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 			'when': 'editorTextFocus',
 		},
 		forceDeleteBookmark: {
 			'command': Commands.nameExtension + '.forceDeleteBookmark',
 			'title': '强制删除书签',
 			'key': 'ctrl+alt+shift+d',
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 			'when': 'editorTextFocus',
 		},
 
-		// 书签树节点上的行内操作按钮。
+		// 由树节点行内图标触发、会携带当前 TreeItem 的命令。
 		deleteBookmark: {
 			'command': Commands.nameExtension + '.deleteBookmark',
 			'title': '删除',
 			'icon': '$(trash)',
-			'when': `${this.viewCodeBookmarkView} && ${this.deletableBookmarkOnTree}`,
+			'when': `${this.viewCodeBookmarkView} && ${this.deletableTreeNode}`,
 			'group': 'inline@4'
 		},
 		editBookmark_editLabel: {
 			'command': Commands.nameExtension + '.editBookmark.editLabel',
 			'title': '重命名书签',
-			'category': 'Code Bookmarks'
+			'category': '代码书签'
 		},
 		editBookmark_updatePosOnly: {
 			'command': Commands.nameExtension + '.editBookmark.updatePosOnly',
 			'title': '更新书签位置到当前光标处（保留标签）',
-			'category': 'Code Bookmarks'
+			'category': '代码书签'
 		},
 		editBookmark_updatePosAndRename: {
 			'command': Commands.nameExtension + '.editBookmark.updatePosAndRename',
 			'title': '更新书签位置到当前光标处（重命名标签）',
-			'category': 'Code Bookmarks'
+			'category': '代码书签'
 		},
 		editBookmark_changeIcon: {
 			'command': Commands.nameExtension + '.editBookmark.changeIcon',
 			'title': '自定义书签图标',
-			'category': 'Code Bookmarks'
+			'category': '代码书签'
 		},
 		editBookmark_restoreDefaultIcon: {
 			'command': Commands.nameExtension + '.editBookmark.restoreDefaultIcon',
 			'title': '恢复默认图标',
-			'category': 'Code Bookmarks'
+			'category': '代码书签'
 		},
 		renameBookmark: {
 			'command': Commands.nameExtension + '.renameBookmark',
 			'title': '重命名书签',
 			'key': 'f2',
 			'when': `listFocus && focusedView == '${Commands.codeBookmarkViewName}'`,
-			'category': "Code Bookmarks"
+			'category': "代码书签"
 		},
 		pinView: {
 			'command': Commands.nameExtension + '.pinView',
-			'title': '设为当前文件的新书签容器',
+			'title': '设置为书签容器',
 			'icon': '$(folder-opened)',
-			'when': `${this.viewCodeBookmarkView} && (viewItem == ${ContextBookmark.Bookmark} || ${this.codeMarkerOnTree})`,
+			'when': `${this.viewCodeBookmarkView} && (viewItem == ${ContextBookmark.Bookmark} || ${this.codeMarkerOnTree} || ${this.fileOnTree}) && !${this.varHasMultipleSelection}`,
 			'group': 'inline@2'
 		},
 		unpinView: {
 			'command': Commands.nameExtension + '.unpinView',
-			'title': '取消新书签容器',
+			'title': '取消作为书签容器',
 			'icon': '$(folder)',
-			'when': `${this.viewCodeBookmarkView} && ${this.pinnedBookmarkOnTree}`,
+			'when': `${this.viewCodeBookmarkView} && (${this.pinnedBookmarkOnTree} || ${this.pinnedFileOnTree}) && !${this.varHasMultipleSelection}`,
 			'group': 'inline@2'
 		},
 
-		// 书签视图顶部工具栏按钮。
+		// 书签视图标题栏中的全局操作。
 		undo: {
 			'command': Commands.nameExtension + '.undo',
 			'title': '撤销：暂无可撤销操作',
 			'icon': '$(discard)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varCanUndo}`,
-			'category': "Code Bookmarks",
+			'category': "代码书签",
 			'group': `navigation@${this.indexStatusBarButton.undo}`
 		},
 		redo: {
@@ -168,7 +170,7 @@ export class Commands {
 			'icon': '$(redo)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varCanRedo}`,
-			'category': "Code Bookmarks",
+			'category': "代码书签",
 			'group': `navigation@${this.indexStatusBarButton.redo}`
 		},
 		searchInFile: {
@@ -177,7 +179,7 @@ export class Commands {
 			'icon': '$(search)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varHasBookmark}`,
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 			"group": `navigation@${this.indexStatusBarButton.searchInFile}`,
 		},
 		toggleExpandCollapse: {
@@ -186,7 +188,7 @@ export class Commands {
 			'icon': '$(expand-all)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varHasBookmark}`,
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 			"group": `navigation@${this.indexStatusBarButton.toggleExpand}`,
 		},
 		toggleExpandCollapse_collapse: {
@@ -195,7 +197,7 @@ export class Commands {
 			'icon': '$(collapse-all)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varHasBookmark}`,
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 			"group": `navigation@${this.indexStatusBarButton.toggleExpand}`,
 		},
 		sort: {
@@ -204,222 +206,222 @@ export class Commands {
 			'icon': '$(list-selection)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varHasBookmark}`,
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 		},
 		openSettings: {
 			'command': Commands.nameExtension + '.openSettings',
 			'title': '$(settings) 代码书签设置',
 			'icon': '$(settings)',
 			'when': `${this.viewCodeBookmarkView}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		openHelp: {
 			'command': Commands.nameExtension + '.openHelp',
 			'title': '$(info) 使用说明',
 			'icon': '$(info)',
 			'when': `${Commands.viewCodeBookmarkView}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		importBookmarkConfig: {
 			'command': Commands.nameExtension + '.importBookmarkConfig',
 			'title': '导入书签配置文件',
 			'icon': '$(file-symlink-file)',
 			'enablement': `!${Commands.varActiveFileHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		manageBookmarkConfigurations: {
 			'command': Commands.nameExtension + '.manageBookmarkConfigurations',
 			'title': '$(files) 书签配置文件管理',
 			'icon': '$(files)',
 			'when': `${Commands.viewCodeBookmarkView}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateAppend: {
 			'command': Commands.nameExtension + '.ai.generateAppend',
 			'title': '$(add) 追加',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateOverwrite: {
 			'command': Commands.nameExtension + '.ai.generateOverwrite',
 			'title': '$(replace) 重新生成并替换',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateSkip: {
 			'command': Commands.nameExtension + '.ai.generateSkip',
 			'title': '$(diff-added) 生成',
 			'when': `${Commands.viewCodeBookmarkView} && !${Commands.varActiveFileHasBookmark}`,
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiOptimize: {
 			'command': Commands.nameExtension + '.ai.optimize',
 			'title': '$(hubot) 当前脚本',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiOptimizeDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeDirect',
 			'title': '$(hubot) 优化当前脚本的书签标签',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiOptimizeFolderDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeFolderDirect',
 			'title': '$(hubot) 优化当前文件夹内有书签的脚本中的书签标签',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiOptimizeSelectedDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeSelectedDirect',
 			'title': '$(hubot) 优化选中书签的标签',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiOptimizeSelected: {
 			'command': Commands.nameExtension + '.ai.optimizeSelected',
 			'title': '$(hubot) 选中的书签',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateAppendFolder: {
 			'command': Commands.nameExtension + '.ai.generateAppendFolder',
 			'title': '$(add) 为有书签的脚本追加',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateOverwriteFolder: {
 			'command': Commands.nameExtension + '.ai.generateOverwriteFolder',
 			'title': '$(replace) 为有书签的脚本重新生成并替换',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateAppendFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateAppendFolderDirect',
 			'title': '$(add) 为当前文件夹内有书签的脚本追加',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateOverwriteFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateOverwriteFolderDirect',
 			'title': '$(replace) 为当前文件夹内有书签的脚本重新生成并替换',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateSkipFolder: {
 			'command': Commands.nameExtension + '.ai.generateSkipFolder',
 			'title': '$(diff-added) 为所有无书签脚本生成',
 			'when': `${Commands.viewCodeBookmarkView} && ${Commands.varCurrentFolderHasUnbookmarkedScript}`,
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiGenerateSkipFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateSkipFolderDirect',
 			'title': '$(diff-added) 为当前文件夹内无书签脚本生成',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiOptimizeFolder: {
 			'command': Commands.nameExtension + '.ai.optimizeFolder',
 			'title': '$(hubot) 当前文件夹内有书签的脚本',
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiOptimizeContextItem: {
 			'command': Commands.nameExtension + '.ai.optimizeContextItem',
 			'title': '$(hubot) AI 优化书签标签',
 			'when': `${Commands.viewCodeBookmarkView} && ${Commands.editableBookmarkOnTree}`,
 			'enablement': Commands.whenAIAnalysisAvailable,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		aiTestConnection: {
 			'command': Commands.nameExtension + '.ai.testConnection',
 			'title': '测试 AI 连接',
 			'icon': '$(debug-disconnect)',
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 		},
 		aiOpenSettings: {
 			'command': Commands.nameExtension + '.ai.openSettings',
 			'title': '$(settings) AI 配置',
 			'icon': '$(settings)',
-			"category": "Code Bookmarks",
+			"category": "代码书签",
 		},
 		exportToMarkdown: {
 			'command': Commands.nameExtension + '.exportToMarkdown',
 			'title': 'Markdown',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		exportToHtml: {
 			'command': Commands.nameExtension + '.exportToHtml',
 			'title': 'HTML',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		exportToCsv: {
 			'command': Commands.nameExtension + '.exportToCsv',
 			'title': 'CSV',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		exportToText: {
 			'command': Commands.nameExtension + '.exportToText',
 			'title': '纯文本',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		exportSourceFiles: {
 			'command': Commands.nameExtension + '.exportSourceFiles',
 			'title': '配置源文件',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		batchExportToMarkdown: {
 			'command': Commands.nameExtension + '.batchExportToMarkdown',
 			'title': 'Markdown',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		batchExportToHtml: {
 			'command': Commands.nameExtension + '.batchExportToHtml',
 			'title': 'HTML',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		batchExportToCsv: {
 			'command': Commands.nameExtension + '.batchExportToCsv',
 			'title': 'CSV',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		batchExportToText: {
 			'command': Commands.nameExtension + '.batchExportToText',
 			'title': '纯文本',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		batchExportSourceFiles: {
 			'command': Commands.nameExtension + '.batchExportSourceFiles',
 			'title': '配置源文件',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			'enablement': `${Commands.varHasBookmark}`,
-			"category": "Code Bookmarks"
+			"category": "代码书签"
 		},
 		clearInvalidBookmarks: {
 			'command': Commands.nameExtension + '.clearInvalidBookmarks',
 			'title': '$(trash) 清除失效书签',
 			'when': `bookmarks.var.bookmark.hasInvalid`,
-			'category': 'Code Bookmarks'
+			'category': '代码书签'
 		}
 	}
 
@@ -493,8 +495,8 @@ export class Commands {
 	static editSubmenu_items = [
 		{ command: this.bookmarkCommands.editBookmark_editLabel.command, when: `viewItem != ${ContextBookmark.BookmarkInvalid}`, group: "1_modification@1" },
 		{ command: this.bookmarkCommands.editBookmark_changeIcon.command, when: `viewItem != ${ContextBookmark.BookmarkInvalid}`, group: "1_modification@2" },
-		{ command: this.bookmarkCommands.editBookmark_updatePosOnly.command, group: "2_position@1" },
-		{ command: this.bookmarkCommands.editBookmark_updatePosAndRename.command, group: "2_position@2" }
+		{ command: this.bookmarkCommands.editBookmark_updatePosOnly.command, when: `!${this.fileOnTree} && !${this.pinnedFileOnTree}`, group: "2_position@1" },
+		{ command: this.bookmarkCommands.editBookmark_updatePosAndRename.command, when: `!${this.fileOnTree} && !${this.pinnedFileOnTree}`, group: "2_position@2" }
 	]
 
 	static moreSubmenu_items = [
@@ -681,23 +683,23 @@ export class Commands {
 		this.bookmarkCommands.unpinView,
 		{
 			"submenu": this.editSubmenuId,
-			"when": `${this.viewCodeBookmarkView} && ${this.editableBookmarkOnTree}`,
+			"when": `${this.viewCodeBookmarkView} && ${this.editableTreeNode}`,
 			"group": "inline@3"
 		},
 		this.bookmarkCommands.deleteBookmark,
 		{
 			"command": this.bookmarkCommands.editBookmark_editLabel.command,
-			"when": `${this.viewCodeBookmarkView} && ${this.editableBookmarkOnTree}`,
+			"when": `${this.viewCodeBookmarkView} && ${this.editableTreeNode}`,
 			"group": "1_edit@1"
 		},
 		{
 			"command": this.bookmarkCommands.editBookmark_changeIcon.command,
-			"when": `${this.viewCodeBookmarkView} && ${this.editableBookmarkOnTree}`,
+			"when": `${this.viewCodeBookmarkView} && ${this.editableTreeNode}`,
 			"group": "1_edit@2"
 		},
 		{
 			"command": this.bookmarkCommands.editBookmark_restoreDefaultIcon.command,
-			"when": `${this.viewCodeBookmarkView} && ${this.restoreDefaultIconOnTree}`,
+			"when": `${this.viewCodeBookmarkView} && ${this.customIconTreeNode}`,
 			"group": "1_edit@3"
 		},
 		{
@@ -791,14 +793,14 @@ export class Commands {
 					"order": 10,
 					"type": "string",
 					"editPresentation": "multilineText",
-					"default": DEFAULT_AI_GENERATION_PROMPT,
+					"default": defaultMessages['ai.prompt.generation'],
 					"description": "AI 自动提取书签的系统提示词。"
 				},
 				"codebookmark.AI.optimizePrompt": {
 					"order": 11,
 					"type": "string",
 					"editPresentation": "multilineText",
-					"default": DEFAULT_AI_OPTIMIZATION_PROMPT,
+					"default": defaultMessages['ai.prompt.optimization'],
 					"description": "AI 优化书签标签和语义图标时的提示词。"
 				}
 			}

@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责集成测试专用公开接口，具体对象为 `IntegrationTestTypes`。
- *
- * 实现要点：把真实提供器操作包装为稳定测试 API，并只返回可断言的不可变快照。
- * 核心边界：仅向受控测试环境暴露稳定快照和操作入口，生产运行时不得依赖这些接口。
- * 主要入口：`IntegrationBookmarkSnapshotNode`、`IntegrationBookmarkSnapshot`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 定义 Extension Host 集成测试可读取的书签树快照结构。
+ * 类型只包含路径、标签、身份和层级等可观察字段，不把内部服务或 VS Code 实例暴露给测试。
  */
 export interface IntegrationBookmarkSnapshotNode {
 	readonly id: string
@@ -12,6 +8,9 @@ export interface IntegrationBookmarkSnapshotNode {
 	readonly path: string
 	readonly isFile: boolean
 	readonly scriptId?: string
+	readonly ownerScriptId?: string
+	readonly parentId?: string
+	readonly treeDepth: number
 	readonly line: number
 	readonly children: readonly IntegrationBookmarkSnapshotNode[]
 }

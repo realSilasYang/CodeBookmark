@@ -1,10 +1,6 @@
 /**
- * 模块说明：本文件负责行为契约与回归验证，具体对象为 `verify-bookmark-deletion-workflow-runner`。
- *
- * 实现要点：构造隔离夹具或模块替身，直接调用编译结果并以断言锁定 `verify-bookmark-deletion-workflow-runner` 对应契约。
- * 核心边界：通过断言锁定“verify-bookmark-deletion-workflow-runner”相关行为，任何失败都表示实现偏离既有契约。
- * 主要入口：`makeBookmark`、`attach`、`createPort`、`main`。
- * 维护约束：注释只解释意图与约束；修改实现后必须同步更新相应契约测试和验证脚本。
+ * 覆盖选中删除、子树删除和失效书签清理的确认、撤销、保存与分级统计。
+ * 为核对选中删除、子树删除和失效书签清理的确认、撤销、保存与分级统计，脚本直接调用编译后的 `Bookmark`、`BookmarkSet`、`ContextValue`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
 const { createVscodeFake } = require('./test-support/vscode-fake')
@@ -42,6 +38,8 @@ function makeBookmark(id, options = {}) {
     isInvalid: options.invalid,
     codeMarker: options.codeMarker,
     contextValue: options.contextValue,
+    scriptId: options.scriptId,
+    ownerScriptId: options.ownerScriptId,
     subs: options.subs,
   })
 }
@@ -53,11 +51,12 @@ function attach(parent, child) {
 
 function createPort(bookmarks, events, targets = []) {
   const containsId = (set, id) => set.values.some(bookmark => bookmark.id === id || containsId(bookmark.subs, id))
+  const containsCodeMarker = bookmark => bookmark.isCodeMarker || bookmark.subs.values.some(containsCodeMarker)
   return {
     bookmarks: () => bookmarks,
     resolveTargets: () => targets,
     findBookmark: bookmark => bookmarks.findBookmark(bookmark),
-    bookmarkContainsCodeMarker: bookmark => bookmark.isCodeMarker || bookmark.subs.values.some(child => child.isCodeMarker),
+    bookmarkContainsCodeMarker: containsCodeMarker,
     warnProtectedCodeMarkers: count => events.push(`warn:${count}`),
     deleteBookmark: id => {
       events.push(`delete:${id}`)
@@ -69,6 +68,8 @@ function createPort(bookmarks, events, targets = []) {
     saveUndoState: action => events.push(`undo:${action}`),
     saveBookmarks: paths => events.push(`save:${paths.join('|')}`),
     refreshDecoration: () => events.push('refresh'),
+    hideFileNode: scriptId => events.push(`hide:${scriptId}`),
+    commitTopology: async () => { events.push('commit') },
   }
 }
 
@@ -104,6 +105,7 @@ async function main() {
     'delete:first',
     'delete:second',
     'save:C:\\workspace\\src/first.ts|C:\\workspace\\src/second.ts',
+    'commit',
     'refresh',
   ])
   assert.equal(informationMessages.at(-1), '批量删除完成，删除结果：共 2 个书签：一级 2 个。')
@@ -135,10 +137,52 @@ async function main() {
     'undo:deleteBookmarks',
     'delete:folder',
     'save:C:\\workspace\\src/folder.ts',
+    'commit',
     'refresh',
   ])
   assert.equal(retainTree.findBookmark(child), child)
   assert.equal(child.parent, file)
+
+  const fileA = makeBookmark('file-a', {
+    path: 'src/a.ts',
+    contextValue: ContextBookmark.File,
+    scriptId: 'script-a',
+  })
+  const bookmarkA = makeBookmark('bookmark-a', { path: 'src/a.ts', ownerScriptId: 'script-a' })
+  const fileB = makeBookmark('file-b', {
+    path: 'src/b.ts',
+    contextValue: ContextBookmark.File,
+    scriptId: 'script-b',
+  })
+  const bookmarkB = makeBookmark('bookmark-b', { path: 'src/b.ts', ownerScriptId: 'script-b' })
+  const protectedB = makeBookmark('todo-b', {
+    path: 'src/b.ts',
+    ownerScriptId: 'script-b',
+    codeMarker: { marker: 'TODO' },
+  })
+  attach(fileA, bookmarkA)
+  attach(bookmarkA, fileB)
+  attach(fileB, bookmarkB)
+  attach(bookmarkB, protectedB)
+  const crossScriptTree = new BookmarkSet([fileA])
+  const crossScriptEvents = []
+  promptResults.push('delete')
+  await runDeleteBookmarks(fileA, undefined, createPort(crossScriptTree, crossScriptEvents, [fileA]))
+  assert.equal(crossScriptTree.findBookmark(bookmarkA), undefined)
+  assert.equal(crossScriptTree.findBookmark(bookmarkB), undefined)
+  assert.equal(crossScriptTree.findBookmark(protectedB), protectedB)
+  assert.equal(protectedB.parent, undefined)
+  assert.deepEqual(crossScriptEvents, [
+    'undo:deleteBookmarks',
+    'warn:1',
+    'hide:script-a',
+    'hide:script-b',
+    'hide:script-a',
+    'delete:file-a',
+    'save:C:\\workspace\\src/a.ts',
+    'commit',
+    'refresh',
+  ])
 
   const protectedTree = new BookmarkSet([makeBookmark('protected', { codeMarker: { marker: 'TODO' } })])
   const protectedEvents = []
