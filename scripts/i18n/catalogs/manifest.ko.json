@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "코드 북마크",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "직관적인 코드 탐색을 위한 스마트 북마크입니다. 스티키 엔진이 북마크와 스크립트의 연결을 유지하여 코드 편집, 파일 이름 변경, 폴더 이동에도 자동으로 따라갑니다. 설정은 로컬에 저장되며, AI가 북마크를 생성하고 레이블을 다듬고 풍부한 아이콘을 연결해 중요한 로직을 한눈에 찾고 바로 이동할 수 있습니다.",
+  "codebookmark.description": "직관에 맞는 스마트한 코드 탐색을 위해 만들어졌습니다. 자체 개발한 앵커 엔진이 북마크를 코드 변화에 정확히 따라가게 하면서 스크립트와의 연결을 꾸준히 유지합니다. 로컬 저장 방식과 강력한 AI 지원, 풍부한 아이콘, 다양한 사용자 설정을 제공합니다.",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark가 스크립트를 연결하고 북마크 설정을 영구 저장하려면 로컬 파일 시스템이 필요합니다.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "신뢰할 수 없는 작업 영역에서도 로컬 북마크 기능은 사용할 수 있지만, AI 기능과 작업 영역 수준의 민감한 설정은 비활성화됩니다.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "코드 북마크",

@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "コードブックマーク",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "直感的なコードナビゲーションのためのスマートブックマークです。スティッキーエンジンがブックマークとスクリプトの結び付きを保ち、コード編集、ファイル名の変更、フォルダー移動にも自動で追従します。設定はローカルに保存され、AI によるブックマーク生成、ラベル改善、豊富なアイコンの割り当てによって重要なロジックへすぐに移動できます。",
+  "codebookmark.description": "直感に沿う、スマートなコードナビゲーションのために。独自開発のアンカーエンジンが、ブックマークをコードの変化へ正確に追従させ、スクリプトとの結び付きを保ちます。ローカル保存を採用し、強力な AI 支援、豊富なアイコン、柔軟なカスタマイズに対応します。",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark でスクリプトを関連付けて設定を永続化するには、ローカルファイルシステムが必要です。",
   "codebookmark.capabilities.untrustedWorkspaces.description": "信頼されていないワークスペースでもローカルブックマークは使用できますが、AI 機能とワークスペース単位の機密設定は無効になります。",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "コードブックマーク",

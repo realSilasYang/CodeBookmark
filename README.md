@@ -1,7 +1,6 @@
 <div align="center">
   <img src="./resources/bookmark_logo.png" width="112" height="112" alt="CodeBookmark Logo">
-
-  <p><strong>简体中文</strong> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.en.md">English</a></p>
+  <p><strong>简体中文</strong> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.zh-HK.md">繁體中文（香港）</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.zh-TW.md">繁體中文（台灣）</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.en.md">English</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.ja.md">日本語</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.vi.md">Tiếng Việt</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.ko.md">한국어</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.es.md">Español</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.fr.md">Français</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.pt.md">Português</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.ru.md">Русский</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.de.md">Deutsch</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.it.md">Italiano</a></p>
 
   <h1>代码书签 - CodeBookmark</h1>
 
@@ -42,6 +41,23 @@
 [文件事件、转移日志与存储根切换](#5-文件事件转移日志与存储根切换) · [保存队列、外部编辑与原子写入](#6-保存队列外部编辑与原子写入) · [源码位置追随](#7-源码位置追随) · [撤销设计](#8-撤销设计)<br>
 [AI 协议与安全边界](#9-ai-协议与安全边界) · [自动标记与语言配置](#10-自动标记与语言配置) · [图标系统与 Webview](#11-图标系统与-webview) · [构建、测试与发布](#12-构建测试与发布)
 
+
+# 赞赏
+
+如果书签导航与 AI 辅助为你节省了时间，欢迎通过下方二维码请作者喝杯奶茶！
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><strong>微信</strong></td>
+      <td align="center"><strong>支付宝</strong></td>
+    </tr>
+    <tr>
+      <td align="center"><img src="./resources/donate/wechat-pay.png" width="240" alt="微信个人收款码"></td>
+      <td align="center"><img src="./resources/donate/alipay.png" width="240" alt="支付宝个人收款码"></td>
+    </tr>
+  </table>
+</div>
 
 <br>
 
@@ -314,7 +330,7 @@ CodeBookmark/
 │  ├─ eslint.config.mjs             ESLint 严格检查配置
 │  └─ tsconfig.json                 TypeScript 编译配置
 ├─ docs/
-│  ├─ README.en.md                  英文项目文档
+│  ├─ README.*.md                   12 份非简体中文项目文档
 │  ├─ CHANGELOG.en.md               英文版本变化记录
 │  ├─ images/                       README 界面截图
 │  ├─ legal/                        第三方声明与许可证全文
@@ -354,7 +370,7 @@ CodeBookmark/
 └─ package-lock.json                可复现的 npm 依赖锁定
 ```
 
-`out/`、`.vscode-test/`、`node_modules/` 和根目录的 `package.nls*.json` 都是生成或依赖内容，不应手工修改；NLS 清单由编译生成到 `package.json` 同级供 VS Code 与 VSIX 使用，但不纳入源码管理，并在资源管理器中折叠到 `package.json` 下。扩展元数据和 npm 脚本定义在 `src/util/constants/BasePackage.ts`；命令、菜单、快捷键、设置和子菜单定义在 `src/util/constants/Commands.ts`；颜色定义在 `Colors.ts`。`npm run compile` 会先清理 `out/`、编译 TypeScript，再根据 `scripts/i18n/catalogs/manifest.<语言>.json` 重新生成 `package.json` 和 NLS 目录。Marketplace 不按访客语言切换搜索元数据，因此默认目录保持中文标题优先，并在同一个简短简介中加入英文核心价值和各支持语言的“代码书签”名称；30 个关键词则覆盖核心英文、简繁中文以及日、韩、越、西/葡、法、俄、德、意检索词。扩展安装后，各语言环境仍使用各自完整的母语清单，其他明确的非中文环境回退英文。
+`out/`、`.vscode-test/`、`node_modules/` 和根目录的 `package.nls*.json` 都是生成或依赖内容，不应手工修改；NLS 清单由编译生成到 `package.json` 同级供 VS Code 与 VSIX 使用，但不纳入源码管理，并在资源管理器中折叠到 `package.json` 下。扩展元数据和 npm 脚本定义在 `src/util/constants/BasePackage.ts`；命令、菜单、快捷键、设置和子菜单定义在 `src/util/constants/Commands.ts`；颜色定义在 `Colors.ts`。`npm run compile` 会先清理 `out/`、编译 TypeScript，再根据 `scripts/i18n/catalogs/manifest.<语言>.json` 重新生成 `package.json` 和 NLS 目录。Marketplace 默认简介保持自然、精炼的简体中文，不再混入检索词；30 个 `keywords` 独立覆盖核心英文、简繁中文以及日、韩、越、西／葡、法、俄、德、意搜索词。扩展安装后，各受支持语言使用自己的母语清单，其他明确的非中文环境回退英文。
 
 运行时文案统一使用 `localize('稳定键', { 命名参数 })`，13 套完整目录位于 `src/i18n/catalogs/`。业务源码不保存平行语言原文，也不能用译文参与条件判断；命令 ID、菜单条件、Webview 消息、筛选/排序稳定值、配置键和持久化字段始终与语言无关。运行时目录和 VS Code 在扩展激活前解析的命令、菜单、设置文案均跟随 `vscode.env.language`，因此插件界面始终与 VS Code 显示语言一致。简体中文是探测为空时的默认目录，`zh-Hans` 回退简体，`zh-Hant` 回退台繁，澳门地区回退港繁；明确但未注册的非中文语言回退英文。
 
@@ -401,7 +417,7 @@ extension.activate
 
 `Bookmark.fromJSON()` 对类型、位置范围、展开状态和自动标记元数据做严格校验；最大深度为 64，最大节点数为 10,000。损坏的单条书签可被跳过，损坏的脚本信封不会进入索引。
 
-`BookmarkSet` 负责身份去重、父子查询、同文件拖拽、防循环、固定容器、路径批量改写和重复文件节点合并。跨文件拖拽在 Provider 层拒绝，以保持“一份脚本配置只拥有一个脚本的数据”这一边界。
+`BookmarkSet` 负责身份去重、父子查询、同文件树操作、防循环、固定容器、路径批量改写和重复文件节点合并。Provider 允许文件节点与普通书签进行跨文件视觉排序和嵌套，但不会转移书签的数据所有权：一份脚本配置始终只保存该脚本拥有的书签，跨文件关系单独交给工作区布局记录。
 
 ## 4. 持久化布局与脚本身份
 
@@ -411,7 +427,8 @@ extension.activate
 │  └─ <scriptId>.json
 ├─ scopes/
 │  └─ <工作区名_路径哈希>/
-│     └─ _workspace_order.json
+│     ├─ _workspace_layout.json
+│     └─ _workspace_order.json      仅在尚未升级的旧顺序记录中出现
 ├─ .script-relocations/
 │  └─ <operationId>.json
 └─ .storage-transfer.json
@@ -419,7 +436,7 @@ extension.activate
 
 每类持久化数据都有独立的 `format` 身份和 `schemaVersion: 1`，覆盖脚本信封、工作区排序、脚本转移日志、存储根转移日志、撤销会话和最近图标。只有完全没有版本头的数据允许一次性升级；半个版本头、错误格式和未来版本会明确拒绝，避免把未知数据误读成当前结构。不可重建的旧脚本配置会保留迁移备份；成功完成的事务日志会连同临时迁移备份一起删除，不让历史元数据阻止旧目录清理。
 
-脚本信封结构为 `{ format, schemaVersion, script, bookmarks }`。`script` 保存 `id`、绝对 `path`、最近确认时间、可选的失联时间/排序位置和源码指纹；`bookmarks` 只保存该脚本的书签树。工作区目录不再保存书签副本，只保存视图顺序，因此同一脚本从工作区打开或独立打开都命中 `scripts/<scriptId>.json`。
+脚本信封结构为 `{ format, schemaVersion, script, bookmarks }`。`script` 保存 `id`、绝对 `path`、最近确认时间、可选的失联时间/排序位置和源码指纹；`bookmarks` 只保存该脚本的书签树。工作区 `_workspace_layout.json` 只保存跨文件顺序、父子关系、隐藏、容器和展开状态，不复制任何书签正文；读取旧 `_workspace_order.json` 后，首次保存新布局会写入当前记录并删除旧顺序文件。因此同一脚本从工作区打开或独立打开都命中 `scripts/<scriptId>.json`。
 
 工作区空视图的单文件导入仍以当前活动脚本为目标；工作区文件夹导入优先把所选目录中的 `*.codebookmark.json` 去掉后缀作为源码相对路径，并拼接到选定工作区根目录；若是原始 `scripts` 目录，则使用信封中的绝对脚本路径，但只接受仍位于该工作区的路径。导入前会验证配置结构和目标源码，指纹不一致时对整个批次统一确认；成功文件作为一次撤销操作提交，损坏配置、缺失源码和单个写入失败会分别计数，不影响其他候选继续导入。
 
@@ -533,7 +550,7 @@ node scripts/icons/generate-icon-dictionary.js
 npm run verify:icons
 ```
 
-发布前应通过 `npm run check:release`。扩展包只包含 `out`、`resources`、`package.nls*.json`、根目录中文 `README` 与 `CHANGELOG`、`docs` 中的英文版本、`LICENSE` 和 `docs/legal` 下的第三方声明与许可证。发布工具 `@vscode/vsce` 固定在开发依赖和 lockfile 中，全部 GitHub Actions 固定到完整提交 SHA。Release 只接受属于 `main` 历史的注解标签；工作流生成 VSIX、CycloneDX SBOM 和 `SHA256SUMS`，写入 GitHub 构建来源与 SBOM 证明，再通过 OIDC 短期令牌发布 Marketplace、核对线上包哈希并创建 GitHub Release。仓库不保存长期发布凭据；完整流程见[发布指南](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.md)。Marketplace Publisher ID 固定为 `realSilasYang`。项目源码使用 MIT 许可证，第三方图标与 Fuse.js 遵循各自许可证。
+发布前应通过 `npm run check:release`。扩展包只包含 `out`、`resources`、`package.nls*.json`、13 种语言的 `README`、中英文 `CHANGELOG`、`LICENSE` 和 `docs/legal` 下的第三方声明与许可证。扩展内“查看使用说明”会按照当前 VS Code 语言打开对应 README，未知的非中文语言回退英文。发布工具 `@vscode/vsce` 固定在开发依赖和 lockfile 中，全部 GitHub Actions 固定到完整提交 SHA。Release 只接受属于 `main` 历史的注解标签；工作流生成 VSIX、CycloneDX SBOM 和 `SHA256SUMS`，写入 GitHub 构建来源与 SBOM 证明，再通过 OIDC 短期令牌发布 Marketplace、核对线上包哈希并创建 GitHub Release。仓库不保存长期发布凭据；完整流程见[发布指南](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.md)。Marketplace Publisher ID 固定为 `realSilasYang`。项目源码使用 MIT 许可证，第三方图标与 Fuse.js 遵循各自许可证。
 
 # Star 历史趋势
 

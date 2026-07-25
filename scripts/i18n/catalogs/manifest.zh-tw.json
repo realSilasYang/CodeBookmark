@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "程式碼書籤",
   "codebookmark.displayName": "程式碼書籤 - CodeBookmark",
-  "codebookmark.description": "為直覺的程式碼導覽而生。錨定引擎會讓書籤持續綁定指令碼，並在編輯程式碼、重新命名檔案或移動資料夾時自動跟隨；設定保留在本機，AI 可協助產生書籤、改善標籤和搭配豐富圖示，讓關鍵邏輯一目了然、隨時直達。",
+  "codebookmark.description": "為智慧程式碼導覽而生，符合你的直覺。自研錨定引擎讓書籤精準跟隨程式碼，並持續綁定指令碼。採用本機儲存方案，具備強大的 AI 輔助功能，支援豐富圖示與自訂選項。",
   "codebookmark.capabilities.virtualWorkspaces.description": "程式碼書籤需要本機檔案系統，才能綁定指令碼並持久儲存書籤設定。",
   "codebookmark.capabilities.untrustedWorkspaces.description": "不受信任的工作區仍可使用本機書籤功能，但 AI 功能和工作區層級的敏感設定會停用。",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "程式碼書籤",

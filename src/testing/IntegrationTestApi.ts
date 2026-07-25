@@ -10,6 +10,7 @@ export interface CodeBookmarkIntegrationTestApi {
 	waitUntilReady(timeoutMs?: number): Promise<void>
 	synchronizeCodeMarkers(): Promise<boolean>
 	addBookmark(line: number, label: string): Promise<void>
+	toggleBookmark(line: number, label: string): Promise<void>
 	deleteBookmarksAtLine(line: number): Promise<void>
 	undo(): Promise<void>
 	redo(): Promise<void>
@@ -56,6 +57,13 @@ export function createIntegrationTestApi(
 			selectLine(editor, line)
 			await provider.ensureEditorScope(editor)
 			await provider.forceAddBookmark(editor, async () => label)
+			await provider.flushPendingSaves(true)
+		},
+		async toggleBookmark(line: number, label: string): Promise<void> {
+			const editor = activeFileEditor()
+			selectLine(editor, line)
+			await provider.ensureEditorScope(editor)
+			await provider.toggleBookmark(editor, async () => label)
 			await provider.flushPendingSaves(true)
 		},
 		async deleteBookmarksAtLine(line: number): Promise<void> {

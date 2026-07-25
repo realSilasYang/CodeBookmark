@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "Code-Lesezeichen",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "Für intelligente, intuitive Codenavigation entwickelt. Die persistente Engine hält Lesezeichen bei Codeänderungen sowie beim Umbenennen oder Verschieben von Dateien und Ordnern an ihre Skripte gebunden; Konfigurationen bleiben lokal gespeichert, während KI beim Erzeugen von Lesezeichen, Verbessern von Bezeichnungen und Auswählen aussagekräftiger Symbole hilft, damit wichtige Logik sofort sichtbar und erreichbar bleibt.",
+  "codebookmark.description": "Für intelligente Codenavigation entwickelt, die sich intuitiv anfühlt. Unsere eigens entwickelte Anker-Engine lässt Lesezeichen Codeänderungen präzise folgen und hält sie dauerhaft an ihre Skripte gebunden. Lokale Speicherung, leistungsstarke KI-Unterstützung, zahlreiche Symbole und flexible Anpassungen sind integriert.",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark benötigt ein lokales Dateisystem, um Skripte zu binden und Lesezeichenkonfigurationen dauerhaft zu speichern.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "Lokale Lesezeichen stehen auch in nicht vertrauenswürdigen Arbeitsbereichen zur Verfügung; KI-Funktionen und sensible arbeitsbereichsbezogene Einstellungen werden jedoch deaktiviert.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "Code-Lesezeichen",

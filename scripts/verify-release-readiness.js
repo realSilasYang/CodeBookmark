@@ -9,6 +9,7 @@ const path = require('node:path')
 const root = path.resolve(__dirname, '..')
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8')
 const { loadLocalizedManifest } = require('./lib/localized-manifest')
+const { README_DOCUMENTS } = require(path.join(root, 'out', 'i18n', 'ReadmeDocuments'))
 const manifest = loadLocalizedManifest('zh-cn')
 const lockfile = JSON.parse(read('package-lock.json'))
 
@@ -68,22 +69,16 @@ assert.equal(
   'Marketplace keywords must be unique'
 )
 assert.ok([...manifest.description].length <= 500, 'Marketplace description must remain concise')
-for (const discoveryText of [
-  '为代码智能导航而生',
-  'sticky tracking',
-  '代碼書籤',
-  '程式碼書籤',
-  'コードブックマーク',
-  '코드 북마크',
-  'Dấu trang mã nguồn',
-  'Marcadores de código',
-  'Signets de code',
-  'Закладки кода',
-  'Code-Lesezeichen',
-  'Segnalibri per codice',
-]) {
-  assert.ok(manifest.description.includes(discoveryText), `Marketplace description is missing '${discoveryText}'`)
-}
+assert.equal(
+  manifest.description,
+  '为代码智能导航而生，符合你的直觉。自研粘性引擎，让书签准确跟随代码并持续绑定脚本。采用本地保存方案，拥有强大的 AI 辅助功能，支持丰富的图标和自定义选项。',
+  'The default Marketplace description must remain natural Simplified Chinese instead of duplicating search keywords',
+)
+assert.doesNotMatch(
+  manifest.description,
+  /sticky tracking|代碼書籤|程式碼書籤|コードブックマーク|코드 북마크|Dấu trang|Marcadores|Signets|Закладки|Lesezeichen|Segnalibri/iu,
+  'Multilingual discovery terms belong in keywords, not the visible description',
+)
 assert.deepEqual(manifest.dependencies, {})
 assert.equal(lockfile.version, manifest.version)
 assert.equal(lockfile.packages[''].version, manifest.version)
@@ -96,8 +91,7 @@ assert.deepEqual(manifest.files, [
   'out/extension.js',
   'resources',
   'package.nls*.json',
-  'README.md',
-  'docs/README.en.md',
+  ...README_DOCUMENTS,
   'CHANGELOG.md',
   'docs/CHANGELOG.en.md',
   'LICENSE',
@@ -121,8 +115,7 @@ assert.match(manifest.scripts['check:release'], /npm audit --audit-level=low/)
 assert.match(manifest.scripts['check:release'], /npm run package:list/)
 
 const requiredSourceDocuments = [
-  'README.md',
-  path.join('docs', 'README.en.md'),
+  ...README_DOCUMENTS.map(documentPath => documentPath.replaceAll('/', path.sep)),
   'CHANGELOG.md',
   path.join('docs', 'CHANGELOG.en.md'),
   'LICENSE',
@@ -219,8 +212,7 @@ for (const content of [changelog, englishChangelog]) {
   assert.ok(content.includes(`[English](${githubDocumentUrl}docs/CHANGELOG.en.md)`))
 }
 const repositoryMarkdownDocuments = [
-  ['README.md', readme],
-  [path.join('docs', 'README.en.md'), englishReadme],
+  ...README_DOCUMENTS.map(documentPath => [documentPath, read(documentPath)]),
   [path.join('docs', 'release', 'RELEASING.md'), read(path.join('docs', 'release', 'RELEASING.md'))],
   [path.join('docs', 'release', 'RELEASING.en.md'), read(path.join('docs', 'release', 'RELEASING.en.md'))],
   [path.join('.github', 'CONTRIBUTING.md'), read(path.join('.github', 'CONTRIBUTING.md'))],
@@ -262,7 +254,7 @@ assert.match(license, /Copyright \(c\) 2026 阳熙来/)
 assert.match(readme, /\[发布指南\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.md\)/)
 assert.match(englishReadme, /\[release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.en\.md\)/i)
 assert.match(notices, /`fxemoji`[^\n]+CC-BY-4\.0/)
-for (const [documentName, content] of [['README.md', readme], ['docs/README.en.md', englishReadme], ['CHANGELOG.md', changelog], ['docs/CHANGELOG.en.md', englishChangelog]]) {
+for (const [documentName, content] of [...README_DOCUMENTS.map(documentPath => [documentPath, read(documentPath)]), ['CHANGELOG.md', changelog], ['docs/CHANGELOG.en.md', englishChangelog]]) {
   const markdownImages = [...content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)]
   const htmlImages = [...content.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
   for (const target of [...markdownImages, ...htmlImages].map(match => match[1])) {

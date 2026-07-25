@@ -159,8 +159,8 @@ assert.deepEqual(iconMetadataFalsePositives, [])
 const repositoryProseFalsePositives = [
   ['src/util/FileUtils.ts', 'typescript', cLikeProfile],
   ['src/util/CodeMarkerScanner.ts', 'typescript', cLikeProfile],
-  ['README.md', 'markdown', markupProfile],
-  ['docs/README.en.md', 'markdown', markupProfile],
+  ...require('./../out/i18n/ReadmeDocuments').README_DOCUMENTS
+    .map(fileName => [fileName, 'markdown', markupProfile]),
 ].flatMap(([fileName, languageId, profile]) => {
   const lines = fs.readFileSync(fileName, 'utf8').split(/\r\n|\n|\r/)
   return scanCodeMarkers(lines, languageId, fileName, 100, profile).occurrences

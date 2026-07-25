@@ -32,6 +32,7 @@ npm audit --audit-level=low
 - 扩展元数据和 npm 脚本以 `src/util/constants/BasePackage.ts` 为事实源。
 - 命令、菜单、快捷键和设置以 `src/util/constants/Commands.ts` 为事实源。
 - 修改上述文件后运行 `npm run compile`，让 `package.json` 与源码保持一致。
+- 新增用户可见运行时文案时，必须同步补齐 13 套语言目录；涉及 README 的功能变化应更新所有受影响语言版本。稳定命令 ID、协议值、持久化字段和条件判断不得依赖译文。
 - 新增行为应补充对应的 `scripts/verify-*.js`；涉及 VS Code 生命周期时再补集成测试。
 - 新增第三方资源前必须核对再分发许可，并更新 `docs/legal/THIRD_PARTY_NOTICES.md`。
 - 不要提交 API Key、用户路径、书签数据、构建产物或本地工具配置。
@@ -39,4 +40,4 @@ npm audit --audit-level=low
 
 ## 提交与 Pull Request
 
-每个提交应只表达一个完整意图，并包含必要的测试。Pull Request 请说明问题、行为变化、验证命令，以及可能影响的配置或持久化格式。用户可见变化还应更新 README 和 CHANGELOG。
+每个提交应只表达一个完整意图，并包含必要的测试。Pull Request 请说明问题、行为变化、验证命令，以及可能影响的配置或持久化格式。用户可见变化还应更新所有受影响的 README 语言版本和中英文 CHANGELOG。

@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "Marcadores de código",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "Marcadores inteligentes para navegar pelo código de forma intuitiva. O mecanismo de ancoragem mantém cada marcador vinculado ao script e acompanha edições, renomeações de arquivos e movimentações de pastas. A configuração fica salva localmente, enquanto a IA ajuda a gerar marcadores, aprimorar rótulos e escolher ícones adequados para destacar a lógica importante e acessá-la rapidamente.",
+  "codebookmark.description": "Criado para uma navegação inteligente pelo código que acompanha a sua intuição. Nosso mecanismo de ancoragem, desenvolvido internamente, faz os marcadores seguirem o código com precisão e permanecerem vinculados aos scripts. Inclui armazenamento local, assistência avançada de IA, muitos ícones e opções de personalização.",
   "codebookmark.capabilities.virtualWorkspaces.description": "O CodeBookmark precisa do sistema de arquivos local para vincular scripts e manter a configuração dos marcadores.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "Os marcadores locais continuam disponíveis em espaços de trabalho não confiáveis, mas os recursos de IA e as configurações confidenciais do espaço de trabalho ficam desativados.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "Marcadores de código",

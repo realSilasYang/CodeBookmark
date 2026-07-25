@@ -2,6 +2,21 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.1.1 - 2026-07-25
+
+### ✨ Added
+
+- **Complete documentation in 13 languages:** The user and developer guides are now fully available in Simplified Chinese, Hong Kong Traditional Chinese, Taiwan Traditional Chinese, English, Japanese, Vietnamese, Korean, Spanish, French, Portuguese, Russian, German, and Italian. The in-extension Help command opens the guide matching the current interface language, with English as the fallback for unsupported non-Chinese locales.
+- **Donation section:** The README now includes a concise, optional donation section for readers whose bookmark navigation and AI assistance have saved them time, with WeChat Pay and Alipay QR codes for buying the author a milk tea.
+
+---
+
+### 🚀 Improved
+
+- **Marketplace copy:** Store descriptions for all 13 languages now express the same core value in natural native wording, highlighting the in-house anchoring engine, local storage, AI assistance, rich icons, and customization. Multilingual discovery terms remain in keywords instead of being inserted into the visible description.
+- **Real Extension Host coverage:** Integration tests now validate every contributed command and setting, then exercise bookmark toggling, forced deletion, undo, and redo to catch manifest or command-registration drift.
+- **Development dependency security:** The transitive development dependency `brace-expansion` has been updated to `5.0.8`; the current dependency audit reports no known vulnerabilities.
+
 ## 🎉 Version 3.1.0 - 2026-07-24
 
 ### ✨ Added

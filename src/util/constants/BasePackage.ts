@@ -2,13 +2,14 @@
  * 作为扩展清单的源码真值，集中声明版本、身份、设置、命令、菜单和本地化原文。
  * package.json 由构建脚本生成；直接编辑生成清单会在下一次编译时被覆盖。
  */
+import { README_DOCUMENTS } from '../../i18n/ReadmeDocuments'
 import { RESTRICTED_WORKSPACE_CONFIGURATION_KEYS } from '../WorkspaceCapabilities'
 
 export const basePackage = {
 	"name": "codebookmark",
 	"displayName": "代码书签 - CodeBookmark",
-	"description": "为代码智能导航而生，符合你的直觉。粘性引擎持续绑定脚本，支持 AI 辅助、丰富图标和本地保存。Code bookmarks with sticky tracking, AI assistance, icons, and local storage. 代碼書籤・程式碼書籤・コードブックマーク・코드 북마크・Dấu trang mã nguồn・Marcadores de código・Signets de code・Закладки кода・Code-Lesezeichen・Segnalibri per codice。",
-	"version": "3.1.0",
+	"description": "为代码智能导航而生，符合你的直觉。自研粘性引擎，让书签准确跟随代码并持续绑定脚本。采用本地保存方案，拥有强大的 AI 辅助功能，支持丰富的图标和自定义选项。",
+	"version": "3.1.1",
 	"publisher": "realSilasYang",
 	"author": "阳熙来",
 	"private": true,
@@ -85,8 +86,7 @@ export const basePackage = {
 		"out/extension.js",
 		"resources",
 		"package.nls*.json",
-		"README.md",
-		"docs/README.en.md",
+		...README_DOCUMENTS,
 		"CHANGELOG.md",
 		"docs/CHANGELOG.en.md",
 		"LICENSE",

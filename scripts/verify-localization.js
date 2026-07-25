@@ -205,8 +205,29 @@ const chineseManifest = loadLocalizedManifest('zh-cn')
 const englishManifest = loadLocalizedManifest('en-US')
 assert.equal(chineseManifest.displayName, '代码书签 - CodeBookmark')
 assert.equal(englishManifest.displayName, 'CodeBookmark')
-assert.match(chineseManifest.description, /粘性引擎/)
-assert.match(englishManifest.description, /anchoring engine/i)
+const marketplaceDescriptionContracts = {
+  'zh-cn': [/智能导航/u, /符合你的直觉/u, /自研粘性引擎/u, /准确跟随代码.*持续绑定脚本/u, /本地保存/u, /强大的 AI 辅助/u, /丰富的图标.*自定义选项/u],
+  'zh-hk': [/智能程式碼導覽/u, /符合你的直覺/u, /自研錨定引擎/u, /準確跟隨程式碼.*持續綁定指令碼/u, /本機儲存/u, /強大的 AI 輔助/u, /豐富圖示.*自訂選項/u],
+  'zh-tw': [/智慧程式碼導覽/u, /符合你的直覺/u, /自研錨定引擎/u, /精準跟隨程式碼.*持續綁定指令碼/u, /本機儲存/u, /強大的 AI 輔助/u, /豐富圖示.*自訂選項/u],
+  en: [/intelligent code navigation/iu, /feels intuitive/iu, /in-house anchoring engine/iu, /precisely aligned.*persistently bound/iu, /local storage/iu, /powerful AI assistance/iu, /rich icon library.*customization/iu],
+  ja: [/スマートなコードナビゲーション/u, /直感に沿う/u, /独自開発のアンカーエンジン/u, /正確に追従.*結び付きを保/u, /ローカル保存/u, /強力な AI 支援/u, /豊富なアイコン.*カスタマイズ/u],
+  vi: [/điều hướng mã thông minh/iu, /trực giác/iu, /tự phát triển/iu, /bám chính xác.*luôn gắn/iu, /lưu cục bộ/iu, /AI mạnh mẽ/iu, /biểu tượng phong phú.*cá nhân hóa/iu],
+  ko: [/스마트한 코드 탐색/u, /직관에 맞는/u, /자체 개발한 앵커 엔진/u, /정확히 따라가게.*연결을 꾸준히 유지/u, /로컬 저장/u, /강력한 AI 지원/u, /풍부한 아이콘.*사용자 설정/u],
+  es: [/navegación inteligente por el código/iu, /se siente natural/iu, /desarrollado internamente/iu, /sigan el código con precisión.*permanezcan vinculados/iu, /almacenamiento local/iu, /potente asistencia de IA/iu, /iconos.*personalización/iu],
+  fr: [/navigation intelligente dans le code/iu, /fidèle à votre intuition/iu, /développé en interne/iu, /suivre précisément le code.*restant liés/iu, /stockage local/iu, /puissante assistance IA/iu, /icônes.*personnalisation/iu],
+  pt: [/navegação inteligente pelo código/iu, /acompanha a sua intuição/iu, /desenvolvido internamente/iu, /seguirem o código com precisão.*permanecerem vinculados/iu, /armazenamento local/iu, /assistência avançada de IA/iu, /ícones.*personalização/iu],
+  ru: [/умной навигации по коду/iu, /вашей интуиции/iu, /Собственный механизм привязки/iu, /точно следовать.*оставаться связанными/iu, /локальное хранение/iu, /мощные возможности ИИ/iu, /набор значков.*настройка/iu],
+  de: [/intelligente Codenavigation/iu, /intuitiv anfühlt/iu, /eigens entwickelte Anker-Engine/iu, /präzise folgen.*dauerhaft.*gebunden/iu, /Lokale Speicherung/iu, /leistungsstarke KI-Unterstützung/iu, /Symbole.*Anpassungen/iu],
+  it: [/navigazione intelligente del codice/iu, /in sintonia con il tuo intuito/iu, /sviluppato internamente/iu, /con precisione.*legati agli script/iu, /salvataggio locale/iu, /potenti funzioni IA/iu, /icone.*personalizzazione/iu],
+}
+assert.deepEqual(Object.keys(marketplaceDescriptionContracts), supportedLocales)
+for (const [locale, patterns] of Object.entries(marketplaceDescriptionContracts)) {
+  const description = loadLocalizedManifest(locale).description
+  assert.ok([...description].length <= 500, `${locale} Marketplace description must remain concise`)
+  for (const pattern of patterns) {
+    assert.match(description, pattern, `${locale} Marketplace description is missing the intended product positioning: ${pattern}`)
+  }
+}
 const languageSetting = englishManifest.contributes.configuration
   .flatMap(group => Object.entries(group.properties))
   .find(([key]) => key === 'codebookmark.language')?.[1]
@@ -265,7 +286,11 @@ for (const entry of collectStrings(englishManifest)) {
   if (entry.path[0] === 'author' || entry.path[0] === 'keywords') continue
   assert.doesNotMatch(entry.value, cjk, `Localized English manifest contains Chinese text at ${entry.path.join('.')}`)
 }
-for (const requiredFile of ['README.md', 'docs/README.en.md', 'CHANGELOG.md', 'docs/CHANGELOG.en.md']) {
+const { readmeDocumentForLanguage, README_DOCUMENTS } = require(path.join(root, 'out', 'i18n', 'ReadmeDocuments'))
+const README_DOCUMENT_BY_LANGUAGE = Object.fromEntries(
+  supportedLocales.map(locale => [locale, readmeDocumentForLanguage(locale)]),
+)
+for (const requiredFile of [...README_DOCUMENTS, 'CHANGELOG.md', 'docs/CHANGELOG.en.md']) {
   assert.ok(englishManifest.files.includes(requiredFile), `${requiredFile} must be included in the VSIX`)
 }
 
@@ -706,7 +731,6 @@ assert.doesNotMatch(read('src/util/UndoActions.ts'), /_EN\b|currentLanguage\(/)
 assert.doesNotMatch(read('src/util/AIIconCatalog.ts'), /_EN\b|AI_ICON_SELECTION_PROMPT/)
 
 const documentPairs = [
-  ['README.md', 'docs/README.en.md'],
   ['CHANGELOG.md', 'docs/CHANGELOG.en.md'],
   ['docs/release/RELEASING.md', 'docs/release/RELEASING.en.md'],
   ['docs/release/CHANGELOG_TEMPLATE.md', 'docs/release/CHANGELOG_TEMPLATE.en.md'],
@@ -715,6 +739,29 @@ const documentPairs = [
   ['.github/SUPPORT.md', '.github/SUPPORT.en.md'],
   ['.github/PULL_REQUEST_TEMPLATE.md', '.github/PULL_REQUEST_TEMPLATE.en.md'],
 ]
+assert.deepEqual(Object.keys(README_DOCUMENT_BY_LANGUAGE), supportedLocales)
+for (const [locale, documentPath] of Object.entries(README_DOCUMENT_BY_LANGUAGE)) {
+  const content = read(documentPath)
+  assert.ok(fs.statSync(path.join(root, documentPath)).isFile(), `${documentPath} must exist`)
+  assert.ok(Buffer.byteLength(content, 'utf8') >= 8_000, `${documentPath} is too short to be a complete localized guide`)
+  assert.match(content, /CodeBookmark/u, `${documentPath} must identify the product`)
+  for (const requiredTopic of [
+    'globalStoragePath', 'Ctrl+B', '_workspace_layout.json', 'TODO', 'FIXME', 'BUG',
+    'APIKey', 'test:integration', 'CycloneDX', 'SHA256SUMS',
+  ]) {
+    assert.ok(content.includes(requiredTopic), `${documentPath} must document ${requiredTopic}`)
+  }
+  assert.match(content, new RegExp(`<strong>${({
+    'zh-cn': '简体中文', 'zh-hk': '繁體中文（香港）', 'zh-tw': '繁體中文（台灣）', en: 'English',
+    ja: '日本語', vi: 'Tiếng Việt', ko: '한국어', es: 'Español', fr: 'Français', pt: 'Português',
+    ru: 'Русский', de: 'Deutsch', it: 'Italiano',
+  })[locale].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</strong>`), `${documentPath} must mark its active language`)
+  for (const targetDocument of README_DOCUMENTS) {
+    if (targetDocument === documentPath) continue
+    const targetUrl = targetDocument === 'README.md' ? 'README.md' : targetDocument
+    assert.match(content, new RegExp(targetUrl.replaceAll('.', '\\.')), `${documentPath} must link to ${targetDocument}`)
+  }
+}
 for (const [chineseDocument, englishDocument] of documentPairs) {
   assert.ok(fs.statSync(path.join(root, chineseDocument)).isFile())
   assert.ok(fs.statSync(path.join(root, englishDocument)).isFile())
@@ -738,6 +785,8 @@ assert.match(read('docs/README.en.md'), /^# User Guide$/m)
 assert.match(read('docs/README.en.md'), /^# Developer Guide$/m)
 assert.match(read('docs/README.en.md'), /Stable-key runtime language catalogs/)
 assert.match(read('docs/README.en.md'), /localize\('stable\.key', \{ namedValue \}\)/)
+assert.match(read('src/commands/bookmarkCommands.ts'), /readmeDocumentForLanguage\(currentLanguage\(\)\)/)
+assert.match(read('src/commands/bookmarkCommands.ts'), /documentPath\.split\('\/'\)/)
 assert.match(read('scripts/integration/run-integration-tests.js'), /const fallbackTestLocale = 'tr'/)
 assert.match(
   read('scripts/integration/run-integration-tests.js'),

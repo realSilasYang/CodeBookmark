@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "代码书签",
   "codebookmark.displayName": "代码书签 - CodeBookmark",
-  "codebookmark.description": "为代码智能导航而生，符合你的直觉。粘性引擎持续绑定脚本，支持 AI 辅助、丰富图标和本地保存。Code bookmarks with sticky tracking, AI assistance, icons, and local storage. 代碼書籤・程式碼書籤・コードブックマーク・코드 북마크・Dấu trang mã nguồn・Marcadores de código・Signets de code・Закладки кода・Code-Lesezeichen・Segnalibri per codice。",
+  "codebookmark.description": "为代码智能导航而生，符合你的直觉。自研粘性引擎，让书签准确跟随代码并持续绑定脚本。采用本地保存方案，拥有强大的 AI 辅助功能，支持丰富的图标和自定义选项。",
   "codebookmark.capabilities.virtualWorkspaces.description": "代码书签需要本地文件系统来绑定脚本并持久化书签配置。",
   "codebookmark.capabilities.untrustedWorkspaces.description": "未受信任工作区中可使用本地书签功能，但 AI 功能和工作区级敏感配置会停用。",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "代码书签",

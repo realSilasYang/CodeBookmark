@@ -1,5 +1,5 @@
 /**
- * 从生成后的 package.json 检查扩展身份、工作区能力、命令唯一性和双语文档入口。
+ * 从生成后的 package.json 检查扩展身份、工作区能力、命令唯一性和多语种文档入口。
  * 这些断言保护 Marketplace 兼容面，防止普通重构意外改变扩展 ID 或打包边界。
  */
 const assert = require('node:assert/strict')
@@ -9,6 +9,7 @@ const { describe, it } = require('node:test')
 
 const root = path.resolve(__dirname, '..', '..')
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+const { README_DOCUMENTS, readmeDocumentForLanguage } = require(path.join(root, 'out', 'i18n', 'ReadmeDocuments'))
 
 describe('generated extension manifest baseline', () => {
 	it('declares workspace execution and explicit workspace capability boundaries', () => {
@@ -40,14 +41,25 @@ describe('generated extension manifest baseline', () => {
     assert.equal(new Set(commandIds).size, commandIds.length)
   })
 
-  it('publishes the bilingual README and changelog documents', () => {
+  it('publishes every localized README and the bilingual changelog documents', () => {
     for (const requiredFile of [
-      'README.md',
-      'docs/README.en.md',
+      ...README_DOCUMENTS,
       'CHANGELOG.md',
       'docs/CHANGELOG.en.md',
     ]) {
       assert.ok(manifest.files.includes(requiredFile), `Missing packaged document: ${requiredFile}`)
     }
+  })
+
+  it('maps every supported interface language to its packaged README', () => {
+    assert.deepEqual([
+      readmeDocumentForLanguage('zh-cn'), readmeDocumentForLanguage('zh-hk'),
+      readmeDocumentForLanguage('zh-tw'), readmeDocumentForLanguage('en'),
+      readmeDocumentForLanguage('ja'), readmeDocumentForLanguage('vi'),
+      readmeDocumentForLanguage('ko'), readmeDocumentForLanguage('es'),
+      readmeDocumentForLanguage('fr'), readmeDocumentForLanguage('pt'),
+      readmeDocumentForLanguage('ru'), readmeDocumentForLanguage('de'),
+      readmeDocumentForLanguage('it'),
+    ], README_DOCUMENTS)
   })
 })

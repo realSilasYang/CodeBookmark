@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "Segnalibri di codice",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "Pensato per navigare il codice in modo intelligente e intuitivo. Il motore persistente mantiene i segnalibri associati agli script mentre il codice cambia e quando file o cartelle vengono rinominati o spostati; le configurazioni restano locali e l’IA aiuta a generare segnalibri, migliorare le etichette e scegliere icone significative, così la logica importante rimane subito riconoscibile e raggiungibile.",
+  "codebookmark.description": "Pensato per una navigazione intelligente del codice, in sintonia con il tuo intuito. Il nostro motore di ancoraggio sviluppato internamente fa seguire ai segnalibri le modifiche del codice con precisione e li mantiene legati agli script. Include salvataggio locale, potenti funzioni IA, numerose icone e opzioni di personalizzazione.",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark richiede un file system locale per associare gli script e rendere persistenti le configurazioni dei segnalibri.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "Nelle aree di lavoro non attendibili sono disponibili i segnalibri locali, mentre le funzioni IA e le impostazioni sensibili dell’area di lavoro vengono disattivate.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "Segnalibri di codice",

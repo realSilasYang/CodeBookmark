@@ -43,7 +43,7 @@ npm run check:release
 npm run package:vsix -- --out codebookmark-3.0.0.vsix
 ```
 
-`package:list` 和 VSIX 打包使用 `devDependencies` 与 `package-lock.json` 中精确固定的 `@vscode/vsce`，发布工作流不临时下载另一份工具。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、双语 README/CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。扩展没有运行时依赖或原生模块，生成的 VSIX 是跨平台通用包，不需要 `--target`。
+`package:list` 和 VSIX 打包使用 `devDependencies` 与 `package-lock.json` 中精确固定的 `@vscode/vsce`，发布工作流不临时下载另一份工具。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、13 语 README、中英文 CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。扩展没有运行时依赖或原生模块，生成的 VSIX 是跨平台通用包，不需要 `--target`。
 
 ## 3. 联动发布 Marketplace 与 GitHub Release
 

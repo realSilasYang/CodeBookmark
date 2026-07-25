@@ -6,6 +6,12 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { GENERATED_NLS_PATTERN } = require('./lib/manifest-language-catalogs')
+const readmeDocuments = [
+  'docs/README.en.md', 'docs/README.zh-HK.md', 'docs/README.zh-TW.md',
+  'docs/README.ja.md', 'docs/README.vi.md', 'docs/README.ko.md',
+  'docs/README.es.md', 'docs/README.fr.md', 'docs/README.pt.md',
+  'docs/README.ru.md', 'docs/README.de.md', 'docs/README.it.md',
+]
 
 const root = path.resolve(__dirname, '..')
 const rootFiles = new Set([
@@ -50,7 +56,7 @@ assert.deepEqual(
 const requiredPaths = [
   'config/eslint.config.mjs',
   'config/tsconfig.json',
-  'docs/README.en.md',
+  ...readmeDocuments,
   'docs/CHANGELOG.en.md',
   'docs/legal/THIRD_PARTY_NOTICES.md',
   'docs/legal/licenses/Apache-2.0.txt',

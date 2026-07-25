@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "Dấu trang mã",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "Dấu trang thông minh dành cho việc điều hướng mã theo trực giác. Bộ máy bám dính giữ dấu trang gắn với tệp lệnh và tự đi theo khi mã được sửa, tệp được đổi tên hoặc thư mục được di chuyển. Cấu hình được lưu cục bộ; AI hỗ trợ tạo dấu trang, cải thiện nhãn và chọn biểu tượng phù hợp để bạn nhận ra logic quan trọng và truy cập ngay lập tức.",
+  "codebookmark.description": "Được tạo ra để điều hướng mã thông minh theo đúng trực giác của bạn. Bộ máy neo do chúng tôi tự phát triển giúp dấu trang bám chính xác theo thay đổi của mã và luôn gắn với tệp lệnh. Dữ liệu được lưu cục bộ, kèm trợ lý AI mạnh mẽ, thư viện biểu tượng phong phú và nhiều tùy chọn cá nhân hóa.",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark cần hệ thống tệp cục bộ để liên kết tệp lệnh và lưu bền vững cấu hình dấu trang.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "Bạn vẫn có thể dùng dấu trang cục bộ trong không gian làm việc chưa tin cậy, nhưng các tính năng AI và cấu hình nhạy cảm ở cấp không gian làm việc sẽ bị tắt.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "Dấu trang mã",

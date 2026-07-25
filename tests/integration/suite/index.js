@@ -86,20 +86,24 @@ async function run() {
   assert.ok(extensionApi.integration, 'Integration test API is unavailable')
 
   const commands = new Set(await vscode.commands.getCommands(true))
-  for (const command of [
-    'codebookmark.toggleBookmark',
-    'codebookmark.manageBookmarkConfigurations',
-    'codebookmark.ai.openSettings',
-    'codebookmark.ai.testConnection',
-  ]) {
+  const contributedCommands = extension.packageJSON.contributes.commands.map(command => command.command)
+  assert.equal(new Set(contributedCommands).size, contributedCommands.length, 'Contributed command IDs must be unique')
+  for (const command of contributedCommands) {
     assert.equal(commands.has(command), true, `Missing registered command: ${command}`)
   }
 
   const configuration = vscode.workspace.getConfiguration('codebookmark')
+  const contributedConfigurationKeys = extension.packageJSON.contributes.configuration
+    .flatMap(group => Object.keys(group.properties))
+  for (const configurationKey of contributedConfigurationKeys) {
+    assert.match(configurationKey, /^codebookmark\./u)
+    assert.equal(
+      configuration.has(configurationKey.slice('codebookmark.'.length)),
+      true,
+      `Missing contributed configuration: ${configurationKey}`,
+    )
+  }
   assert.equal(configuration.has('language'), false)
-  assert.equal(configuration.has('AI.address'), true)
-  assert.equal(configuration.has('AI.APIKey'), true)
-  assert.equal(configuration.has('AI.model'), true)
   if (!['zh-cn', 'en'].includes(expectedLocale) || expectedRuntimeLanguage !== expectedLocale) {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors')
     return
@@ -110,7 +114,9 @@ async function run() {
   const document = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(workspaceFolder.uri, 'sample.ts'))
   await vscode.window.showTextDocument(document)
   assert.equal(vscode.window.activeTextEditor?.document.uri.toString(), document.uri.toString())
-  await extensionApi.integration.waitUntilReady()
+  // 连续启动多个真实 Extension Host 时，VS Code 的首次工作区初始化可能超过
+  // 扩展自身的慢加载提示阈值；测试等待更久，但仍以有限上限识别真正的挂起。
+  await extensionApi.integration.waitUntilReady(30_000)
 
   await extensionApi.integration.addBookmark(1, 'Integration return value')
   let snapshot = extensionApi.integration.snapshot()
@@ -121,12 +127,47 @@ async function run() {
   const scriptId = snapshot.roots[0].scriptId
   const bookmarkId = snapshot.roots[0].children[0].id
   assert.ok(scriptId)
+  const bookmarkCount = currentSnapshot => currentSnapshot.roots
+    .reduce((count, root) => count + root.children.length, 0)
 
   await extensionApi.integration.undo()
-  assert.equal(extensionApi.integration.snapshot().roots.length, 0)
+  assert.equal(bookmarkCount(extensionApi.integration.snapshot()), 0)
   await extensionApi.integration.redo()
   snapshot = extensionApi.integration.snapshot()
   assert.equal(snapshot.roots[0].scriptId, scriptId)
+  assert.equal(snapshot.roots[0].children[0].id, bookmarkId)
+
+  await extensionApi.integration.toggleBookmark(0, 'Toggle command bookmark')
+  snapshot = extensionApi.integration.snapshot()
+  assert.deepEqual(snapshot.roots[0].children.map(child => child.label).sort(), [
+    'Integration return value',
+    'Toggle command bookmark',
+  ].sort())
+  await extensionApi.integration.toggleBookmark(0, 'This label must not be requested while deleting')
+  assert.deepEqual(
+    extensionApi.integration.snapshot().roots[0].children.map(child => child.id),
+    [bookmarkId],
+  )
+  await extensionApi.integration.undo()
+  assert.equal(extensionApi.integration.snapshot().roots[0].children.length, 2)
+  await extensionApi.integration.redo()
+  assert.deepEqual(
+    extensionApi.integration.snapshot().roots[0].children.map(child => child.id),
+    [bookmarkId],
+  )
+
+  await extensionApi.integration.deleteBookmarksAtLine(1)
+  snapshot = extensionApi.integration.snapshot()
+  assert.equal(bookmarkCount(snapshot), 0)
+  await extensionApi.integration.undo()
+  snapshot = extensionApi.integration.snapshot()
+  assert.equal(snapshot.roots[0].scriptId, scriptId)
+  assert.equal(snapshot.roots[0].children[0].id, bookmarkId)
+  await extensionApi.integration.redo()
+  snapshot = extensionApi.integration.snapshot()
+  assert.equal(bookmarkCount(snapshot), 0)
+  await extensionApi.integration.undo()
+  snapshot = extensionApi.integration.snapshot()
   assert.equal(snapshot.roots[0].children[0].id, bookmarkId)
 
   const scriptsFolder = path.join(storageRoot, 'scripts')

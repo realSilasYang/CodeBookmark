@@ -1244,8 +1244,11 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		return runForceDeleteBookmark(editor, this.manualBookmarkWorkflowPort())
 	}
 
-	async toggleBookmark(editor: vscode.TextEditor): Promise<void> {
-		return runToggleBookmark(editor, this.manualBookmarkWorkflowPort())
+	async toggleBookmark(
+		editor: vscode.TextEditor,
+		showInputBox?: (options: vscode.InputBoxOptions) => Thenable<string | undefined>,
+	): Promise<void> {
+		return runToggleBookmark(editor, this.manualBookmarkWorkflowPort(showInputBox))
 	}
 	// 从这里开始是整份脚本级命令，与上面的单个书签节点操作分开排列。
 	private currentScopeFilePath: string | undefined;

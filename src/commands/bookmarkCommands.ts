@@ -8,7 +8,8 @@ import { Commands } from '../util/constants/Commands'
 import { Bookmark } from '../models/Bookmark'
 import { ExtensionConfig } from '../config/ExtensionConfig'
 import { AIService } from '../util/AIService'
-import { isUserCancelledError, localize } from '../i18n/Localization'
+import { currentLanguage, isUserCancelledError, localize } from '../i18n/Localization'
+import { readmeDocumentForLanguage } from '../i18n/ReadmeDocuments'
 import { ensureAIWorkspaceTrusted } from '../util/WorkspaceCapabilityPolicy'
 
 export function bookmarkCommands(
@@ -174,7 +175,8 @@ export function bookmarkCommands(
 	register(Commands.bookmarkCommands.toggleExpandCollapse_collapse.command,
 		requireStorage(() => provider.toggleExpandCollapse()))
 	register(Commands.bookmarkCommands.openHelp.command, () => {
-		const uri = vscode.Uri.joinPath(context.extensionUri, 'README.md')
+		const documentPath = readmeDocumentForLanguage(currentLanguage())
+		const uri = vscode.Uri.joinPath(context.extensionUri, ...documentPath.split('/'))
 		return vscode.commands.executeCommand('markdown.showPreview', uri)
 	})
 	register(Commands.bookmarkCommands.clearInvalidBookmarks.command,

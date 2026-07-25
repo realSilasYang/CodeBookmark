@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..')
 const { loadLocalizedManifest } = require('./lib/localized-manifest')
 const manifest = loadLocalizedManifest('zh-cn')
 const { Commands } = require(path.join(root, 'out', 'util', 'constants', 'Commands'))
+const { README_DOCUMENTS } = require(path.join(root, 'out', 'i18n', 'ReadmeDocuments'))
 
 assert.equal('activationEvents' in manifest, false)
 assert.equal(fs.existsSync(path.join(root, '.vscodeignore')), false, 'manifest.files is the only package filter')
@@ -17,8 +18,7 @@ assert.deepEqual(manifest.files, [
   'out/extension.js',
   'resources',
   'package.nls*.json',
-  'README.md',
-  'docs/README.en.md',
+  ...README_DOCUMENTS,
   'CHANGELOG.md',
   'docs/CHANGELOG.en.md',
   'LICENSE',
@@ -26,8 +26,7 @@ assert.deepEqual(manifest.files, [
   'docs/legal/licenses',
 ])
 for (const releaseDocument of [
-  'README.md',
-  'docs/README.en.md',
+  ...README_DOCUMENTS,
   'CHANGELOG.md',
   'docs/CHANGELOG.en.md',
   'LICENSE',

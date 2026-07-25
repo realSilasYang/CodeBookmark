@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "Signets de code",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "Conçu pour parcourir le code intelligemment et naturellement. Son moteur persistant maintient les signets liés aux scripts pendant les modifications du code et lorsque des fichiers ou dossiers sont renommés ou déplacés ; les configurations restent locales et l’IA aide à générer des signets, améliorer leurs libellés et choisir des icônes pertinentes, afin que la logique importante reste immédiatement visible et accessible.",
+  "codebookmark.description": "Conçu pour une navigation intelligente dans le code, fidèle à votre intuition. Notre moteur d’ancrage développé en interne permet aux signets de suivre précisément le code tout en restant liés à leurs scripts. Le stockage local, une puissante assistance IA, de nombreuses icônes et des options de personnalisation sont intégrés.",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark a besoin d’un système de fichiers local pour lier les scripts et enregistrer durablement les configurations de signets.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "Les signets locaux restent disponibles dans les espaces de travail non approuvés, mais les fonctions IA et les réglages sensibles propres à l’espace de travail sont désactivés.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "Signets de code",

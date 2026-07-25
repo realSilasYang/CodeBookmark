@@ -1,7 +1,7 @@
 <div align="center">
   <img src="../resources/bookmark_logo.png" width="112" height="112" alt="CodeBookmark logo">
 
-  <p><a href="https://github.com/realSilasYang/CodeBookmark/blob/main/README.md">简体中文</a> · <strong>English</strong></p>
+  <p><a href="https://github.com/realSilasYang/CodeBookmark/blob/main/README.md">简体中文</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.zh-HK.md">繁體中文（香港）</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.zh-TW.md">繁體中文（台灣）</a> · <strong>English</strong> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.ja.md">日本語</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.vi.md">Tiếng Việt</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.ko.md">한국어</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.es.md">Español</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.fr.md">Français</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.pt.md">Português</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.ru.md">Русский</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.de.md">Deutsch</a> · <a href="https://github.com/realSilasYang/CodeBookmark/blob/main/docs/README.it.md">Italiano</a></p>
 
   <h1>CodeBookmark</h1>
 
@@ -43,6 +43,17 @@ The Code Bookmarks panel shows the bookmarks attached to each script, their hier
 [AI Protocol and Security Boundaries](#9-ai-protocol-and-security-boundaries) · [Automatic Markers and Language Profiles](#10-automatic-markers-and-language-profiles) · [Icon System and Webviews](#11-icon-system-and-webviews) · [Build, Test, and Release](#12-build-test-and-release)
 
 <br>
+
+# Donate
+
+If bookmark navigation and AI assistance save you time, you can use either QR code below to buy the author a milk tea!
+
+<div align="center">
+  <table>
+    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
+    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="WeChat Pay donation QR code"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="Alipay donation QR code"></td></tr>
+  </table>
+</div>
 
 # User Guide
 
@@ -311,7 +322,7 @@ CodeBookmark/
 │  ├─ eslint.config.mjs             Strict ESLint configuration
 │  └─ tsconfig.json                 TypeScript compiler configuration
 ├─ docs/
-│  ├─ README.en.md                  English project documentation
+│  ├─ README.*.md                   Twelve non-Simplified-Chinese project guides
 │  ├─ CHANGELOG.en.md               English release history
 │  ├─ images/                       README screenshots
 │  ├─ legal/                        Third-party notices and complete licenses
@@ -351,7 +362,7 @@ CodeBookmark/
 └─ package-lock.json                Reproducible npm dependency lock
 ```
 
-`out/`, `.vscode-test/`, `node_modules/`, and root-level `package.nls*.json` files are generated output or dependencies and must not be edited by hand. Compilation writes NLS catalogs beside `package.json` for VS Code and the VSIX, but they are not committed and are nested beneath `package.json` in the explorer. Extension metadata and npm scripts are defined in `src/util/constants/BasePackage.ts`; commands, menus, keybindings, settings, and submenus live in `src/util/constants/Commands.ts`; colors live in `Colors.ts`. `npm run compile` cleans `out/`, compiles TypeScript, and regenerates `package.json` and every NLS catalog from `scripts/i18n/catalogs/manifest.<locale>.json`. Marketplace search metadata does not switch with the visitor locale, so the default catalog keeps the Chinese title first while one concise description adds the English value proposition and the native “code bookmark” name for every supported language. Thirty Marketplace keywords cover core English, Simplified and Traditional Chinese, Japanese, Korean, Vietnamese, Spanish/Portuguese, French, Russian, German, and Italian search terms. Once installed, each supported locale still receives its complete native manifest; any explicitly non-Chinese locale without a catalog falls back to English.
+`out/`, `.vscode-test/`, `node_modules/`, and root-level `package.nls*.json` files are generated output or dependencies and must not be edited by hand. Compilation writes NLS catalogs beside `package.json` for VS Code and the VSIX, but they are not committed and are nested beneath `package.json` in the explorer. Extension metadata and npm scripts are defined in `src/util/constants/BasePackage.ts`; commands, menus, keybindings, settings, and submenus live in `src/util/constants/Commands.ts`; colors live in `Colors.ts`. `npm run compile` cleans `out/`, compiles TypeScript, and regenerates `package.json` and every NLS catalog from `scripts/i18n/catalogs/manifest.<locale>.json`. The default Marketplace description remains concise, natural Simplified Chinese and never doubles as a search-term list. Thirty independent `keywords` cover core English, Simplified and Traditional Chinese, Japanese, Korean, Vietnamese, Spanish/Portuguese, French, Russian, German, and Italian discovery terms. Once installed, each supported locale receives its complete native manifest; any explicitly non-Chinese locale without a catalog falls back to English.
 
 Stable-key runtime language catalogs live in `src/i18n/catalogs/`, with one complete 627-entry catalog for each of the same 13 languages. Runtime code calls `localize('stable.key', { namedValue })`; feature modules contain neither parallel translations nor language-specific branches, and translated text is never used as a condition. Command IDs, menu conditions, Webview messages, stable filter and sort values, setting keys, and persistence fields are language-neutral. Runtime catalogs and the commands, menus, and configuration descriptions that VS Code resolves before activation all follow `vscode.env.language`, so the extension consistently uses the VS Code display language. Simplified Chinese is the default when no locale can be detected. `zh-Hans` resolves to Simplified Chinese, `zh-Hant` to Taiwan Traditional Chinese, and Macao to Hong Kong Traditional Chinese. An explicit but unsupported non-Chinese locale resolves to English.
 
@@ -398,7 +409,7 @@ View changes use a generation number, `AbortSignal`, and a serial preparation qu
 
 `Bookmark.fromJSON()` strictly checks types, position ranges, collapsible state, and automatic-marker metadata. The maximum depth is 64 and the maximum tree size is 10,000 nodes. A damaged individual bookmark can be skipped; a damaged script envelope never enters the index.
 
-`BookmarkSet` owns identity deduplication, parent and child lookup, same-file dragging, cycle prevention, the active bookmark container, bulk path rewriting, and duplicate file-node merging. Providers reject cross-file bookmark dragging to preserve the invariant that one script configuration owns data for exactly one script.
+`BookmarkSet` owns identity deduplication, parent and child lookup, same-file tree operations, cycle prevention, the active bookmark container, bulk path rewriting, and duplicate file-node merging. Providers allow file nodes and ordinary bookmarks to be visually sorted and nested across files without transferring data ownership: one script configuration still stores only bookmarks owned by that script, while cross-file relationships live in the workspace layout record.
 
 ## 4. Persistence Layout and Script Identity
 
@@ -408,7 +419,8 @@ View changes use a generation number, `AbortSignal`, and a serial preparation qu
 │  └─ <scriptId>.json
 ├─ scopes/
 │  └─ <workspace-name_path-hash>/
-│     └─ _workspace_order.json
+│     ├─ _workspace_layout.json
+│     └─ _workspace_order.json      present only for an unupgraded legacy order record
 ├─ .script-relocations/
 │  └─ <operationId>.json
 └─ .storage-transfer.json
@@ -416,7 +428,7 @@ View changes use a generation number, `AbortSignal`, and a serial preparation qu
 
 Every persistence family carries its own `format` identity and `schemaVersion: 1`: script envelopes, workspace order, script-relocation journals, storage-root transfer records, undo sessions, and recent icons. Only data with no version header at all is eligible for one-time migration. A partial header, wrong format, or future version is rejected explicitly so unknown data cannot be interpreted as the current schema. Irrecoverable legacy script data keeps a migration backup. Completed transaction journals and temporary migration backups are removed so historical metadata cannot prevent cleanup of an old directory.
 
-A script envelope has the shape `{ format, schemaVersion, script, bookmarks }`. `script` holds `id`, absolute `path`, the last confirmation time, optional missing-since time or ordering position, and a source fingerprint. `bookmarks` contains only that script's bookmark tree. Workspace directories contain view order rather than bookmark copies, so opening a script through a workspace or by itself always resolves to `scripts/<scriptId>.json`.
+A script envelope has the shape `{ format, schemaVersion, script, bookmarks }`. `script` holds `id`, absolute `path`, the last confirmation time, optional missing-since time or ordering position, and a source fingerprint. `bookmarks` contains only that script's bookmark tree. Workspace `_workspace_layout.json` stores cross-file order, parent relationships, hidden state, containers, and expansion without copying bookmark content. After a legacy `_workspace_order.json` is read, the first new-layout save writes the current record and removes the old order file. Opening a script through a workspace or by itself therefore always resolves to `scripts/<scriptId>.json`.
 
 Single-file import from an empty workspace view still targets the active script. Folder import strips `*.codebookmark.json` from each selected relative path and joins the remainder to the chosen workspace root. When the raw `scripts` directory is selected, envelope paths are used instead, but only when they still point inside that workspace. The batch validates configuration structure and destination source before import and asks once if fingerprints differ. Successful files commit as one undo action; damaged configurations, missing sources, and isolated write failures are counted separately without stopping the remaining candidates.
 
@@ -530,7 +542,7 @@ node scripts/icons/generate-icon-dictionary.js
 npm run verify:icons
 ```
 
-Run `npm run check:release` before publishing. The extension package contains only `out`, `resources`, `package.nls*.json`, the root Chinese `README` and `CHANGELOG`, their English files under `docs`, `LICENSE`, and third-party notices and licenses under `docs/legal`. The official VS Code packaging tool, `@vscode/vsce`, is pinned in both development dependencies and the lockfile; every GitHub Action is pinned to a full commit SHA. Release accepts only annotated tags that belong to `main` history. The workflow creates a VSIX, CycloneDX SBOM, and `SHA256SUMS`, records GitHub build-provenance and SBOM attestations, publishes to Marketplace with a short-lived OIDC token, verifies the online package hash, and then creates the GitHub Release. No long-lived publishing credential is stored in the repository. See the [release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md) for the complete process. The Marketplace Publisher ID is fixed as `realSilasYang`. Project source is under the MIT License; third-party icons and Fuse.js retain their respective licenses.
+Run `npm run check:release` before publishing. The extension package contains only `out`, `resources`, `package.nls*.json`, all 13 localized README documents, the Chinese and English changelogs, `LICENSE`, and third-party notices and licenses under `docs/legal`. The in-extension help command opens the README matching the current VS Code language, while an unsupported non-Chinese locale falls back to English. The official VS Code packaging tool, `@vscode/vsce`, is pinned in both development dependencies and the lockfile; every GitHub Action is pinned to a full commit SHA. Release accepts only annotated tags that belong to `main` history. The workflow creates a VSIX, CycloneDX SBOM, and `SHA256SUMS`, records GitHub build-provenance and SBOM attestations, publishes to Marketplace with a short-lived OIDC token, verifies the online package hash, and then creates the GitHub Release. No long-lived publishing credential is stored in the repository. See the [release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md) for the complete process. The Marketplace Publisher ID is fixed as `realSilasYang`. Project source is under the MIT License; third-party icons and Fuse.js retain their respective licenses.
 
 # Star History
 

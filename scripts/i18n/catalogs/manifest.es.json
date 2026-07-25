@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "Marcadores de código",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "Marcadores inteligentes para navegar por el código de forma intuitiva. El motor de anclaje mantiene cada marcador vinculado a su script y lo sigue al editar el código, cambiar el nombre de un archivo o mover una carpeta. La configuración se guarda localmente y la IA ayuda a generar marcadores, mejorar etiquetas y asignar iconos adecuados para que la lógica importante sea fácil de reconocer y abrir.",
+  "codebookmark.description": "Creado para una navegación inteligente por el código que se siente natural. Nuestro motor de anclaje, desarrollado internamente, hace que los marcadores sigan el código con precisión y permanezcan vinculados a sus scripts. Incluye almacenamiento local, una potente asistencia de IA, abundantes iconos y opciones de personalización.",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark necesita un sistema de archivos local para vincular scripts y conservar la configuración de los marcadores.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "Los marcadores locales siguen disponibles en espacios de trabajo que no son de confianza, pero se desactivan las funciones de IA y la configuración confidencial del espacio de trabajo.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "Marcadores de código",

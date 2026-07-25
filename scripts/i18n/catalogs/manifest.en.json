@@ -1,7 +1,7 @@
 {
   "codebookmark.common.commandCategory": "CodeBookmark",
   "codebookmark.displayName": "CodeBookmark",
-  "codebookmark.description": "Built for intuitive code navigation. Its anchoring engine keeps bookmarks bound to scripts as code changes and files or folders move. Configurations stay local, while AI can generate bookmarks, improve labels, and select meaningful icons so important logic remains visible and immediately accessible.",
+  "codebookmark.description": "Built for intelligent code navigation that feels intuitive. Our in-house anchoring engine keeps bookmarks precisely aligned with changing code and persistently bound to their scripts. Local storage, powerful AI assistance, a rich icon library, and flexible customization are built in.",
   "codebookmark.capabilities.virtualWorkspaces.description": "CodeBookmark requires a local file system to bind scripts and persist bookmark configurations.",
   "codebookmark.capabilities.untrustedWorkspaces.description": "Local bookmark features remain available in untrusted workspaces, but AI features and sensitive workspace settings are disabled.",
   "codebookmark.contributes.viewsContainers.activitybar.codebookmark.title": "CodeBookmark",
