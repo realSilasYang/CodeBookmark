@@ -41,10 +41,14 @@ function resolveVsixInvocation(repoRoot, args) {
     throw new Error(`VSIX output must use the .vsix extension: ${outputPath}`)
   }
 
-  const realRepoRoot = fs.realpathSync.native(repoRoot)
-  if (isSameOrDescendant(realRepoRoot, outputPath)) {
+  // 词法边界必须与调用方传入的仓库根目录比较。Windows 的临时目录可能经
+  // realpath 变成大小写或短名称不同的等价路径；若提前混用真实路径，仓库内
+  // 输出仍会被后续真实目录检查拦住，但错误分类会随机器变化。
+  const lexicalRepoRoot = path.resolve(repoRoot)
+  if (isSameOrDescendant(lexicalRepoRoot, outputPath)) {
     throw new Error(`VSIX output must stay outside the repository: ${outputPath}`)
   }
+  const realRepoRoot = fs.realpathSync.native(lexicalRepoRoot)
   fs.mkdirSync(path.dirname(outputPath), { recursive: true })
   const realOutputDirectory = fs.realpathSync.native(path.dirname(outputPath))
   if (isSameOrDescendant(realRepoRoot, realOutputDirectory)) {
