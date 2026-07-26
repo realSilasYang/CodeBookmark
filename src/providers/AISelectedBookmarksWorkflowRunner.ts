@@ -8,25 +8,18 @@ import { Bookmark } from '../models/Bookmark'
 import { AIService } from '../util/AIService'
 import { Helper } from '../util/Helper'
 import { applyAIOptimizationChanges, resolveAIOptimizationChanges } from '../util/AIOptimizationMutations'
-import { normalizedAbsolutePath } from '../util/AbsolutePath'
 import { assertAISourceSnapshot, readAISourceSnapshot, type AIFileSnapshot } from '../util/AISourceSnapshot'
 import { formatBookmarkLevelSummary, summarizeBookmarks } from '../util/BookmarkStatistics'
 import { isBookmarkItemContext } from '../util/ContextValue'
 import type { AIFolderWorkflowPort } from './AIFolderWorkflowRunner'
 import { isUserCancelledError, localize } from '../i18n/Localization'
+import { errorMessage } from '../util/ErrorMessage'
+import { findOpenFileDocument } from '../util/VscodeDocument'
+import { ReplaceableDisposable } from '../util/ReplaceableDisposable'
 
 export interface AISelectedBookmarksWorkflowPort extends AIFolderWorkflowPort {
 	absoluteBookmarkPath(bookmarkPath: string): string
 	resolveTargets(bookmark?: Bookmark, selectedBookmarks?: Bookmark[]): Bookmark[]
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
-}
-
-function openDocumentForPath(filePath: string): vscode.TextDocument | undefined {
-	return vscode.workspace.textDocuments.find(document => document.uri.scheme === 'file'
-		&& normalizedAbsolutePath(document.uri.fsPath) === normalizedAbsolutePath(filePath))
 }
 
 export async function runOptimizeSelectedBookmarks(
@@ -68,7 +61,7 @@ export async function runOptimizeSelectedBookmarks(
 
 		let sourceSnapshot: AIFileSnapshot
 		try {
-			sourceSnapshot = await readAISourceSnapshot(filePath, openDocumentForPath)
+			sourceSnapshot = await readAISourceSnapshot(filePath, findOpenFileDocument)
 		} catch (error) {
 			port.taskRegistry.finishFile(taskKey)
 			const message = errorMessage(error)
@@ -84,15 +77,14 @@ export async function runOptimizeSelectedBookmarks(
 				title: localize("providers.AISelectedBookmarksWorkflowRunner.aiIsImprovingBookmarksIn", { fileName: path.basename(filePath), bookmarksCount: bookmarks.length }),
 				cancellable: true,
 			}, async (_progress, token) => {
-				let statusDisposable: vscode.Disposable | undefined
+				const statusMessage = new ReplaceableDisposable<vscode.Disposable>()
 				try {
 					const optimizedList = await AIService.optimizeBookmarks(
 						fileContent,
 						filePath,
 						bookmarks,
 						(message: string) => {
-							if (statusDisposable) statusDisposable.dispose()
-							statusDisposable = vscode.window.setStatusBarMessage(`AI: ${message}`)
+							statusMessage.replace(vscode.window.setStatusBarMessage(`AI: ${message}`))
 						},
 						token,
 					)
@@ -126,7 +118,7 @@ export async function runOptimizeSelectedBookmarks(
 						}
 					}
 				} finally {
-					if (statusDisposable) statusDisposable.dispose()
+					statusMessage.dispose()
 				}
 			})
 		} catch (error: unknown) {

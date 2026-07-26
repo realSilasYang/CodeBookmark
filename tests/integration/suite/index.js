@@ -257,6 +257,52 @@ async function run() {
   snapshot = extensionApi.integration.snapshot()
   assert.equal(snapshot.roots.find(root => root.path === 'externally-moved.ts').children.some(child => child.id === otherBookmarkId), true)
 
+  const portableTargetUri = vscode.Uri.joinPath(workspaceFolder.uri, 'portable-target.ts')
+  await fs.writeFile(portableTargetUri.fsPath, 'export const portableTarget = true\n', 'utf8')
+  const portableScriptId = '10000000-0000-4000-8000-000000000091'
+  const portableBookmarkId = '20000000-0000-4000-8000-000000000091'
+  const portablePackagePath = path.join(workspaceFolder.uri.fsPath, 'integration-import.codebookmark')
+  const { createPortableArchive } = require(path.join(extension.extensionPath, 'out', 'portable', 'PortableArchive'))
+  const portableArchive = createPortableArchive({
+    format: 'codebookmark.portable-package', schemaVersion: 1,
+    exchangeId: '30000000-0000-4000-8000-000000000091',
+    revisionId: '40000000-0000-4000-8000-000000000091',
+    parentRevisionIds: [], createdAt: Date.now(), title: 'Extension Host import', scope: 'workspace',
+    roots: [{ id: 'root-1', name: workspaceFolder.name }],
+  }, [{
+    index: {
+      scriptId: portableScriptId, rootId: 'root-1', relativePath: 'portable-target.ts',
+      entry: `scripts/${portableScriptId}.json`,
+    },
+    value: {
+      format: 'codebookmark.portable-script', schemaVersion: 1, scriptId: portableScriptId,
+      bookmarks: [{
+        id: portableBookmarkId, createdAt: Date.now(), label: 'Portable integration bookmark',
+        collapsibleState: 0, pinned: false, content: 'export const portableTarget = true',
+        iconName: '', isInvalid: false, subs: [], params: '0,0,0,34',
+      }],
+    },
+  }])
+  await fs.writeFile(portablePackagePath, Buffer.from(portableArchive))
+  await extensionApi.integration.importPortablePackage(portablePackagePath)
+  snapshot = extensionApi.integration.snapshot()
+  const portableRoot = snapshot.roots.find(root => root.path === 'portable-target.ts')
+  assert.ok(portableRoot, 'Portable package did not create a file node in the real Extension Host')
+  assert.equal(portableRoot.scriptId, portableScriptId)
+  assert.equal(portableRoot.children[0].id, portableBookmarkId)
+  assert.equal(portableRoot.children[0].label, 'Portable integration bookmark')
+  const exchangeFiles = await fs.readdir(path.join(storageRoot, 'exchanges'))
+  assert.equal(exchangeFiles.length, 1)
+  const exchangeRecord = JSON.parse(await fs.readFile(path.join(storageRoot, 'exchanges', exchangeFiles[0]), 'utf8'))
+  assert.equal(exchangeRecord.format, 'codebookmark.portable-exchange')
+  assert.equal(exchangeRecord.exchangeId, '30000000-0000-4000-8000-000000000091')
+  assert.equal(exchangeRecord.scriptMappings[portableScriptId], portableScriptId)
+  await extensionApi.integration.undo()
+  assert.equal(extensionApi.integration.snapshot().roots.some(root => root.path === 'portable-target.ts'), false)
+  await extensionApi.integration.redo()
+  snapshot = extensionApi.integration.snapshot()
+  assert.equal(snapshot.roots.find(root => root.path === 'portable-target.ts').children[0].id, portableBookmarkId)
+
   const markerUri = vscode.Uri.joinPath(workspaceFolder.uri, 'marker-directives.ts')
   await fs.writeFile(markerUri.fsPath, [
     'export function markerDirectiveFixture(): boolean {',

@@ -44,6 +44,15 @@ interface WorkspaceOrderSnapshot {
 export class WorkspaceOrderStore {
 	constructor(private readonly io: WorkspaceOrderIO) {}
 
+	async captureRollback(folder: string): Promise<() => Promise<void>> {
+		const snapshot = await this.read(folder)
+		if (snapshot.usesWorkspaceLayout) return async () => {}
+		return async () => {
+			if (!snapshot.exists) await this.io.deleteFile(snapshot.filePath)
+			else await this.write(snapshot.filePath, snapshot.order)
+		}
+	}
+
 	async append(
 		folder: string,
 		bookmarkPath: string,

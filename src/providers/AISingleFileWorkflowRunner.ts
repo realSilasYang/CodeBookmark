@@ -15,6 +15,8 @@ import { formatBookmarkLevelSummary, summarizeBookmarks, summarizeBookmarkTrees 
 import { buildAIBookmarks, expandGeneratedBookmarkTree } from './AIBookmarkBuilder'
 import type { AITaskRegistry } from './AITaskRegistry'
 import type { AIWorkflowGuard } from './AIWorkflowGuard'
+import { errorMessage } from '../util/ErrorMessage'
+import { ReplaceableDisposable } from '../util/ReplaceableDisposable'
 
 export type AIGenerationMode = 'append' | 'overwrite' | 'skip_existing'
 
@@ -33,10 +35,6 @@ export interface AISingleFileWorkflowPort {
 	refreshDecoration(): void
 	findBookmark(bookmark: Bookmark): Bookmark | undefined
 	assignAIIcons(): boolean
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
 }
 
 export async function runGenerateBookmarksForFile(
@@ -76,11 +74,10 @@ export async function runGenerateBookmarksForFile(
 			title: localize("providers.AISingleFileWorkflowRunner.aiIsGeneratingCodeBookmarks"),
 			cancellable: true,
 		}, async (_progress, token) => {
-			let statusDisposable: vscode.Disposable | undefined
+			const statusMessage = new ReplaceableDisposable<vscode.Disposable>()
 			try {
 				const aiBookmarks = await AIService.generateBookmarks(codeContent, document.uri.fsPath, (message: string) => {
-					if (statusDisposable) statusDisposable.dispose()
-					statusDisposable = vscode.window.setStatusBarMessage(`AI: ${message}`)
+					statusMessage.replace(vscode.window.setStatusBarMessage(`AI: ${message}`))
 				}, token)
 
 				if (token.isCancellationRequested) return
@@ -113,8 +110,7 @@ export async function runGenerateBookmarksForFile(
 					return
 				}
 
-				if (statusDisposable) statusDisposable.dispose()
-				statusDisposable = vscode.window.setStatusBarMessage(localize("providers.AISingleFileWorkflowRunner.aiSavingGeneratedBookmarks"))
+				statusMessage.replace(vscode.window.setStatusBarMessage(localize("providers.AISingleFileWorkflowRunner.aiSavingGeneratedBookmarks")))
 
 				port.saveUndoState('generateAIBookmarks')
 				if (mode === 'overwrite') {
@@ -141,7 +137,7 @@ export async function runGenerateBookmarksForFile(
 					vscode.window.showErrorMessage(localize("providers.AISingleFileWorkflowRunner.aiBookmarkGenerationFailed", { message }))
 				}
 			} finally {
-				if (statusDisposable) statusDisposable.dispose()
+				statusMessage.dispose()
 			}
 		})
 	} finally {
@@ -185,15 +181,14 @@ export async function runOptimizeBookmarksForFile(
 			title: localize("providers.AISingleFileWorkflowRunner.aiIsImprovingBookmarks"),
 			cancellable: true,
 		}, async (_progress, token) => {
-			let statusDisposable: vscode.Disposable | undefined
+			const statusMessage = new ReplaceableDisposable<vscode.Disposable>()
 			try {
 				const optimizedList = await AIService.optimizeBookmarks(
 					codeContent,
 					document.uri.fsPath,
 					existingBookmarks,
 					(message: string) => {
-						if (statusDisposable) statusDisposable.dispose()
-						statusDisposable = vscode.window.setStatusBarMessage(`AI: ${message}`)
+						statusMessage.replace(vscode.window.setStatusBarMessage(`AI: ${message}`))
 					},
 					token,
 				)
@@ -208,8 +203,7 @@ export async function runOptimizeBookmarksForFile(
 					return
 				}
 
-				if (statusDisposable) statusDisposable.dispose()
-				statusDisposable = vscode.window.setStatusBarMessage(localize("providers.AISingleFileWorkflowRunner.aiApplyingBookmarkImprovements"))
+				statusMessage.replace(vscode.window.setStatusBarMessage(localize("providers.AISingleFileWorkflowRunner.aiApplyingBookmarkImprovements")))
 				const changes = resolveAIOptimizationChanges(
 					optimizedList,
 					port.bookmarksForPath(pathRel),
@@ -235,7 +229,7 @@ export async function runOptimizeBookmarksForFile(
 					vscode.window.showErrorMessage(localize("providers.AISingleFileWorkflowRunner.aiLabelImprovementFailed", { message }))
 				}
 			} finally {
-				if (statusDisposable) statusDisposable.dispose()
+				statusMessage.dispose()
 			}
 		})
 	} finally {

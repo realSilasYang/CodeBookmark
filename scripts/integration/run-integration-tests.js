@@ -488,9 +488,11 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertNoProjectLogDiagnostics,
   assertNoUnexpectedExtensionHostDiagnostics,
   createLanguagePacksConfiguration,
   findProjectDiagnosticsInLog,
   findInstalledVSCodeExecutable,
+  outputSink,
   stripKnownExternalDiagnostics,
 }

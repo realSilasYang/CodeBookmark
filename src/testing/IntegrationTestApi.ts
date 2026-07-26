@@ -5,6 +5,7 @@
 import * as vscode from 'vscode'
 import type { CodeBookmarksViewProvider } from '../providers/CodeBookmarkViewProvider'
 import type { IntegrationBookmarkSnapshot } from './IntegrationTestTypes'
+import { performanceMonitor } from '../util/PerformanceMonitor'
 
 export interface CodeBookmarkIntegrationTestApi {
 	waitUntilReady(timeoutMs?: number): Promise<void>
@@ -17,7 +18,9 @@ export interface CodeBookmarkIntegrationTestApi {
 	moveNode(sourceId: string, targetId: string): Promise<void>
 	reload(): Promise<void>
 	flush(): Promise<void>
+	importPortablePackage(filePath: string): Promise<void>
 	snapshot(): IntegrationBookmarkSnapshot
+	performanceMeasurement(name: string): { durationMs: number, detail: Record<string, string | number | boolean | undefined> } | undefined
 }
 
 function activeFileEditor(): vscode.TextEditor {
@@ -92,8 +95,15 @@ export function createIntegrationTestApi(
 		async flush(): Promise<void> {
 			await provider.flushPendingSaves(true)
 		},
+		async importPortablePackage(filePath: string): Promise<void> {
+			await provider.importPortablePackageFromUri(vscode.Uri.file(filePath))
+			await provider.flushPendingSaves(true)
+		},
 		snapshot(): IntegrationBookmarkSnapshot {
 			return provider.integrationTestSnapshot()
+		},
+		performanceMeasurement(name: string) {
+			return performanceMonitor.latest(name)
 		},
 	})
 }

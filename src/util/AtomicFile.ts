@@ -17,26 +17,54 @@ async function removeTemporaryFile(temporaryPath: string): Promise<void> {
 	}
 }
 
-export async function atomicWriteFile(target: string, content: string | Buffer): Promise<void> {
+async function promoteTemporaryFile(temporaryPath: string, target: string): Promise<void> {
+	let directRenameError: unknown
+	try {
+		await fs.promises.rename(temporaryPath, target)
+		return
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code
+		if (process.platform !== 'win32' || (code !== 'EEXIST' && code !== 'EPERM' && code !== 'EACCES')) throw error
+		directRenameError = error
+	}
+	let targetStat: fs.Stats
+	try { targetStat = await fs.promises.lstat(target) } catch { throw directRenameError }
+	if (!targetStat.isFile()) throw directRenameError
+	const backupPath = `${temporarySiblingPath(target)}.bak`
+	let backedUp = false
+	try {
+		await fs.promises.rename(target, backupPath)
+		backedUp = true
+		await fs.promises.rename(temporaryPath, target)
+		await removeTemporaryFile(backupPath)
+	} catch (error) {
+		if (backedUp) {
+			try {
+				await fs.promises.rename(backupPath, target)
+			} catch {
+				// 恢复失败时保留备份文件，避免把原目标内容一并删除。
+			}
+		}
+		throw error
+	}
+}
+
+async function atomicReplace(target: string, writeTemporary: (temporaryPath: string) => Promise<void>): Promise<void> {
 	const temporaryPath = temporarySiblingPath(target)
 	await fs.promises.mkdir(path.dirname(target), { recursive: true })
 	try {
-		await fs.promises.writeFile(temporaryPath, content)
-		await fs.promises.rename(temporaryPath, target)
+		await writeTemporary(temporaryPath)
+		await promoteTemporaryFile(temporaryPath, target)
 	} catch (error) {
 		await removeTemporaryFile(temporaryPath)
 		throw error
 	}
 }
 
+export async function atomicWriteFile(target: string, content: string | Buffer): Promise<void> {
+	await atomicReplace(target, temporaryPath => fs.promises.writeFile(temporaryPath, content))
+}
+
 export async function atomicCopyFile(source: string, target: string): Promise<void> {
-	const temporaryPath = temporarySiblingPath(target)
-	await fs.promises.mkdir(path.dirname(target), { recursive: true })
-	try {
-		await fs.promises.copyFile(source, temporaryPath)
-		await fs.promises.rename(temporaryPath, target)
-	} catch (error) {
-		await removeTemporaryFile(temporaryPath)
-		throw error
-	}
+	await atomicReplace(target, temporaryPath => fs.promises.copyFile(source, temporaryPath))
 }

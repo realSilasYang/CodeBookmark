@@ -5,6 +5,7 @@
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
+import { sha256Hex } from './Sha256'
 
 const DELETED_HASH = '<deleted>'
 
@@ -13,7 +14,7 @@ function fileKey(filePath: string): string {
 }
 
 export function hashContent(content: string): string {
-	return crypto.createHash('sha256').update(content).digest('hex')
+	return sha256Hex(content)
 }
 
 async function readContentHash(filePath: string): Promise<string> {
@@ -81,6 +82,18 @@ class FileChangeFingerprintTracker {
 	markDeleteFailed(filePath: string): void {
 		const key = fileKey(filePath)
 		if (this.selfWrittenHashes.get(key) === DELETED_HASH) this.selfWrittenHashes.delete(key)
+	}
+
+	async trackDeletion<T>(filePath: string, operation: () => Promise<T>): Promise<T> {
+		this.markDeleteIntent(filePath)
+		try {
+			const result = await operation()
+			this.markDeleteComplete(filePath)
+			return result
+		} catch (error) {
+			this.markDeleteFailed(filePath)
+			throw error
+		}
 	}
 
 	async rememberDirectory(directory: string): Promise<void> {

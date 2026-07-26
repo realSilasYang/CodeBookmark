@@ -1,8 +1,9 @@
 /**
  * 按语言配置提供的扩展名、文件名和 glob 扫描工作区，再批量同步自动标记。
- * 扫描遵守排除目录、文件数量和取消限制，不会回退到“所有文件都猜注释语法”的宽泛策略。
+ * 扫描遵守排除目录和取消边界，不会截断候选文件，也不会回退到“所有文件都猜注释语法”的宽泛策略。
  */
 import type { CodeMarkerSource } from './CodeMarkerDocumentSync'
+import { performance } from 'node:perf_hooks'
 
 interface WorkspaceCodeMarkerCandidate<Uri> {
 	uri: Uri
@@ -14,10 +15,9 @@ interface WorkspaceCodeMarkerScanPort<Uri, WorkspaceFolder> {
 	canDiscoverFiles(): boolean
 	workspaceFolder(): WorkspaceFolder | undefined
 	discoveryGlobs(): readonly string[]
-	findFiles(workspaceFolder: WorkspaceFolder, glob: string, limit: number): Promise<Uri[]>
+	findFiles(workspaceFolder: WorkspaceFolder, glob: string): Promise<Uri[]>
 	uriKey(uri: Uri): string
 	isCurrent(scope: string, generation: number): boolean
-	warnDiscoveryTruncated(scope: string): void
 	existingMarkerCandidates(): readonly WorkspaceCodeMarkerCandidate<Uri>[]
 	scopeForUri(uri: Uri): string
 	isExcluded(uri: Uri): boolean
@@ -27,14 +27,30 @@ interface WorkspaceCodeMarkerScanPort<Uri, WorkspaceFolder> {
 	sourceIsMissing(uri: Uri): Promise<boolean>
 	markCompleted(scope: string): void
 	persistChanges(paths: readonly Uri[]): void
-	measure(startedAt: number, files: number, changedFiles: number): void
+	measure(startedAt: number, metrics: WorkspaceCodeMarkerScanMetrics): void
 	reportDiscoveryFailure(glob: string, error: unknown): void
+}
+
+interface WorkspaceCodeMarkerScanMetrics {
+	files: number
+	changedFiles: number
+	discoveryQueries: number
+	discoveryMs: number
+	discoveryQueryMs: number
+	processingMs: number
+	discoveredFiles: number
+	openedDocuments: number
+	openMs: number
+	readMs: number
+	bytesRead: number
+	prefilteredFiles: number
+	exactScans: number
+	exactScanMs: number
 }
 
 export async function scanWorkspaceCodeMarkers<Uri, WorkspaceFolder>(
 	scope: string,
 	generation: number,
-	maxFiles: number,
 	concurrency: number,
 	port: WorkspaceCodeMarkerScanPort<Uri, WorkspaceFolder>,
 ): Promise<void> {
@@ -44,29 +60,33 @@ export async function scanWorkspaceCodeMarkers<Uri, WorkspaceFolder>(
 	if (!workspaceFolder || !port.isCurrent(scope, generation)) return
 
 	const discoveredByPath = new Map<string, Uri>()
-	let discoveryTruncated = false
-	for (const glob of port.discoveryGlobs()) {
-		let matches: Uri[]
-		try {
-			matches = await port.findFiles(workspaceFolder, glob, maxFiles + 1)
-		} catch (error) {
-			port.reportDiscoveryFailure(glob, error)
-			continue
-		}
-		for (const uri of matches) {
-			discoveredByPath.set(port.uriKey(uri), uri)
-			if (discoveredByPath.size > maxFiles) {
-				discoveryTruncated = true
-				break
+	let discoveryQueries = 0
+	let discoveryQueryMs = 0
+	const discoveryStartedAt = performance.now()
+	const discoveryGlobs = port.discoveryGlobs()
+	let discoveryCursor = 0
+	const discover = async (): Promise<void> => {
+		while (discoveryCursor < discoveryGlobs.length) {
+			const glob = discoveryGlobs[discoveryCursor++]
+			let matches: Uri[]
+			try {
+				const discoveryStartedAt = performance.now()
+				discoveryQueries++
+				matches = await port.findFiles(workspaceFolder, glob)
+				discoveryQueryMs += performance.now() - discoveryStartedAt
+			} catch (error) {
+				port.reportDiscoveryFailure(glob, error)
+				continue
 			}
+			for (const uri of matches) discoveredByPath.set(port.uriKey(uri), uri)
 		}
-		if (discoveryTruncated) break
 	}
+	await Promise.all(Array.from({ length: Math.min(4, discoveryGlobs.length) }, () => discover()))
+	const discoveryMs = performance.now() - discoveryStartedAt
 	if (!port.isCurrent(scope, generation)) return
-	if (discoveryTruncated) port.warnDiscoveryTruncated(scope)
 
 	const candidates = new Map<string, WorkspaceCodeMarkerCandidate<Uri>>()
-	for (const uri of [...discoveredByPath.values()].slice(0, maxFiles)) {
+	for (const uri of discoveredByPath.values()) {
 		candidates.set(port.uriKey(uri), { uri, knownMarkerFile: false })
 	}
 	for (const candidate of port.existingMarkerCandidates()) {
@@ -75,7 +95,16 @@ export async function scanWorkspaceCodeMarkers<Uri, WorkspaceFolder>(
 
 	const uris = [...candidates.values()]
 	const changedPaths: Uri[] = []
+	let openedDocuments = 0
+	let openMs = 0
+	let readMs = 0
+	let bytesRead = 0
+	let prefilteredFiles = 0
+	let exactScans = 0
+	let exactScanMs = 0
 	let cursor = 0
+	let completedSinceYield = 0
+	const processingStartedAt = performance.now()
 	const worker = async (): Promise<void> => {
 		while (cursor < uris.length) {
 			if (!port.isCurrent(scope, generation)) return
@@ -86,15 +115,44 @@ export async function scanWorkspaceCodeMarkers<Uri, WorkspaceFolder>(
 				continue
 			}
 			const source = await port.readSource(uri, knownMarkerFile)
-			if (source && port.synchronize(uri, source).changed) changedPaths.push(uri)
+			if (source) {
+				if (source.readMetrics?.origin === 'document') openedDocuments++
+				openMs += source.readMetrics?.openMs ?? 0
+				readMs += source.readMetrics?.readMs ?? 0
+				bytesRead += source.readMetrics?.bytesRead ?? 0
+				const prefilteredEmpty = source.readMetrics?.prefilteredEmpty === true
+				if (prefilteredEmpty) prefilteredFiles++
+				if (prefilteredEmpty && !knownMarkerFile) continue
+				const exactScanStartedAt = performance.now()
+				exactScans++
+				if (port.synchronize(uri, source).changed) changedPaths.push(uri)
+				exactScanMs += performance.now() - exactScanStartedAt
+			}
 			else if (!source && knownMarkerFile && await port.sourceIsMissing(uri)) {
 				if (port.removeMarkers(uri)) changedPaths.push(uri)
 			}
+			if (++completedSinceYield % 256 === 0) await new Promise<void>(resolve => setImmediate(resolve))
 		}
 	}
 	await Promise.all(Array.from({ length: Math.min(concurrency, uris.length) }, () => worker()))
+	const processingMs = performance.now() - processingStartedAt
 	if (!port.isCurrent(scope, generation)) return
 	port.markCompleted(scope)
 	port.persistChanges(changedPaths)
-	port.measure(startedAt, uris.length, changedPaths.length)
+	port.measure(startedAt, {
+		files: uris.length,
+		changedFiles: changedPaths.length,
+		discoveryQueries,
+		discoveryMs,
+		discoveryQueryMs,
+		processingMs,
+		discoveredFiles: discoveredByPath.size,
+		openedDocuments,
+		openMs,
+		readMs,
+		bytesRead,
+		prefilteredFiles,
+		exactScans,
+		exactScanMs,
+	})
 }

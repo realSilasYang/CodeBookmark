@@ -186,6 +186,7 @@ async function captureExpectedLoggerErrors(operation) {
   assert.ok(globs.some(glob => glob.includes('Fictionfile')))
   assert.ok(globs.some(glob => glob.includes('fiction-template')))
   assert.equal(globs.some(glob => glob.includes('uncolored')), false)
+  assert.equal(globs.length, 1)
 
   files.set('/extensions/fiction/language-configuration.json', Buffer.from(`{
     "comments": { "lineComment": "##" }
@@ -202,7 +203,7 @@ async function captureExpectedLoggerErrors(operation) {
   const source = require('node:fs').readFileSync('src/util/LanguageCommentProfiles.ts', 'utf8')
   assert.match(source, /MAX_LANGUAGE_CONFIG_BYTES = 512 \* 1024/)
   assert.match(source, /MAX_LANGUAGE_CONTRIBUTIONS = 4_096/)
-  assert.match(source, /MAX_DISCOVERY_GLOBS = 64/)
+  assert.doesNotMatch(source, /MAX_DISCOVERY_GLOBS/)
   assert.match(source, /failedPatterns\+\+/)
 })().catch(error => {
   console.error(error)

@@ -108,9 +108,17 @@ export function renameWorkspaceOrderDirectory(
 	oldBookmarkPath: string,
 	newBookmarkPath: string,
 ): string[] {
-	return [...new Set(order.map(entry => isSameOrDescendantBookmarkPath(entry, oldBookmarkPath)
+	return [...new Set(renameWorkspaceOrderPaths(order, oldBookmarkPath, newBookmarkPath))]
+}
+
+export function renameWorkspaceOrderPaths(
+	order: readonly string[],
+	oldBookmarkPath: string,
+	newBookmarkPath: string,
+): string[] {
+	return order.map(entry => isSameOrDescendantBookmarkPath(entry, oldBookmarkPath)
 		? renamedBookmarkPath(entry, oldBookmarkPath, newBookmarkPath)
-		: entry))]
+		: entry)
 }
 
 export function moveWorkspaceOrderDirectory(

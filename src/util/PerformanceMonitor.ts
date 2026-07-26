@@ -4,13 +4,13 @@
  */
 import { performance } from 'node:perf_hooks'
 import { logger } from './Logger'
-import { localize } from '../i18n/Localization'
+import { formatPerformanceLog, type PerformanceDetail } from './PerformanceLogFormatter'
 
-type PerformanceDetail = Record<string, string | number | boolean | undefined>
 
 class PerformanceMonitor {
 	private readonly verbose = process.env.CODEBOOKMARK_PERF === '1'
 	private readonly slowOperationMs = 250
+	private readonly latestMeasurements = new Map<string, { durationMs: number, detail: PerformanceDetail }>()
 
 	start(): number {
 		return performance.now()
@@ -18,25 +18,16 @@ class PerformanceMonitor {
 
 	measure(name: string, startedAt: number, detail: PerformanceDetail = {}, thresholdMs = this.slowOperationMs): number {
 		const durationMs = performance.now() - startedAt
+		this.latestMeasurements.set(name, { durationMs, detail: { ...detail } })
 		if (this.verbose || durationMs >= thresholdMs) {
-			const displayNames: Record<string, string> = {
-				'workspace-code-marker-scan': localize("util.PerformanceMonitor.workspaceCodeMarkerScan"),
-				'bookmark-view-background-enhancement': localize("util.PerformanceMonitor.bookmarkViewBackgroundEnhancement"),
-				'bookmark-view-initialization': localize("util.PerformanceMonitor.bookmarkViewInitialization"),
-			}
-			const detailNames: Record<string, string> = {
-				files: localize("util.PerformanceMonitor.files"),
-				changed: localize("util.PerformanceMonitor.changed"),
-				scope: localize("util.PerformanceMonitor.scope"),
-				failed: localize("util.PerformanceMonitor.failed"),
-			}
-			const fields = Object.entries(detail)
-				.filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined)
-				.map(([key, value]) => `${detailNames[key] ?? key}=${value}`)
-				.join(' ')
-			logger.info(localize("util.PerformanceMonitor.perfDurationms", { name: displayNames[name] ?? name, toFixed: durationMs.toFixed(1), fields: fields ? ` ${fields}` : '' }))
+			logger.info(formatPerformanceLog(name, durationMs, detail))
 		}
 		return durationMs
+	}
+
+	latest(name: string): { durationMs: number, detail: PerformanceDetail } | undefined {
+		const measurement = this.latestMeasurements.get(name)
+		return measurement ? { durationMs: measurement.durationMs, detail: { ...measurement.detail } } : undefined
 	}
 }
 

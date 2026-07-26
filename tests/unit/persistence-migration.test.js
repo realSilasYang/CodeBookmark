@@ -8,7 +8,10 @@ const os = require('node:os')
 const path = require('node:path')
 const { it } = require('node:test')
 
-const { persistLegacyJsonMigration } = require('../../out/util/PersistenceMigration')
+const {
+  persistLegacyJsonMigration,
+  persistLegacyJsonMigrationAtomically,
+} = require('../../out/util/PersistenceMigration')
 
 it('backs up an unversioned JSON file before persisting its v1 replacement', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'codebookmark-schema-migration-'))
@@ -34,6 +37,23 @@ it('backs up an unversioned JSON file before persisting its v1 replacement', asy
       return true
     })
     assert.deepEqual(JSON.parse(await fs.readFile(backupPath, 'utf8')), legacy)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+it('atomically persists a migrated JSON value through the shared writer', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'codebookmark-atomic-schema-migration-'))
+  const filePath = path.join(root, 'configuration.json')
+  try {
+    await fs.writeFile(filePath, JSON.stringify({ legacy: true }), 'utf8')
+    const value = { format: 'codebookmark.test', schemaVersion: 1, current: true }
+    await persistLegacyJsonMigrationAtomically(filePath, value)
+    assert.deepEqual(JSON.parse(await fs.readFile(filePath, 'utf8')), value)
+    assert.deepEqual(
+      JSON.parse(await fs.readFile(`${filePath}.migration-v0.backup`, 'utf8')),
+      { legacy: true },
+    )
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

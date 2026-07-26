@@ -32,7 +32,7 @@ describe('generated extension manifest baseline', () => {
     assert.equal(manifest.name, 'codebookmark')
     assert.equal(manifest.publisher, 'realSilasYang')
     assert.equal(manifest.main, './out/extension.js')
-    assert.deepEqual(manifest.dependencies, {})
+    assert.deepEqual(manifest.dependencies, { fflate: '0.8.3' })
     assert.equal('activationEvents' in manifest, false)
   })
 

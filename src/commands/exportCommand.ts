@@ -27,9 +27,17 @@ import {
 	summarizeBookmarkLevels,
 	type BookmarkLevelSummary,
 } from '../util/BookmarkStatistics'
+import { preparePortableExport } from '../portable/PortableExport'
+import { readPortableArchive } from '../portable/PortableArchive'
+import { PORTABLE_PACKAGE_EXTENSION } from '../portable/PortablePackage'
+import { storageRootState } from '../util/StorageRootState'
+import { writePortableExchangeRecord } from '../portable/PortableExchangeStore'
+import { atomicWriteFile } from '../util/AtomicFile'
+import { errorMessage } from '../util/ErrorMessage'
+import { activeFileUri } from '../util/VscodeDocument'
 
 type ReadableExportFormat = 'markdown' | 'html' | 'csv' | 'text'
-type BatchExportFormat = ReadableExportFormat | 'source'
+type BatchExportFormat = ReadableExportFormat
 
 interface ExportRecord {
 	bookmark: Bookmark
@@ -70,26 +78,6 @@ function collectRecords(
 function absolutePathForFileNode(fileNode: Bookmark, scopeUri?: vscode.Uri): string {
 	return normalizedAbsolutePath(fileNode.resourceUri?.fsPath
 		?? (path.isAbsolute(fileNode.path) ? fileNode.path : fileUtils.relativeToAbsolute(fileNode.path, scopeUri)))
-}
-
-function sourcePathForFileNode(fileNode: Bookmark): string | undefined {
-	if (!fileNode.scriptId) return undefined
-	const scriptFolder = fileUtils.getScriptStoreFolder()
-	return scriptFolder ? path.join(scriptFolder, `${fileNode.scriptId}.json`) : undefined
-}
-
-async function exportWorkspaceLayout(outputFolder: string, scopeUri?: vscode.Uri): Promise<void> {
-	const workspaceFolder = scopeUri ? vscode.workspace.getWorkspaceFolder(scopeUri) : undefined
-	if (!workspaceFolder) return
-	const storageFolder = fileUtils.getGlobalBookmarkFolder(true, scopeUri)
-	if (!storageFolder) return
-	const source = path.join(storageFolder, '_workspace_layout.json')
-	try {
-		await fs.promises.mkdir(outputFolder, { recursive: true })
-		await fs.promises.copyFile(source, path.join(outputFolder, '_workspace_layout.json'))
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-	}
 }
 
 function fileExportTargets(bookmarkSet: BookmarkSet, scopeUri?: vscode.Uri): FileExportTarget[] {
@@ -323,8 +311,7 @@ function formatLabel(format: BatchExportFormat): string {
 	return format === 'markdown' ? 'Markdown'
 		: format === 'html' ? 'HTML'
 			: format === 'csv' ? 'CSV'
-				: format === 'text' ? localize("commands.exportCommand.plainText")
-					: localize("commands.exportCommand.bookmarkConfigurationSource")
+				: localize("commands.exportCommand.plainText")
 }
 
 function ensureExtension(filePath: string, extension: string): string {
@@ -338,17 +325,6 @@ function timestamp(): string {
 async function writeUtf8(filePath: string, content: string): Promise<void> {
 	await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
 	await fs.promises.writeFile(filePath, content, 'utf8')
-}
-
-async function writeReadableSourceConfig(sourcePath: string, targetPath: string): Promise<void> {
-	const raw = await fs.promises.readFile(sourcePath, 'utf8')
-	const data: unknown = JSON.parse(raw)
-	await writeUtf8(targetPath, `${JSON.stringify(data, null, 2)}\n`)
-}
-
-function activeFileUri(): vscode.Uri | undefined {
-	const uri = vscode.window.activeTextEditor?.document.uri
-	return uri?.scheme === 'file' ? uri : undefined
 }
 
 function defaultExportDirectory(): string | undefined {
@@ -384,6 +360,24 @@ async function chooseExportDirectory(title: string): Promise<vscode.Uri | undefi
 	return selected?.[0]
 }
 
+async function currentFolderForExport(): Promise<string | undefined> {
+	const folders = vscode.workspace.workspaceFolders ?? []
+	const activeUri = activeFileUri()
+	const activeFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined
+	if (activeUri && activeFolder) return path.dirname(activeUri.fsPath)
+	if (folders.length === 1) return folders[0].uri.fsPath
+	if (folders.length === 0) return undefined
+	const selected = await vscode.window.showQuickPick(folders.map(folder => ({
+		label: folder.name,
+		description: folder.uri.fsPath,
+		folder,
+	})), {
+		title: localize('commands.exportCommand.chooseCurrentFolderRoot'),
+		placeHolder: localize('commands.exportCommand.chooseCurrentFolderRootDescription'),
+	})
+	return selected?.folder.uri.fsPath
+}
+
 function relativeSourcePath(absolutePath: string, baseDirectory: string): string {
 	const relative = path.relative(baseDirectory, absolutePath)
 	return relative && !relative.startsWith('..') && !path.isAbsolute(relative)
@@ -394,18 +388,6 @@ function relativeSourcePath(absolutePath: string, baseDirectory: string): string
 function readableTargetPath(outputFolder: string, baseDirectory: string, sourcePath: string, format: ReadableExportFormat): string {
 	const relative = relativeSourcePath(sourcePath, baseDirectory)
 	return path.join(outputFolder, path.dirname(relative), `${path.basename(relative)}.bookmarks${extensionFor(format)}`)
-}
-
-function sourceTargetPath(outputFolder: string, baseDirectory: string, sourcePath: string): string {
-	const relative = relativeSourcePath(sourcePath, baseDirectory)
-	return path.join(outputFolder, path.dirname(relative), `${path.basename(relative)}.codebookmark.json`)
-}
-
-function directSourceBaseDirectory(targets: readonly FileExportTarget[]): string {
-	const activeUri = activeFileUri()
-	const workspaceFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined
-	if (workspaceFolder) return workspaceFolder.uri.fsPath
-	return activeUri ? path.dirname(activeUri.fsPath) : path.dirname(targets[0].absolutePath)
 }
 
 export function registerExportCommand(context: vscode.ExtensionContext, provider: CodeBookmarksViewProvider): void {
@@ -431,47 +413,45 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 			await writeUtf8(filePath, formatContent(format, groups, total))
 			void vscode.window.showInformationMessage(localize("commands.exportCommand.bookmarkExportCompletedExportedFile", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(summary), fileName: path.basename(filePath) }))
 		} catch (error) {
-			void vscode.window.showErrorMessage(localize("commands.exportCommand.exportFailed", { errorMessage: error instanceof Error ? error.message : String(error) }))
+			void vscode.window.showErrorMessage(localize("commands.exportCommand.exportFailed", { errorMessage: errorMessage(error) }))
 		}
 	}
 
-	const exportSourceFiles = async (): Promise<void> => {
-		const scopeUri = activeFileUri()
-		const targets = fileExportTargets(provider.codeBookmarks, scopeUri)
-		if (targets.length === 0) {
-			void vscode.window.showInformationMessage(localize("commands.exportCommand.thereAreNoBookmarkConfigurationSourceFilesToExport"))
-			return
-		}
-		const selectedFolder = await chooseExportDirectory(localize("commands.exportCommand.selectAFolderForBookmarkConfigurationSources"))
-		if (!selectedFolder) return
-		const outputFolder = path.join(selectedFolder.fsPath, `${localize("commands.exportCommand.codebookmarkConfigurationSources")}-${timestamp()}`)
-		const baseDirectory = directSourceBaseDirectory(targets)
-		let exported = 0
-		let failed = 0
-		const exportedSummaries: BookmarkLevelSummary[] = []
+	const exportPortablePackage = (currentFolderOnly: boolean) => async (): Promise<void> => {
 		try {
+			const storageRoot = storageRootState.root
+			if (!storageRoot) throw new Error(localize('repository.BookmarkRepository.theBookmarkStorageFolderIsNotConfigured'))
 			await provider.flushPendingSaves(true)
-			for (const target of targets) {
-				const sourcePath = sourcePathForFileNode(target.fileNode)
-				if (!sourcePath) {
-					failed++
-					continue
-				}
-				try {
-					await writeReadableSourceConfig(sourcePath, sourceTargetPath(outputFolder, baseDirectory, target.absolutePath))
-					exportedSummaries.push(exportTargetSummary(target))
-					exported++
-				} catch {
-					failed++
-				}
+			const rootPath = currentFolderOnly ? await currentFolderForExport() : undefined
+			if (currentFolderOnly && !rootPath) return
+			const prepared = await preparePortableExport(provider.portableExportSnapshot(), storageRoot, { rootPath })
+			const target = await vscode.window.showSaveDialog({
+				title: localize('commands.exportCommand.exportPortablePackage'),
+				defaultUri: vscode.Uri.file(path.join(defaultExportDirectory() ?? storageRoot, `${prepared.manifest.title}${PORTABLE_PACKAGE_EXTENSION}`)),
+				filters: { CodeBookmark: [PORTABLE_PACKAGE_EXTENSION.slice(1)] },
+			})
+			if (!target) return
+			const outputPath = target.fsPath.toLowerCase().endsWith(PORTABLE_PACKAGE_EXTENSION)
+				? target.fsPath : `${target.fsPath}${PORTABLE_PACKAGE_EXTENSION}`
+			await readPortableArchive(prepared.archive)
+			const rollbackRecord = await writePortableExchangeRecord(storageRoot, prepared.record)
+			try {
+				await atomicWriteFile(outputPath, Buffer.from(prepared.archive))
+			} catch (error) {
+				try { await rollbackRecord() } catch { /* 保留导出写入错误，恢复失败会由配置管理界面暴露。 */ }
+				throw error
 			}
-			await exportWorkspaceLayout(outputFolder, scopeUri)
-			if (exported === 0) throw new Error(localize("commands.exportCommand.noneOfTheConfigurationSourceFilesForTheCurrent"))
-			const failedText = failed > 0 ? localize("commands.exportCommand.filesFailed", { failed }) : ''
-			const summary = mergeBookmarkLevelSummaries(...exportedSummaries)
-			void vscode.window.showInformationMessage(localize("commands.exportCommand.bookmarkConfigurationSourceExportCompletedFilesSucceededExportedFolder", { exported, failedText, formatBookmarkLevelSummary: formatBookmarkLevelSummary(summary), fileName: path.basename(outputFolder) }))
+			const summary = mergeBookmarkLevelSummaries(...fileExportTargets(provider.codeBookmarks)
+				.filter(item => !rootPath || isSameOrDescendantAbsolutePath(item.absolutePath, rootPath))
+				.map(exportTargetSummary))
+			void vscode.window.showInformationMessage(localize('commands.exportCommand.bookmarkExportCompletedExportedFile', {
+				formatBookmarkLevelSummary: formatBookmarkLevelSummary(summary),
+				fileName: path.basename(outputPath),
+			}))
 		} catch (error) {
-			void vscode.window.showErrorMessage(localize("commands.exportCommand.failedToExportBookmarkConfigurationSources", { errorMessage: error instanceof Error ? error.message : String(error) }))
+			void vscode.window.showErrorMessage(localize('commands.exportCommand.exportFailed', {
+				errorMessage: errorMessage(error),
+			}))
 		}
 	}
 
@@ -496,7 +476,6 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 		let failed = 0
 		const exportedSummaries: BookmarkLevelSummary[] = []
 		try {
-			if (format === 'source') await provider.flushPendingSaves(true)
 			await vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
 				title: localize("commands.exportCommand.batchExportingAs", { formatLabel: formatLabel(format) }),
@@ -507,18 +486,12 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 					progress.report({ message: `${index + 1}/${targets.length} ${path.basename(target.absolutePath)}` })
 					try {
 						const summary = exportTargetSummary(target)
-						if (format === 'source') {
-							const sourcePath = sourcePathForFileNode(target.fileNode)
-							if (!sourcePath) throw new Error(localize("commands.exportCommand.bookmarkConfigurationSourceFileNotFound"))
-							await writeReadableSourceConfig(sourcePath, sourceTargetPath(outputFolder, currentFolder, target.absolutePath))
-						} else {
-							const group = exportGroupForFile(target)
-							if (!group) throw new Error(localize("commands.exportCommand.theFileHasNoBookmarksToExport"))
-							await writeUtf8(
-								readableTargetPath(outputFolder, currentFolder, target.absolutePath, format),
-								formatContent(format, [group], group.records.length),
-							)
-						}
+						const group = exportGroupForFile(target)
+						if (!group) throw new Error(localize("commands.exportCommand.theFileHasNoBookmarksToExport"))
+						await writeUtf8(
+							readableTargetPath(outputFolder, currentFolder, target.absolutePath, format),
+							formatContent(format, [group], group.records.length),
+						)
 						exportedSummaries.push(summary)
 						exported++
 					} catch {
@@ -527,14 +500,13 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 				}
 			})
 			if (exported === 0) throw new Error(localize("commands.exportCommand.everyFileFailedToExport"))
-			if (format === 'source') await exportWorkspaceLayout(outputFolder, activeUri)
 			const failedText = failed > 0 ? localize("commands.exportCommand.filesFailed2", { failed }) : ''
 			const summary = mergeBookmarkLevelSummaries(...exportedSummaries)
 			void vscode.window.showInformationMessage(
 				localize("commands.exportCommand.batchExportForTheCurrentFolderCompletedFilesWith", { exported, failedText, formatBookmarkLevelSummary: formatBookmarkLevelSummary(summary), fileName: path.basename(outputFolder) }),
 			)
 		} catch (error) {
-			void vscode.window.showErrorMessage(localize("commands.exportCommand.batchExportFailed", { errorMessage: error instanceof Error ? error.message : String(error) }))
+			void vscode.window.showErrorMessage(localize("commands.exportCommand.batchExportFailed", { errorMessage: errorMessage(error) }))
 		}
 	}
 
@@ -543,11 +515,11 @@ export function registerExportCommand(context: vscode.ExtensionContext, provider
 		vscode.commands.registerCommand(Commands.bookmarkCommands.exportToHtml.command, exportReadable('html')),
 		vscode.commands.registerCommand(Commands.bookmarkCommands.exportToCsv.command, exportReadable('csv')),
 		vscode.commands.registerCommand(Commands.bookmarkCommands.exportToText.command, exportReadable('text')),
-		vscode.commands.registerCommand(Commands.bookmarkCommands.exportSourceFiles.command, exportSourceFiles),
+		vscode.commands.registerCommand(Commands.bookmarkCommands.exportPortablePackage.command, exportPortablePackage(false)),
+		vscode.commands.registerCommand(Commands.bookmarkCommands.batchExportPortablePackage.command, exportPortablePackage(true)),
 		vscode.commands.registerCommand(Commands.bookmarkCommands.batchExportToMarkdown.command, batchExport('markdown')),
 		vscode.commands.registerCommand(Commands.bookmarkCommands.batchExportToHtml.command, batchExport('html')),
 		vscode.commands.registerCommand(Commands.bookmarkCommands.batchExportToCsv.command, batchExport('csv')),
 		vscode.commands.registerCommand(Commands.bookmarkCommands.batchExportToText.command, batchExport('text')),
-		vscode.commands.registerCommand(Commands.bookmarkCommands.batchExportSourceFiles.command, batchExport('source')),
 	)
 }

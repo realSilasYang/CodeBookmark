@@ -36,6 +36,14 @@ function workspaceLayout(scriptId, updatedAt) {
   }
 }
 
+function exchangeRecord(exchangeId, scopeKey, revisionId, updatedAt) {
+  return {
+    format: 'codebookmark.portable-exchange', schemaVersion: 1,
+    exchangeId, scopeKey, lastRevisionId: revisionId, updatedAt,
+    scriptMappings: {}, bookmarkMappings: {}, baseScripts: [],
+  }
+}
+
 async function main() {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'codebookmark-storage-transfer-'))
   const source = path.join(sandbox, 'source')
@@ -50,6 +58,10 @@ async function main() {
   fs.mkdirSync(targetWorkspace, { recursive: true })
   fs.mkdirSync(sourceScope, { recursive: true })
   fs.mkdirSync(targetScope, { recursive: true })
+	const sourceExchanges = path.join(source, 'exchanges')
+	const targetExchanges = path.join(target, 'exchanges')
+	fs.mkdirSync(sourceExchanges, { recursive: true })
+	fs.mkdirSync(targetExchanges, { recursive: true })
 
   const sharedScriptId = '10000000-0000-9000-1000-000000000001'
   const copiedScriptId = '10000000-0000-9000-1000-000000000002'
@@ -94,6 +106,14 @@ async function main() {
   const targetLayout = workspaceLayout('10000000-0000-9000-1000-000000000032', 100)
   fs.writeFileSync(path.join(sourceScope, '_workspace_layout.json'), JSON.stringify(sourceLayout))
   fs.writeFileSync(path.join(targetScope, '_workspace_layout.json'), JSON.stringify(targetLayout))
+	const exchangeId = '30000000-0000-4000-8000-000000000001'
+	const sourceRevisionId = '40000000-0000-4000-8000-000000000002'
+	const targetRevisionId = '40000000-0000-4000-8000-000000000001'
+	fs.writeFileSync(path.join(sourceExchanges, 'shared.json'), JSON.stringify(exchangeRecord(exchangeId, 'workspace:test', sourceRevisionId, 200)))
+	fs.writeFileSync(path.join(targetExchanges, 'shared.json'), JSON.stringify(exchangeRecord(exchangeId, 'workspace:test', targetRevisionId, 100)))
+	fs.writeFileSync(path.join(sourceExchanges, 'source-only.json'), JSON.stringify(exchangeRecord(
+		'30000000-0000-4000-8000-000000000002', 'workspace:other', '40000000-0000-4000-8000-000000000003', 150,
+	)))
   fs.writeFileSync(path.join(source, 'unrelated-root-config.json'), '{}')
   fs.writeFileSync(path.join(source, '.storage-transfer.json'), '{}')
   fs.writeFileSync(path.join(source, '.storage-transfer.json.123.456.tmp'), 'stale journal temporary file')
@@ -101,9 +121,10 @@ async function main() {
 
   try {
     const first = await transferStorageRoot(source, target)
-    assert.deepEqual(first, { copiedFiles: 1, mergedFiles: 2, conflictFiles: 1 })
+    assert.deepEqual(first, { copiedFiles: 2, mergedFiles: 3, conflictFiles: 1 })
     assert.equal(fs.existsSync(path.join(source, 'scripts')), false)
     assert.equal(fs.existsSync(path.join(source, 'scopes')), false)
+		assert.equal(fs.existsSync(path.join(source, 'exchanges')), false)
     assert.equal(fs.existsSync(path.join(source, '.script-relocations')), false)
     assert.equal(fs.existsSync(path.join(source, '.storage-transfer.json')), false)
     assert.equal(fs.existsSync(path.join(source, '.storage-transfer.json.123.456.tmp')), false)
@@ -140,13 +161,16 @@ async function main() {
       'src/b.ts', 'src/c.ts', 'src/a.ts',
     ])
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(targetScope, '_workspace_layout.json'), 'utf8')), targetLayout)
+		assert.equal(JSON.parse(fs.readFileSync(path.join(targetExchanges, 'shared.json'), 'utf8')).lastRevisionId, sourceRevisionId)
+		assert.equal(fs.existsSync(path.join(targetExchanges, 'source-only.json')), true)
+		assert.equal(fs.existsSync(path.join(targetExchanges, 'shared.json.transfer-base')), true)
     const layoutConflictFile = fs.readdirSync(targetScope)
       .find(file => file.startsWith('_workspace_layout.transfer-conflict_') && file.endsWith('.json'))
     assert.ok(layoutConflictFile)
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(targetScope, layoutConflictFile), 'utf8')), sourceLayout)
 
     const second = await transferStorageRoot(source, target)
-    assert.deepEqual(second, { copiedFiles: 1, mergedFiles: 2, conflictFiles: 1 })
+    assert.deepEqual(second, { copiedFiles: 2, mergedFiles: 3, conflictFiles: 1 })
     const mergedAgain = JSON.parse(fs.readFileSync(mergedPath, 'utf8'))
     assert.equal(mergedAgain.bookmarks.length, 5)
     const state = JSON.parse(fs.readFileSync(path.join(target, '.storage-transfer.json'), 'utf8'))

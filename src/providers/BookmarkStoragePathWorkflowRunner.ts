@@ -6,6 +6,7 @@ import * as vscode from 'vscode'
 import type { Bookmark } from '../models/Bookmark'
 import { formatBookmarkLevelSummary, summarizeBookmarkTrees } from '../util/BookmarkStatistics'
 import { localize } from '../i18n/Localization'
+import { errorMessage } from '../util/ErrorMessage'
 
 interface StorageRootTransferResult {
 	copiedFiles: number
@@ -30,10 +31,6 @@ export interface BookmarkStoragePathWorkflowPort {
 	setupConfigWatcher(): Promise<void>
 	reportPreviousFailure(error: unknown): void
 	bookmarks(): Iterable<Bookmark>
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
 }
 
 export class BookmarkStoragePathWorkflowRunner {

@@ -5,6 +5,14 @@
 export interface CodeMarkerSource {
 	lines: string[]
 	languageId?: string
+	/** 只供后台扫描汇总性能，不参与自动标记判定。 */
+	readMetrics?: {
+		origin: 'document' | 'file'
+		openMs: number
+		readMs: number
+		bytesRead: number
+		prefilteredEmpty: boolean
+	}
 }
 
 export interface CodeMarkerDocumentSyncPort<Document, Uri> {

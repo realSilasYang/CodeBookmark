@@ -1,88 +1,123 @@
 /**
- * 检查 JSON、Markdown、HTML 与纯文本导出保留层级、行号、状态、代码和可读格式。
- * 脚本读取仓库真实文件，围绕“检查 JSON、Markdown、HTML 与纯文本导出保留层级、行号、状态、代码和可读格式”核对结构和调用顺序，不复制一份实现来验证自己。
+ * 核对“导入/导出书签”的菜单层级、便携包入口与四种可读格式，阻止旧 JSON 配置源导出回归。
+ * 同时锁定文件夹导出的路径基准，避免子目录被重复拼接后漏掉本应导出的脚本。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-
 const { loadLocalizedManifest } = require('./lib/localized-manifest')
+
 const manifest = loadLocalizedManifest('zh-cn')
 const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]))
-const directCommands = [
+const readable = [
   ['codebookmark.exportToMarkdown', 'Markdown'],
   ['codebookmark.exportToHtml', 'HTML'],
   ['codebookmark.exportToCsv', 'CSV'],
   ['codebookmark.exportToText', '纯文本'],
-  ['codebookmark.exportSourceFiles', '配置源文件'],
 ]
-const batchCommands = [
+const batchReadable = [
   ['codebookmark.batchExportToMarkdown', 'Markdown'],
   ['codebookmark.batchExportToHtml', 'HTML'],
   ['codebookmark.batchExportToCsv', 'CSV'],
   ['codebookmark.batchExportToText', '纯文本'],
-  ['codebookmark.batchExportSourceFiles', '配置源文件'],
 ]
-
-for (const [commandId, title] of [...directCommands, ...batchCommands]) {
+for (const [commandId, title] of [...readable, ...batchReadable]) {
   assert.equal(commands.get(commandId)?.title, title, `导出命令标题不正确：${commandId}`)
 }
-assert.equal(commands.has('codebookmark.exportAll'), false, '聚合导出命令不应继续暴露')
+assert.equal(commands.get('codebookmark.importPortablePackage')?.title, '导入可迁移书签配置')
+assert.equal(commands.get('codebookmark.exportPortablePackage')?.title, '可迁移书签配置')
+assert.equal(commands.get('codebookmark.batchExportPortablePackage')?.title, '可迁移书签配置')
+assert.equal([...commands.keys()].some(command => /SourceFiles$/u.test(command)), false)
 
-const exportMenu = manifest.contributes.menus['codebookmark.exportSubmenu']
-assert.deepEqual(
-  exportMenu.map(item => item.command ?? item.submenu),
-  [...directCommands.map(([commandId]) => commandId), 'codebookmark.batchExportSubmenu'],
-  '导出子菜单的项目或顺序不正确',
-)
-assert.deepEqual(exportMenu.slice(0, 5).map(item => item.group), [
-  '1_formats@1',
-  '1_formats@2',
-  '1_formats@3',
-  '1_formats@4',
-  '1_formats@5',
+const menus = manifest.contributes.menus
+const singleScriptExportWhen = 'workspaceFolderCount == 0 && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)'
+const currentScriptExportWhen = 'workspaceFolderCount > 0 && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)'
+const currentFolderExportWhen = 'workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript'
+assert.deepEqual(menus['codebookmark.exchangeSubmenu'].map(item => item.command ?? item.submenu), [
+  'codebookmark.importPortablePackage',
+  'codebookmark.exportSubmenu',
+  'codebookmark.exportCurrentScriptSubmenu',
+  'codebookmark.exportCurrentFolderSubmenu',
 ])
-assert.equal(exportMenu[5].group, '2_batch@1', '批量导出入口上方应通过独立分组显示分隔线')
+assert.equal(
+  menus['codebookmark.exchangeSubmenu'][1].when,
+  singleScriptExportWhen,
+)
+assert.equal(
+  menus['codebookmark.exchangeSubmenu'][2].when,
+  currentScriptExportWhen,
+)
+assert.equal(
+  menus['codebookmark.exchangeSubmenu'][3].when,
+  currentFolderExportWhen,
+)
 
-const batchMenu = manifest.contributes.menus['codebookmark.batchExportSubmenu']
-assert.deepEqual(
-  batchMenu.map(item => item.command),
-  batchCommands.map(([commandId]) => commandId),
-  '批量导出三级子菜单的项目或顺序不正确',
-)
-assert.equal(
-  manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportSubmenu')?.label,
-  '导出书签为…',
-)
-assert.equal(
-  manifest.contributes.submenus.find(item => item.id === 'codebookmark.batchExportSubmenu')?.label,
-  '批量导出当前文件夹下…',
-)
-assert.equal(manifest.contributes.menus['codebookmark.moreSubmenu']
-  .some(item => item.submenu === 'codebookmark.exportSubmenu'), true)
-for (const [commandId] of batchCommands) {
-  assert.equal(manifest.contributes.menus.commandPalette
-    .some(item => item.command === commandId && item.when === 'false'), true, `批量命令不应重复显示在命令面板：${commandId}`)
+const exportVisibility = new Map([
+  [singleScriptExportWhen, state => state.workspaceFolderCount === 0 && state.activeFileAvailable && state.activeFileHasBookmark],
+  [currentScriptExportWhen, state => state.workspaceFolderCount > 0 && state.activeFileAvailable && state.activeFileHasBookmark],
+  [currentFolderExportWhen, state => state.workspaceFolderCount > 0 && state.currentFolderHasBookmarkedScript],
+])
+const exportItems = menus['codebookmark.exchangeSubmenu'].filter(item => item.submenu?.includes('export'))
+const visibleExports = state => exportItems
+  .filter(item => exportVisibility.get(item.when)?.(state))
+  .map(item => item.submenu)
+for (const workspaceFolderCount of [0, 1]) {
+  for (const activeFileAvailable of [false, true]) {
+    for (const activeFileHasBookmark of [false, true]) {
+      for (const currentFolderHasBookmarkedScript of [false, true]) {
+        const state = { workspaceFolderCount, activeFileAvailable, activeFileHasBookmark, currentFolderHasBookmarkedScript }
+        const activeBookmarkedFile = activeFileAvailable && activeFileHasBookmark
+        const expected = workspaceFolderCount === 0
+          ? activeBookmarkedFile ? ['codebookmark.exportSubmenu'] : []
+          : [
+              ...(activeBookmarkedFile ? ['codebookmark.exportCurrentScriptSubmenu'] : []),
+              ...(currentFolderHasBookmarkedScript ? ['codebookmark.exportCurrentFolderSubmenu'] : []),
+            ]
+        assert.deepEqual(visibleExports(state), expected, `导出菜单状态组合不正确：${JSON.stringify(state)}`)
+      }
+    }
+  }
 }
+assert.deepEqual(menus['codebookmark.exportSubmenu'].map(item => item.command ?? item.submenu), [
+  'codebookmark.exportPortablePackage',
+  'codebookmark.exportOtherFormatsSubmenu',
+])
+assert.deepEqual(menus['codebookmark.exportCurrentScriptSubmenu'], menus['codebookmark.exportSubmenu'])
+assert.deepEqual(
+  menus['codebookmark.exportOtherFormatsSubmenu'].map(item => item.command),
+  readable.map(([commandId]) => commandId),
+)
+assert.deepEqual(menus['codebookmark.exportCurrentFolderSubmenu'].map(item => item.command ?? item.submenu), [
+  'codebookmark.batchExportPortablePackage',
+  'codebookmark.exportCurrentFolderOtherFormatsSubmenu',
+])
+assert.deepEqual(
+  menus['codebookmark.exportCurrentFolderOtherFormatsSubmenu'].map(item => item.command),
+  batchReadable.map(([commandId]) => commandId),
+)
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exchangeSubmenu')?.label, '导入/导出书签')
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportSubmenu')?.label, '导出')
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportCurrentScriptSubmenu')?.label, '导出当前脚本的…')
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportCurrentFolderSubmenu')?.label, '导出当前文件夹的…')
+assert.equal(menus['codebookmark.moreSubmenu'].some(item => item.submenu === 'codebookmark.exchangeSubmenu'), true)
+for (const [commandId] of batchReadable) {
+  assert.equal(menus.commandPalette.some(item => item.command === commandId && item.when === 'false'), true)
+}
+assert.equal(menus.commandPalette.some(item => item.command === 'codebookmark.batchExportPortablePackage' && item.when === 'false'), true)
+assert.equal(menus.commandPalette.some(item => item.command === 'codebookmark.exportPortablePackage'), false)
 
 const source = fs.readFileSync('src/commands/exportCommand.ts', 'utf8')
+const portableExportSource = fs.readFileSync('src/portable/PortableExport.ts', 'utf8')
+assert.match(portableExportSource, /const sourceScopeRoot = scopeRoot\(snapshot\)/)
+assert.match(portableExportSource, /fileUtils\.relativeToAbsolute\(projection\.path, vscode\.Uri\.file\(sourceScopeRoot\)\)/)
+assert.doesNotMatch(portableExportSource, /fileUtils\.relativeToAbsolute\(projection\.path, vscode\.Uri\.file\(rootPath\)\)/)
 for (const marker of [
-  'formatMarkdown',
-  'formatHtml',
-  'formatCsv',
-  'formatText',
-  'isSameOrDescendantAbsolutePath',
-  'relativeSourcePath',
-  '.bookmarks',
-  '.codebookmark.json',
-  'commands.exportCommand.noFilesWithBookmarksWereFoundInTheCurrent',
-]) {
-  assert.match(source, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-}
-assert.match(source, /JSON\.stringify\(data, null, 2\)/, '配置源文件必须使用可读缩进')
-assert.doesNotMatch(source, /书签 ID<\/th>/, '阅读版 HTML 不应突出内部书签 ID')
-assert.doesNotMatch(source, /书签 ID'\]/, '阅读版 CSV 不应突出内部书签 ID')
-assert.match(source, /code > 32 && \(code < 127 \|\| code > 159\)/, 'CSV 公式防护必须覆盖前导空白和控制字符')
+  'formatMarkdown', 'formatHtml', 'formatCsv', 'formatText',
+  'preparePortableExport', 'PORTABLE_PACKAGE_EXTENSION', 'currentFolderForExport',
+  'isSameOrDescendantAbsolutePath', 'relativeSourcePath', '.bookmarks',
+]) assert.match(source, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+assert.doesNotMatch(source, /SourceFiles|copyFile/u)
+assert.match(source, /const rollbackRecord = await writePortableExchangeRecord/)
+assert.match(source, /catch \(error\) \{[\s\S]*?await rollbackRecord\(\)[\s\S]*?throw error/)
+assert.doesNotMatch(source, /书签 ID<\/th>|书签 ID'\]/)
+assert.match(source, /code > 32 && \(code < 127 \|\| code > 159\)/)
 assert.match(source, /'=\+-@'\.includes\(raw\[firstMeaningful\]/)
-
-const commandsSource = fs.readFileSync('src/util/constants/Commands.ts', 'utf8')
-assert.match(commandsSource, /batchExportSubmenuId/)

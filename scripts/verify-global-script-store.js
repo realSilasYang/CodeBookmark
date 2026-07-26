@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { installModuleMocks } = require('./test-support/module-mocks')
+const { createRepositoryVscodeMock } = require('./test-support/repository-vscode-mock')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -15,50 +16,8 @@ const sourcePath = path.join(workspaceRoot, 'src', 'saved.ts')
 fs.mkdirSync(path.dirname(sourcePath), { recursive: true })
 fs.writeFileSync(sourcePath, 'const savedGlobally = true\n')
 
-class TreeItem {
-  constructor(label, collapsibleState) {
-    this.label = label
-    this.collapsibleState = collapsibleState
-  }
-}
-class MarkdownString {
-  appendMarkdown() {}
-  appendText() {}
-  appendCodeblock() {}
-}
 let workspaceFolders = [{ uri: { scheme: 'file', fsPath: workspaceRoot } }]
-const vscodeMock = {
-  TreeItem,
-  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
-  ThemeIcon: class {}, ThemeColor: class {}, MarkdownString,
-  Uri: { file: fsPath => ({ scheme: 'file', fsPath }) },
-  workspace: {
-    get workspaceFolders() { return workspaceFolders },
-    textDocuments: [],
-    getWorkspaceFolder: uri => {
-      const folder = workspaceFolders?.[0]
-      if (!folder) return undefined
-      const relative = path.relative(workspaceRoot, path.resolve(uri.fsPath))
-      return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative)) ? folder : undefined
-    },
-    getConfiguration: section => ({
-      get: key => {
-        if (section === 'codebookmark' && key === 'globalStoragePath') return storageRoot
-        if (section === 'codebookmark' && key === 'autoSpace') return true
-        return undefined
-      },
-    }),
-  },
-  window: {
-    activeTextEditor: undefined,
-    createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
-    showErrorMessage: async () => undefined,
-    showWarningMessage: async () => undefined,
-    showInformationMessage: async () => undefined,
-    showQuickPick: async items => items[0],
-  },
-  commands: { executeCommand: async () => undefined },
-}
+const vscodeMock = createRepositoryVscodeMock({ storageRoot, workspaceFolders: () => workspaceFolders })
 installModuleMocks({ vscode: vscodeMock })
 
 const { Bookmark, CursorIndex } = require('../out/models/Bookmark')

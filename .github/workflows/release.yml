@@ -80,13 +80,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Release tag $env:GITHUB_REF_NAME does not belong to the main branch history."
           }
-          $vsix = "codebookmark-$version.vsix"
-          $sbom = "codebookmark-$version.sbom.cdx.json"
+          $artifactDirectory = Join-Path $env:RUNNER_TEMP "codebookmark-release"
+          New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
+          $vsix = Join-Path $artifactDirectory "codebookmark-$version.vsix"
+          $sbom = Join-Path $artifactDirectory "codebookmark-$version.sbom.cdx.json"
+          $sums = Join-Path $artifactDirectory "SHA256SUMS"
           npm run package:vsix -- --out $vsix
           npm run sbom -- $sbom
-          node scripts/release/write-sha256sums.js SHA256SUMS $vsix $sbom
+          node scripts/release/write-sha256sums.js $sums $vsix $sbom
           "vsix=$vsix" | Add-Content -Path $env:GITHUB_OUTPUT
           "sbom=$sbom" | Add-Content -Path $env:GITHUB_OUTPUT
+          "sums=$sums" | Add-Content -Path $env:GITHUB_OUTPUT
       - name: Build Chinese release notes
         shell: pwsh
         run: |
@@ -98,7 +102,7 @@ jobs:
           subject-path: |
             ${{ steps.artifacts.outputs.vsix }}
             ${{ steps.artifacts.outputs.sbom }}
-            SHA256SUMS
+            ${{ steps.artifacts.outputs.sums }}
       - name: Attest software bill of materials
         uses: actions/attest-sbom@51e74621a501c89df81fc1391c5a8f4cfc9fab2f # v3
         with:
@@ -112,19 +116,22 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Publish to VS Code Marketplace
         shell: pwsh
+        env:
+          VSIX_PATH: ${{ steps.artifacts.outputs.vsix }}
         run: |
-          $version = node -p "require('./package.json').version"
           npm exec -- vsce publish `
             --azure-credential `
-            --packagePath "codebookmark-$version.vsix" `
+            --packagePath $env:VSIX_PATH `
             --skip-duplicate
       - name: Verify Marketplace package matches VSIX
         shell: pwsh
+        env:
+          VSIX_PATH: ${{ steps.artifacts.outputs.vsix }}
         run: |
           $publisher = node -p "require('./package.json').publisher"
           $name = node -p "require('./package.json').name"
           $version = node -p "require('./package.json').version"
-          $localVsix = "codebookmark-$version.vsix"
+          $localVsix = $env:VSIX_PATH
           $marketplaceVsix = Join-Path $env:RUNNER_TEMP "marketplace-$version.vsix"
           $downloadUri = "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/$publisher/vsextensions/$name/$version/vspackage"
           for ($attempt = 1; $attempt -le 6; $attempt++) {
@@ -145,18 +152,22 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          VSIX_PATH: ${{ steps.artifacts.outputs.vsix }}
+          SBOM_PATH: ${{ steps.artifacts.outputs.sbom }}
+          SUMS_PATH: ${{ steps.artifacts.outputs.sums }}
         run: |
           $version = node -p "require('./package.json').version"
-          $vsix = "codebookmark-$version.vsix"
-          $sbom = "codebookmark-$version.sbom.cdx.json"
+          $vsix = $env:VSIX_PATH
+          $sbom = $env:SBOM_PATH
+          $sums = $env:SUMS_PATH
           $releaseNotes = "$env:RUNNER_TEMP/release-notes.md"
           if (gh release view $env:GITHUB_REF_NAME --json tagName 2>$null) {
             gh release edit $env:GITHUB_REF_NAME `
               --title "CodeBookmark v$version" `
               --notes-file $releaseNotes
-            gh release upload $env:GITHUB_REF_NAME $vsix $sbom SHA256SUMS --clobber
+            gh release upload $env:GITHUB_REF_NAME $vsix $sbom $sums --clobber
           } else {
-            gh release create $env:GITHUB_REF_NAME $vsix $sbom SHA256SUMS `
+            gh release create $env:GITHUB_REF_NAME $vsix $sbom $sums `
               --verify-tag `
               --title "CodeBookmark v$version" `
               --notes-file $releaseNotes

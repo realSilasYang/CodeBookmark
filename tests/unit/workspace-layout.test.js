@@ -6,9 +6,10 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('node:test')
 
 const {
-  decodeWorkspaceLayoutPersistence,
-  workspaceLayoutPersistence,
-  workspaceNodeReferenceKey,
+	decodeWorkspaceLayoutPersistence,
+	workspaceLayoutStructuralIdentity,
+	workspaceLayoutPersistence,
+	workspaceNodeReferenceKey,
 } = require('../../out/models/WorkspaceLayout')
 
 const scriptA = '10000000-0000-9000-1000-000000000001'
@@ -43,6 +44,25 @@ describe('WorkspaceLayout', () => {
       workspaceNodeReferenceKey(markA),
       workspaceNodeReferenceKey({ ...markA, scriptId: scriptB }),
     )
+  })
+
+  it('compares every visual field while ignoring persistence metadata', () => {
+    const value = workspaceLayoutPersistence([
+      { node: fileA, parent: null },
+      { node: fileB, parent: fileA },
+    ], [scriptB], fileA, 42, [{ node: fileA, expanded: true }])
+    assert.equal(
+      workspaceLayoutStructuralIdentity(value),
+      workspaceLayoutStructuralIdentity({ ...value, updatedAt: 99 }),
+    )
+    for (const changed of [
+      { ...value, entries: value.entries.slice(0, 1) },
+      { ...value, hiddenFiles: [] },
+      { ...value, pinnedContainer: fileB },
+      { ...value, expansionStates: [{ node: fileA, expanded: false }] },
+    ]) {
+      assert.notEqual(workspaceLayoutStructuralIdentity(value), workspaceLayoutStructuralIdentity(changed))
+    }
   })
 
   it('rejects duplicate, missing-parent, self and cyclic references', () => {

@@ -2,6 +2,36 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.0 - 2026-07-26
+
+### ⚠️ Important Notes
+
+- **Bookmark exchange format upgrade:** Manual migration and resharing now use the new `.codebookmark` portable bookmark configuration exclusively. Legacy JSON configurations, configuration directories, and internal source-configuration files are no longer accepted as import formats. This change only consolidates the manual exchange surface; it does not delete or reset bookmarks already stored on the current machine.
+
+---
+
+### ✨ Added
+
+- **Cross-device portable bookmark configurations:** Export one script or an entire workspace as a single package without machine-specific absolute paths, then repeatedly import, edit, and share it across Windows, macOS, and Linux while retaining labels, icons, hierarchy, code anchors, file-node appearance, and cross-file layout.
+- **Intelligent target matching and safe merging:** Import resolves a unique target through workspace-relative paths, source digests, line-ending-independent digests, and bookmark anchors, while reporting ambiguous results as conflicts. Existing targets offer append or overwrite modes. Exchange records preserve identity, make repeated imports idempotent, support three-way merging, and roll back multi-file writes in reverse order after failure.
+- **Exchange-record management:** The bookmark configuration manager now lists portable exchange records with their exchange series, bound scope, latest revision, script and bookmark identity mappings, and merge bases, and can remove them after explaining the effect.
+
+---
+
+### 🚀 Improvements
+
+- **Import and export menus:** The menu is now organized under “Import/Export Bookmarks”, with “Export Current Script…” and “Export Current Folder…” presented side by side in folders and workspaces. Every package entry uses the “Portable Bookmark Configuration” name, and parents with no available children are hidden according to the active script and folder bookmark state.
+- **Workspace automatic-marker performance:** Candidate discovery, open-document reuse, source reads, prefiltering, and exact scans now run as measured stages and cache unchanged results. Large-workspace startup is faster without reducing language eligibility, comment lexing, or exact-scan accuracy. Performance logs distinguish real wall-clock time from concurrent cumulative I/O time.
+- **Shared infrastructure:** File access, atomic writes, error text, hashing, document lookup, replaceable resources, timers, and test scheduling now use shared implementations instead of parallel copies. Save, refresh, file-change, relocation, undo and redo, and AI workflow behavior remain within their established boundaries.
+- **Verification and packaging boundaries:** Zero-warning development verification is separated from finalized release-material guards, so an unreleased development version does not require a fabricated changelog while a real release still validates its version, notes, and supply chain. VSIX output requires an explicit path outside the repository, and CI and Release jobs use temporary directories so local artifacts cannot remain at the repository root.
+
+---
+
+### 🐛 Fixed
+
+- **Package integrity and cross-platform paths:** Archive entries, counts, and expanded sizes are bounded, while SHA-256 digests, recursive bookmark identities, and relative paths are verified. Path traversal, unknown entries, damaged files, future formats, and partially valid packages are rejected. Path casing, Unicode composition, and CRLF/LF differences no longer prevent reliable matching.
+- **Storage-root transfer:** Moving the bookmark storage root now migrates, merges, and cleans portable exchange records as managed data. Source data is removed only after every target write succeeds; failures continue using the original storage root.
+
 ## 🎉 Version 3.1.1 - 2026-07-25
 
 ### ✨ Added

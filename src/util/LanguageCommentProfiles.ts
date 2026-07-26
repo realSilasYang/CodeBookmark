@@ -11,11 +11,13 @@ import {
 	type CodeMarkerSyntaxProfile,
 } from './CodeMarkerScanner'
 import { logger } from './Logger'
+import { isJsonRecord } from './JsonRecord'
 
 const MAX_LANGUAGE_CONFIG_BYTES = 512 * 1024
 const MAX_LANGUAGE_CONTRIBUTIONS = 4_096
-const MAX_DISCOVERY_GLOBS = 64
-const GLOB_CHUNK_SIZE = 48
+// VS Code 可以稳定处理数千字符的联合 glob。较大的分组显著减少对同一工作区
+// 的重复目录遍历，同时仍保留复杂 brace 模式的独立兼容路径。
+const GLOB_CHUNK_SIZE = 256
 
 interface LanguageContribution {
 	id?: unknown
@@ -34,10 +36,6 @@ interface ProfileState {
 	discoveryExtensions: Set<string>
 	discoveryFilenames: Set<string>
 	discoveryPatterns: Set<string>
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function stripJsonComments(value: string): string {
@@ -144,12 +142,12 @@ function lineCommentTokens(value: unknown, languageId: string): CodeMarkerLineCo
 	for (const candidate of candidates) {
 		const comment = typeof candidate === 'string'
 			? candidate
-			: isRecord(candidate) && typeof candidate.comment === 'string' ? candidate.comment : undefined
+			: isJsonRecord(candidate) && typeof candidate.comment === 'string' ? candidate.comment : undefined
 		if (!comment || comment.length > 32) continue
 		const alphabetic = /^[a-z]+$/i.test(comment)
 		tokens.push({
 			value: comment,
-			startOnly: isRecord(candidate) && candidate.noIndent === true,
+			startOnly: isJsonRecord(candidate) && candidate.noIndent === true,
 			requiresWhitespaceBefore: alphabetic,
 			requiresWhitespaceAfter: alphabetic,
 			caseInsensitive: languageId === 'bat' || languageId === 'batch' || languageId === 'dosbatch',
@@ -159,7 +157,7 @@ function lineCommentTokens(value: unknown, languageId: string): CodeMarkerLineCo
 }
 
 function syntaxProfile(value: unknown, languageId: string): CodeMarkerSyntaxProfile | undefined {
-	if (!isRecord(value) || !isRecord(value.comments)) return undefined
+	if (!isJsonRecord(value) || !isJsonRecord(value.comments)) return undefined
 	const lineComments = lineCommentTokens(value.comments.lineComment, languageId)
 	const block = value.comments.blockComment
 	const blockComments: Array<readonly [string, string]> = []
@@ -281,12 +279,12 @@ function emptyState(): ProfileState {
 	}
 }
 
-function braceGlobs(prefix: string, values: readonly string[]): string[] {
+function unionGlobs(values: readonly string[]): string[] {
 	const globs: string[] = []
 	for (let index = 0; index < values.length; index += GLOB_CHUNK_SIZE) {
 		const chunk = values.slice(index, index + GLOB_CHUNK_SIZE)
-		if (chunk.length === 1) globs.push(`${prefix}${chunk[0]}`)
-		else if (chunk.length > 1) globs.push(`${prefix}{${chunk.join(',')}}`)
+		if (chunk.length === 1) globs.push(`**/${chunk[0]}`)
+		else if (chunk.length > 1) globs.push(`**/{${chunk.join(',')}}`)
 	}
 	return globs
 }
@@ -331,7 +329,7 @@ export class LanguageCommentProfileRegistry {
 			const grammars = extension.packageJSON?.contributes?.grammars
 			if (!Array.isArray(grammars)) continue
 			for (const grammar of grammars) {
-				if (isRecord(grammar) && typeof grammar.language === 'string' && grammar.language.trim()) {
+				if (isJsonRecord(grammar) && typeof grammar.language === 'string' && grammar.language.trim()) {
 					highlightedLanguages.add(grammar.language.toLowerCase())
 				}
 			}
@@ -341,7 +339,7 @@ export class LanguageCommentProfileRegistry {
 			const languages = extension.packageJSON?.contributes?.languages
 			if (!Array.isArray(languages)) continue
 			for (const language of languages) {
-				if (isRecord(language) && contributions.length < MAX_LANGUAGE_CONTRIBUTIONS) {
+				if (isJsonRecord(language) && contributions.length < MAX_LANGUAGE_CONTRIBUTIONS) {
 					contributions.push({ extensionUri: extension.extensionUri, language })
 				}
 			}
@@ -457,12 +455,17 @@ export class LanguageCommentProfileRegistry {
 		const patterns = [...this.state.discoveryPatterns].sort().map(pattern => pattern.replace(/^\*\*\//, ''))
 		const simplePatterns = patterns.filter(pattern => !/[{},]/.test(pattern))
 		const complexPatterns = patterns.filter(pattern => /[{},]/.test(pattern)).map(pattern => `**/${pattern}`)
+		// 扩展名、精确文件名和不含 brace 的模式可以共用一次目录遍历。复杂模式
+		// 独立保留，避免依赖不同 glob 引擎对嵌套 brace 的兼容差异。
+		const simpleSelectors = [
+			...extensions.map(extension => `*${extension}`),
+			...filenames,
+			...simplePatterns,
+		]
 		const globs = [
-			...braceGlobs('**/*', extensions),
-			...braceGlobs('**/', filenames),
-			...braceGlobs('**/', simplePatterns),
+			...unionGlobs([...new Set(simpleSelectors)]),
 			...complexPatterns,
 		]
-		return [...new Set(globs)].slice(0, MAX_DISCOVERY_GLOBS)
+		return [...new Set(globs)]
 	}
 }

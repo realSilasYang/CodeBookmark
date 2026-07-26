@@ -43,7 +43,9 @@ L’identità combina ID dello script, percorso relativo, caratteristiche del co
 
 ## 5. Importazione, esportazione e gestione
 
-Puoi importare un singolo script o un’intera cartella di configurazioni. L’esportazione offre JSON reimportabile, testo gerarchico, Markdown, HTML e CSV. L’esportazione in serie visita ricorsivamente la cartella corrente, elabora solo gli script con segnalibri e produce un risultato per sorgente. Il gestore mostra configurazioni, layout attuale, registri precedenti, migrazioni, copie in conflitto e residui temporanei; il passaggio del mouse rivela i valori completi e si possono pulire soltanto tipi autorizzati. Gli scope vuoti spariscono quando la cronologia annulla／ripristina non ne ha più bisogno.
+“Importa／esporta segnalibri” salva lo script corrente o il workspace in un’unica configurazione portatile dei segnalibri `.codebookmark`. Il file può essere importato in un’altra cartella locale o su dispositivi Windows, macOS e Linux, modificato e condiviso di nuovo senza perdere etichette, icone, gerarchia, ancore del codice, aspetto dei nodi file o layout tra file. Non contiene percorsi assoluti né identità del file system; i vecchi JSON e le cartelle di configurazione non sono più formati di importazione.
+
+L’importazione riconosce automaticamente un pacchetto per script o workspace e collega soltanto una destinazione univoca, usando percorso relativo, impronta del sorgente o contesto dei segnalibri. Le corrispondenze ambigue vengono segnalate come conflitti; se esistono già segnalibri, puoi scegliere Aggiungi o Sovrascrivi. Markdown, HTML, CSV e testo gerarchico restano formati di sola lettura. Il gestore mostra anche gli stati di scambio tra dispositivi, i layout, le migrazioni, le copie in conflitto e i residui temporanei.
 
 ## 6. Assistenza IA
 
@@ -67,7 +69,7 @@ Creazione, eliminazione, rinomina, trascinamento, ordinamento, contenitori, icon
 
 `AIService` gestisce indirizzi e trasporto, gli schema controllano risposte non attendibili, il catalogo autorizza semanticamente le icone. I marker automatici richiedono grammar e regole di commento. Le Webview usano nonce, CSP rigorosa e messaggi strutturati.
 
-Il progetto usa Node.js 24. `npm run verify` esegue compilazione, ESLint, test unitari, contrattuali e verifiche specialistiche; `npm run test:integration` riusa VS Code in ambienti isolati per 13 lingue e fallback inglese; `npm run check:release` aggiunge audit e lista VSIX. Vengono pubblicati solo tag annotati appartenenti a `main`. GitHub Actions usa credenziali OIDC temporanee, confronta l’hash del VSIX Marketplace e crea una Release con VSIX, CycloneDX SBOM e `SHA256SUMS`. Consulta la [guida di pubblicazione](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
+Il progetto usa Node.js 24. `npm run verify` esegue compilazione, ESLint, test unitari e contrattuali e tutte le verifiche valide durante lo sviluppo; `npm run verify:release` controlla i materiali definitivi della versione. `npm run test:integration` riusa VS Code in ambienti isolati per 13 lingue e fallback inglese; `npm run check:release` riunisce tutti i controlli, l’audit e la lista VSIX. Vengono pubblicati solo tag annotati appartenenti a `main`. GitHub Actions usa credenziali OIDC temporanee, confronta l’hash del VSIX Marketplace e crea una Release con VSIX, CycloneDX SBOM e `SHA256SUMS`. Consulta la [guida di pubblicazione](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 
 # Cronologia delle stelle
 

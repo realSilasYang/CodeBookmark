@@ -11,7 +11,7 @@ import { IconPickerWebview } from '../util/quick_pick_icon/IconPickerWebview'
 import { fileChangeFingerprints } from '../util/FileChangeFingerprint'
 import { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
-import { allBookmarks } from '../models/BookmarkOwnership'
+import { allBookmarks, captureWorkspaceLayout } from '../models/BookmarkOwnership'
 import { workspaceOrderPersistence } from '../models/WorkspaceOrder'
 import type { WorkspaceLayout } from '../models/WorkspaceLayout'
 import type { IntegrationBookmarkSnapshot } from '../testing/IntegrationTestTypes'
@@ -99,7 +99,9 @@ import {
 } from './BookmarkTreeInteractionRunner'
 import { createIntegrationTestSnapshot, moveNodeForIntegrationTest } from '../testing/IntegrationTestSupport'
 import { BookmarkSaveCoordinator, type BookmarkSaveCoordinatorPort } from './BookmarkSaveCoordinator'
-import { runImportBookmarkConfiguration, type BookmarkImportWorkflowPort } from './BookmarkImportWorkflowRunner'
+import { importPortablePackageFromUri, runPortablePackageImport, type PortableImportWorkflowPort } from './PortableImportWorkflowRunner'
+import { importPortableWorkspaceLayout } from '../repository/WorkspaceLayoutRepository'
+import type { PortableExportSnapshot } from '../portable/PortableExport'
 import { BookmarkViewRefreshCoordinator, type BookmarkViewRefreshPort } from './BookmarkViewRefreshCoordinator'
 import { BookmarkStoragePathWorkflowRunner, type BookmarkStoragePathWorkflowPort } from './BookmarkStoragePathWorkflowRunner'
 import {
@@ -133,10 +135,9 @@ import {
 } from './BookmarkDocumentChangeCoordinator'
 import { CodeMarkerWorkflowController } from './CodeMarkerWorkflowController'
 import { cleanupEmptyWorkspaceScopeFolders } from '../util/WorkspaceScopeFolderLifecycle'
+import { errorMessage } from '../util/ErrorMessage'
+import { activeFileUri, textDocumentLines } from '../util/VscodeDocument'
 const LAST_STORAGE_ROOT_KEY = 'codebookmark.lastStorageRoot'
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
-}
 const TREE_RENDER_SETTLE_MS = 16
 export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookmark>, vscode.TreeDragAndDropController<Bookmark>, vscode.Disposable {
 	private _onDidChangeTreeData: vscode.EventEmitter<Bookmark | undefined | null | void> = new vscode.EventEmitter<Bookmark | undefined | null | void>()
@@ -343,10 +344,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	private readonly bookmarkContextPortAdapter: BookmarkContextPort<vscode.Uri> = {
 		setContext: (key, value) => vscode.commands.executeCommand('setContext', key, value),
-		activeEditorFileUri: () => {
-			const uri = vscode.window.activeTextEditor?.document.uri
-			return uri?.scheme === 'file' ? uri : undefined
-		},
+		activeEditorFileUri: activeFileUri,
 		activeTabFileUri: () => this.activeTabFileUri(),
 		workspaceFolderDirectory: () => this.workspaceFolderRootForCurrentScope(),
 		isCurrentScope: uri => this.uriMatchesCurrentScope(uri),
@@ -495,10 +493,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	private async synchronizeOpenCodeMarkerDocuments(): Promise<void> {
 		await this.codeMarkerWorkflow.synchronizeOpenDocuments()
-	}
-
-	private documentLines(document: vscode.TextDocument): string[] {
-		return Array.from({ length: document.lineCount }, (_, line) => document.lineAt(line).text)
 	}
 
 	private synchronizeCodeMarkerSnapshot(uri: vscode.Uri, lines: readonly string[], languageId?: string) {
@@ -986,7 +980,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			taskRegistry: this.aiTaskRegistry,
 			workflowGuard: this.aiWorkflowGuard,
 			bookmarksForPath: pathRel => this.getBookmarksByPath(pathRel),
-			documentLines: document => this.documentLines(document),
+			documentLines: textDocumentLines,
 			deleteBookmark: id => { this.deleteBookmarkRecordOnly(id) },
 			addBookmark: bookmark => { this.codeBookmarks.addNewBookmark(bookmark) },
 			persistGeneratedExpansion: storageScope => persistGeneratedWorkspaceExpansion(storageScope, () => this.currentStorageScope, this.workspaceMetadataWriteQueue, () => this.flushPendingSaves(true), this.workspaceTopologyCommitPort()),
@@ -1214,7 +1208,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		bookmarkCount: bookmarkPath => this.getBookmarksByPath(bookmarkPath).length,
 		relocateBookmarks: (bookmarkState, bookmarkPath, uri) =>
 			fileUtils.readContentBookmarkInFile(bookmarkState, true, bookmarkPath, uri),
-		documentLines: document => this.documentLines(document),
+		documentLines: textDocumentLines,
 		documentLanguage: document => document.languageId,
 		synchronizeCodeMarkers: (uri, lines, languageId) =>
 			this.synchronizeCodeMarkerSnapshot(uri, lines, languageId),
@@ -1290,21 +1284,28 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		}
 	}
 
-	private bookmarkImportWorkflowPort(): BookmarkImportWorkflowPort {
+	private portableImportWorkflowPort(): PortableImportWorkflowPort {
 		return {
-			ensureEditorScope: editor => this.ensureEditorScope(editor),
-			absoluteToRelative: filePath => fileUtils.absoluteToRelative(filePath),
-			bookmarksForPath: bookmarkPath => this.getBookmarksByPath(bookmarkPath),
+			storageRoot: () => storageRootState.root,
+			ensureScope: uri => this.ensurePortableImportScope(uri),
 			storageScopeForUri: uri => this.storageScopeForUri(uri),
+			flushPendingSaves: requireSuccess => this.flushPendingSaves(requireSuccess),
 			runImportTransaction: operation => this.runImportTransaction(operation),
 			captureUndoState: () => this.captureUndoState(),
 			commitImportUndo: captured => { undoManager.commitCapturedState(captured, 'importBookmarks') },
-			importFolder: (configFolderPath, workspaceRootPath) =>
-				bookmarkRepository.importBookmarkConfigurationsFromFolder(configFolderPath, workspaceRootPath),
-			importFile: (configPath, targetAbsolutePath) =>
-				bookmarkRepository.importBookmarkConfiguration(configPath, targetAbsolutePath),
-			refresh: (editor, expectedScope) => this.refresh(editor, expectedScope, true),
+			targetHasBookmarks: targetAbsolutePath => bookmarkRepository.portableTargetHasBookmarks(targetAbsolutePath),
+			importScript: (portable, targetAbsolutePath, base, previousScriptId, previousBookmarkMappings, mode) =>
+				bookmarkRepository.importPortableScript(portable, targetAbsolutePath, base, previousScriptId, previousBookmarkMappings, mode),
+			importLayout: (layout, workspaceRootPath, identities, storageRoot, mode) =>
+				importPortableWorkspaceLayout(layout, workspaceRootPath, identities, storageRoot, mode),
+			refresh: expectedScope => this.refresh(undefined, expectedScope, true),
 		}
+	}
+
+	private async ensurePortableImportScope(uri: vscode.Uri): Promise<void> {
+		const scope = this.storageScopeForUri(uri)
+		if (scope === this.currentStorageScope) return
+		await this.initViewEditor(uri.fsPath, false, this.beginViewLoad(), scope)
 	}
 
 	private bookmarkStoragePathWorkflowPort(): BookmarkStoragePathWorkflowPort {
@@ -1349,6 +1350,19 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 	public async flushPendingSaves(requireSuccess = false): Promise<void> {
 		return this.saveCoordinator.flushPendingSaves(requireSuccess)
+	}
+
+	public portableExportSnapshot(): PortableExportSnapshot {
+		if (!this.currentStorageScope) throw new Error('Bookmark view is not ready')
+		const pinned = allBookmarks(this.codeBookmarks).find(bookmark => bookmark.isPinned)
+		return {
+			bookmarks: this.codeBookmarks,
+			storageScope: this.currentStorageScope,
+			scopeFilePath: this.currentScopeFilePath,
+			layout: this.currentStorageScope.startsWith('workspace:')
+				? captureWorkspaceLayout(this.codeBookmarks, this.workspaceLayoutCache?.hiddenFiles ?? [], pinned)
+				: undefined,
+		}
 	}
 
 	private async runImportTransaction<T>(operation: () => Promise<T>): Promise<T> {
@@ -1400,14 +1414,16 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			scopeFilePath,
 			signal,
 			{
-				resolveBookmarkFolder: candidateScopeFilePath => {
-					const scopeUri = candidateScopeFilePath ? vscode.Uri.file(candidateScopeFilePath) : undefined
-					return fileUtils.getGlobalBookmarkFolder(true, scopeUri) ?? undefined
-				},
+				resolveBookmarkFolder: candidateScopeFilePath => this.resolveWorkspaceMetadataFolder(candidateScopeFilePath),
 				readFile: filePath => fs.promises.readFile(filePath, 'utf8'),
 				reportReadFailure: error => logger.error(localize("providers.CodeBookmarkViewProvider.failedToReadTheWorkspaceBookmarkOrder", { errorMessage: errorMessage(error) })),
 			},
 		)
+	}
+
+	private resolveWorkspaceMetadataFolder(scopeFilePath?: string): string | undefined {
+		const scopeUri = scopeFilePath ? vscode.Uri.file(scopeFilePath) : undefined
+		return fileUtils.getGlobalBookmarkFolder(true, scopeUri) ?? undefined
 	}
 
 	private persistPreparedWorkspaceMetadata(prepared: PreparedBookmarkView, generation: number): Promise<void> {
@@ -1450,10 +1466,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				candidateSignal,
 			),
 		}, signal), signal, {
-				resolveBookmarkFolder: candidateScopeFilePath => {
-					const scopeUri = candidateScopeFilePath ? vscode.Uri.file(candidateScopeFilePath) : undefined
-					return fileUtils.getGlobalBookmarkFolder(true, scopeUri) ?? undefined
-				},
+				resolveBookmarkFolder: candidateScopeFilePath => this.resolveWorkspaceMetadataFolder(candidateScopeFilePath),
 				readFile: filePath => fs.promises.readFile(filePath, 'utf8'),
 				reportReadFailure: error => logger.error(localize("providers.CodeBookmarkViewProvider.failedToReadTheWorkspaceBookmarkLayout", { errorMessage: errorMessage(error) })),
 		})
@@ -1505,8 +1518,12 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		this.bookmarkTreeViewLifecycle.resolvePopulation(generation)
 	}
 
-	async importBookmarkConfiguration(): Promise<void> {
-		return runImportBookmarkConfiguration(this.bookmarkImportWorkflowPort())
+	async importPortablePackage(): Promise<void> {
+		return runPortablePackageImport(this.portableImportWorkflowPort())
+	}
+
+	async importPortablePackageFromUri(packageUri: vscode.Uri): Promise<void> {
+		return importPortablePackageFromUri(this.portableImportWorkflowPort(), packageUri)
 	}
 
 	openBookmarkConfigurationManager(): void {

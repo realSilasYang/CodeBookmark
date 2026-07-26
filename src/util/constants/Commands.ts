@@ -222,11 +222,10 @@ export class Commands {
 			'when': `${Commands.viewCodeBookmarkView}`,
 			"category": "代码书签"
 		},
-		importBookmarkConfig: {
-			'command': Commands.nameExtension + '.importBookmarkConfig',
-			'title': '导入书签配置文件',
+		importPortablePackage: {
+			'command': Commands.nameExtension + '.importPortablePackage',
+			'title': '导入可迁移书签配置',
 			'icon': '$(file-symlink-file)',
-			'enablement': `!${Commands.varActiveFileHasBookmark}`,
 			"category": "代码书签"
 		},
 		manageBookmarkConfigurations: {
@@ -375,10 +374,17 @@ export class Commands {
 			'enablement': `${Commands.varHasBookmark}`,
 			"category": "代码书签"
 		},
-		exportSourceFiles: {
-			'command': Commands.nameExtension + '.exportSourceFiles',
-			'title': '配置源文件',
+		exportPortablePackage: {
+			'command': Commands.nameExtension + '.exportPortablePackage',
+			'title': '可迁移书签配置',
 			'when': `${Commands.viewCodeBookmarkView}`,
+			'enablement': `${Commands.varHasBookmark}`,
+			"category": "代码书签"
+		},
+		batchExportPortablePackage: {
+			'command': Commands.nameExtension + '.batchExportPortablePackage',
+			'title': '可迁移书签配置',
+			'when': `${Commands.viewCodeBookmarkView} && ${Commands.whenWorkspaceFolderOpen}`,
 			'enablement': `${Commands.varHasBookmark}`,
 			"category": "代码书签"
 		},
@@ -410,13 +416,6 @@ export class Commands {
 			'enablement': `${Commands.varHasBookmark}`,
 			"category": "代码书签"
 		},
-		batchExportSourceFiles: {
-			'command': Commands.nameExtension + '.batchExportSourceFiles',
-			'title': '配置源文件',
-			'when': `${Commands.viewCodeBookmarkView}`,
-			'enablement': `${Commands.varHasBookmark}`,
-			"category": "代码书签"
-		},
 		clearInvalidBookmarks: {
 			'command': Commands.nameExtension + '.clearInvalidBookmarks',
 			'title': '$(trash) 清除失效书签',
@@ -436,8 +435,12 @@ export class Commands {
 
 	static readonly editSubmenuId = 'codebookmark.editSubmenu'
 	static readonly moreSubmenuId = 'codebookmark.moreSubmenu'
+	static readonly exchangeSubmenuId = 'codebookmark.exchangeSubmenu'
 	static readonly exportSubmenuId = 'codebookmark.exportSubmenu'
-	static readonly batchExportSubmenuId = 'codebookmark.batchExportSubmenu'
+	static readonly exportCurrentScriptSubmenuId = 'codebookmark.exportCurrentScriptSubmenu'
+	static readonly exportOtherFormatsSubmenuId = 'codebookmark.exportOtherFormatsSubmenu'
+	static readonly exportCurrentFolderSubmenuId = 'codebookmark.exportCurrentFolderSubmenu'
+	static readonly exportCurrentFolderOtherFormatsSubmenuId = 'codebookmark.exportCurrentFolderOtherFormatsSubmenu'
 	static readonly aiSubmenuId = 'codebookmark.aiSubmenu'
 	static readonly aiGenerateSubmenuId = 'codebookmark.aiGenerateSubmenu'
 	static readonly aiGenerateWorkspaceSubmenuId = 'codebookmark.aiGenerateWorkspaceSubmenu'
@@ -457,13 +460,29 @@ export class Commands {
 			"icon": "$(three-bars)"
 		},
 		{
-			"id": this.exportSubmenuId,
-			"label": "导出书签为…",
-			"icon": "$(export)"
+			"id": this.exchangeSubmenuId,
+			"label": "导入/导出书签",
+			"icon": "$(arrow-swap)"
 		},
 		{
-			"id": this.batchExportSubmenuId,
-			"label": "批量导出当前文件夹下…"
+			"id": this.exportSubmenuId,
+			"label": "导出"
+		},
+		{
+			"id": this.exportCurrentScriptSubmenuId,
+			"label": "导出当前脚本的…"
+		},
+		{
+			"id": this.exportOtherFormatsSubmenuId,
+			"label": "其他格式"
+		},
+		{
+			"id": this.exportCurrentFolderSubmenuId,
+			"label": "导出当前文件夹的…"
+		},
+		{
+			"id": this.exportCurrentFolderOtherFormatsSubmenuId,
+			"label": "其他格式"
 		},
 		{
 			"id": this.aiSubmenuId,
@@ -502,27 +521,55 @@ export class Commands {
 	static moreSubmenu_items = [
 		{ command: this.bookmarkCommands.clearInvalidBookmarks.command, group: "0_clear@1", when: this.bookmarkCommands.clearInvalidBookmarks.when },
 		{ command: this.bookmarkCommands.sort.command, group: "1_primary@1" },
-		{ submenu: this.exportSubmenuId, group: "1_primary@2" },
+		{ submenu: this.exchangeSubmenuId, group: "1_primary@2" },
 		{ command: this.bookmarkCommands.manageBookmarkConfigurations.command, group: "2_secondary@1" },
 		{ command: this.bookmarkCommands.openHelp.command, group: "2_secondary@2" },
 		{ command: this.bookmarkCommands.openSettings.command, group: "2_secondary@3" }
 	]
 
+	static exchangeSubmenu_items = [
+		{ command: this.bookmarkCommands.importPortablePackage.command, group: "1_items@1" },
+		{
+			submenu: this.exportSubmenuId,
+			group: "1_items@2",
+			when: `workspaceFolderCount == 0 && ${this.whenActiveBookmarkedFile}`,
+		},
+		{
+			submenu: this.exportCurrentScriptSubmenuId,
+			group: "1_items@2",
+			when: `${this.whenWorkspaceFolderOpen} && ${this.whenActiveBookmarkedFile}`,
+		},
+		{
+			submenu: this.exportCurrentFolderSubmenuId,
+			group: "1_items@3",
+			when: `${this.whenWorkspaceFolderOpen} && ${this.varCurrentFolderHasBookmarkedScript}`,
+		},
+	]
+
 	static exportSubmenu_items = [
+		{ command: this.bookmarkCommands.exportPortablePackage.command, group: "1_items@1" },
+		{ submenu: this.exportOtherFormatsSubmenuId, group: "1_items@2" },
+	]
+
+	static exportCurrentScriptSubmenu_items = this.exportSubmenu_items
+
+	static exportOtherFormatsSubmenu_items = [
 		{ command: this.bookmarkCommands.exportToMarkdown.command, group: "1_formats@1" },
 		{ command: this.bookmarkCommands.exportToHtml.command, group: "1_formats@2" },
 		{ command: this.bookmarkCommands.exportToCsv.command, group: "1_formats@3" },
 		{ command: this.bookmarkCommands.exportToText.command, group: "1_formats@4" },
-		{ command: this.bookmarkCommands.exportSourceFiles.command, group: "1_formats@5" },
-		{ submenu: this.batchExportSubmenuId, group: "2_batch@1" },
 	]
 
-	static batchExportSubmenu_items = [
+	static exportCurrentFolderSubmenu_items = [
+		{ command: this.bookmarkCommands.batchExportPortablePackage.command, group: "1_items@1" },
+		{ submenu: this.exportCurrentFolderOtherFormatsSubmenuId, group: "1_items@2" },
+	]
+
+	static exportCurrentFolderOtherFormatsSubmenu_items = [
 		{ command: this.bookmarkCommands.batchExportToMarkdown.command, group: "1_items@1" },
 		{ command: this.bookmarkCommands.batchExportToHtml.command, group: "1_items@2" },
 		{ command: this.bookmarkCommands.batchExportToCsv.command, group: "1_items@3" },
 		{ command: this.bookmarkCommands.batchExportToText.command, group: "1_items@4" },
-		{ command: this.bookmarkCommands.batchExportSourceFiles.command, group: "1_items@5" },
 	]
 
 	static aiSubmenu_items = [
@@ -674,7 +721,7 @@ export class Commands {
 			this.bookmarkCommands.batchExportToHtml,
 			this.bookmarkCommands.batchExportToCsv,
 			this.bookmarkCommands.batchExportToText,
-			this.bookmarkCommands.batchExportSourceFiles,
+			this.bookmarkCommands.batchExportPortablePackage,
 		].map(command => ({ command: command.command, when: 'false' })),
 	]
 

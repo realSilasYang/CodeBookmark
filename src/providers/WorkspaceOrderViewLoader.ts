@@ -5,6 +5,7 @@
 import * as path from 'path'
 import { bookmarkPathKey, canonicalBookmarkPath } from '../util/BookmarkPath'
 import { decodeWorkspaceOrderPersistence } from '../models/WorkspaceOrder'
+import { isFileNotFoundError } from '../util/FileSystem'
 
 export interface WorkspaceOrderSnapshot {
 	order: string[] | null
@@ -41,7 +42,7 @@ export async function readWorkspaceOrderForView(
 			migrated = decoded.migrated
 			savedOrder = decoded.order.map(canonicalBookmarkPath)
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') port.reportReadFailure(error)
+			if (!isFileNotFoundError(error)) port.reportReadFailure(error)
 		}
 	}
 

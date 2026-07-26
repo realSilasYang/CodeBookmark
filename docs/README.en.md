@@ -177,19 +177,13 @@ Its configuration remains as a recoverable record, even when it contains only au
 
 ## 7. Import and Export
 
-### 📄 Import one script
+### 📦 Move or share bookmark configurations
 
-When the current script has no bookmarks, choose Import Bookmark Configuration File from the empty view to bind one CodeBookmark JSON file explicitly to that script.
+More → Import/Export Bookmarks can export the current script or workspace as one `.codebookmark` portable bookmark configuration. The same package can be imported into another local folder or on Windows, macOS, and Linux. It preserves labels, icons, hierarchy, source anchors, file-node presentation, and cross-file layout without carrying machine-specific absolute paths or filesystem identities. Old JSON files and configuration directories are no longer import formats.
 
-### 📁 Import a workspace
+Import detects a script or workspace package automatically and looks for one reliable target by relative path, source digest, and bookmark context. Ambiguous scripts are reported as conflicts instead of being guessed. When a target already contains bookmarks, Append keeps local content and merges both sides, while Overwrite replaces only matched scripts and layout; neither option deletes source files. Packages may be imported, edited, and exported repeatedly, with exchange state preserving cross-device identities and preventing duplicate bookmarks.
 
-In workspace mode, the picker can also select a complete configuration directory. CodeBookmark recursively reads exported `*.codebookmark.json` files and maps their relative paths to source files in the current workspace. If the selected directory is the global storage `scripts` directory, valid script envelopes whose source paths still lie inside the current workspace can also be imported in a batch. A multi-root workspace first asks which root should receive the import.
-
-If a configuration's stored source hash differs from the current file, the extension asks once whether the import should continue. Conflicting script or bookmark identities are regenerated before data is merged, so another configuration is never overwritten.
-
-### 📤 Export the current bookmark scope
-
-More → Export Bookmarks As offers these formats:
+The empty-view Import Bookmark Configuration File button now selects `.codebookmark` files as well. In single-script mode, Export → Portable Bookmark Configuration creates a package for migration and later import. In folder or workspace mode, the same action is under Export Current Script… → Portable Bookmark Configuration. Other Formats creates these readable files:
 
 | Format | Output |
 | --- | --- |
@@ -197,23 +191,23 @@ More → Export Bookmarks As offers these formats:
 | HTML | A printable responsive table with light and dark presentation |
 | CSV | UTF-8 with BOM, containing file, line, column, level, state, label, and source content, with spreadsheet formula injection prevented |
 | Plain text | Indented text designed for reading or pasting |
-| Configuration source files | One formatted JSON configuration for every script in the current scope |
 
-A normal Markdown, HTML, CSV, or text export combines the visible scope, either a workspace or one script, into one readable file. Configuration source export first waits for every queued bookmark save, then writes each script's JSON separately beneath a timestamped directory.
+Markdown, HTML, CSV, and plain text cannot be imported. Folder and workspace mode also show Export Current Folder… at the same level: Portable Bookmark Configuration creates one package for bookmarked scripts below that folder, while Other Formats continues to create one result per source file.
 
 ### 🗃️ Batch export by source file
 
-Choose Batch Export under Current Folder when each source file needs its own output. The command searches recursively from the active script's directory, processes only files that already have bookmarks, and creates one result in the selected format per source file. Relative directories are preserved and outputs are not merged into a summary file.
+Choose Export Current Folder… → Other Formats when each source file needs its own output. The command searches recursively from the active script's directory, processes only files that already have bookmarks, and creates one result in the selected format per source file. Relative directories are preserved and outputs are not merged into a summary file.
 
 ### 🗂️ Manage every configuration file
 
-More → Manage Bookmark Configuration Files opens a view of every CodeBookmark storage record in the current global storage directory, independent of the active script or workspace. It distinguishes three kinds of data:
+More → Manage Bookmark Configuration Files opens a view of every CodeBookmark storage record in the current global storage directory, independent of the active script or workspace. It distinguishes:
 
 - **Script bookmark configurations:** show source path, binding state, configuration kind, total and per-level bookmark counts, automatic and invalid counts, last binding update, file modification time, and size. Primary configurations, migration backups, conflict copies, superseded files, and damaged files are identified separately.
-- **Workspace order records:** show workspace name, path hash, participating script paths, and entry count. These records restore file presentation order only and contain no bookmarks.
+- **Workspace order and layout records:** show workspace name, path hash, participating script paths, and cross-file layout without duplicating bookmark content.
+- **Configuration exchange records:** show the package series, scope, revision, identity mappings, and merge baseline. Clearing one keeps current bookmarks but prevents that series from reusing its previous cross-device identities.
 - **Storage transfer records:** show transfer state, source and destination directories, start and completion times, and copied, merged, and conflicted file counts. They describe only the most recent storage-directory migration.
 
-The view provides shared search, filtering, sorting, and multiselection. Existing source scripts can be opened from their configuration, and every record can be revealed in the file explorer. Before deletion or cleanup, CodeBookmark explains the effect for the selected types and asks for confirmation. Deleting a script configuration permanently deletes its bookmarks and is outside bookmark undo. Clearing a workspace order record keeps all bookmarks but resets custom file order for that workspace. Clearing a transfer record changes neither bookmarks nor the active storage directory. After confirmation, pending saves are completed and each file is compared with the version originally displayed; files changed by another program are skipped so newer data cannot be deleted accidentally. The management view and active bookmark tree are then reloaded from disk.
+The view provides shared search, filtering, sorting, and multiselection. Existing source scripts can be opened from their configuration, and every record can be revealed in the file explorer. Before deletion or cleanup, CodeBookmark explains the effect for the selected types and asks for confirmation. Pending saves are then completed and each file is compared with the version originally displayed; files changed by another program are skipped so newer data cannot be deleted accidentally. The management view and active bookmark tree are then reloaded from disk.
 
 ## 8. AI Assistance
 
@@ -282,7 +276,7 @@ Rapid local changes are coalesced after a short delay, and the save queue touche
 
 ### 🗄️ Change the bookmark storage directory
 
-After `globalStoragePath` changes, CodeBookmark first flushes pending data to the old directory, then merges `scripts`, `scopes`, and recovery journals into the new directory. Distinct destination data is retained as backups or conflict copies. Source configurations are removed only after every destination write succeeds. If transfer or cleanup fails, the old directory remains active and its data is not removed prematurely.
+After `globalStoragePath` changes, CodeBookmark first flushes pending data to the old directory, then merges `scripts`, `scopes`, `exchanges`, and recovery journals into the new directory. The newer record wins for the same exchange series; other distinct destination data remains as backups or conflict copies. Source configurations are removed only after every destination write succeeds. If transfer or cleanup fails, the old directory remains active and its data is not removed prematurely.
 
 ## 10. Settings Reference
 
@@ -347,8 +341,9 @@ CodeBookmark/
 │  │  ├─ Localization.ts            Locale resolution, fallback, and named interpolation
 │  │  └─ catalogs/                  Stable-key runtime language catalogs
 │  ├─ models/                       Bookmark domain, codecs, serialized trees, and workspace order
+│  ├─ portable/                     Portable format, archive, matching, merge, and exchange state
 │  ├─ providers/                    User workflows and view, save, AI, and undo orchestration
-│  ├─ repository/                   Disk formats, indexes, imports, relocation, and storage transfer
+│  ├─ repository/                   Disk formats, indexes, relocation, and storage transfer
 │  ├─ subscriptions/                Editor, filesystem, and configuration event adapters
 │  ├─ testing/                      Read-only API exposed to the real Extension Host test suite
 │  └─ util/                         Identity, path, fingerprint, AI, marker, and icon foundations
@@ -376,7 +371,8 @@ Use these entry points when making changes:
 | Runtime copy and locale fallback | `src/i18n/Localization.ts`, `src/i18n/catalogs/` | Feature modules use stable keys only; every catalog has identical keys and placeholders |
 | Bookmark fields, tree rules, codecs, and workspace order | `src/models/` | Preserve persistence contracts before changing Provider interaction flow |
 | Commands, tree view, saves, undo, and configuration management | `src/commands/`, `src/providers/`, `src/subscriptions/` | VS Code event adaptation and complete user workflows meet here |
-| Script envelopes, indexes, import, relocation, and storage-root transfer | `src/repository/`, `src/util/Persistence*.ts` | Every disk record passes format identity, version, and atomic-write rules |
+| Portable import, export, matching, and merge | `src/portable/`, `PortableImportWorkflowRunner.ts` | Packages contain no machine path; ambiguous targets never bind automatically; multi-file writes must be reversible |
+| Script envelopes, indexes, relocation, and storage-root transfer | `src/repository/`, `src/util/Persistence*.ts` | Every disk record passes format identity, version, and atomic-write rules |
 | AI addresses, protocols, transport, response parsing, and workflows | `src/util/AI*.ts`, `src/providers/AI*.ts` | `util` owns protocol and security boundaries; Providers verify state and apply results |
 | Automatic TODO, FIXME, and BUG markers | `LanguageCommentProfiles.ts` → `CodeMarkerScanner.ts` → `CodeMarkerBookmarks.ts` → `CodeMarker*` Providers | Language eligibility, lexical scanning, tree synchronization, and lifecycle remain separate |
 | Icon and configuration-management Webviews | `src/util/quick_pick_icon/`, `BookmarkConfigurationManagerWebview.ts`, `resources/` | The host supplies allowlisted data and localized copy; Webviews handle display and stable message values only |
@@ -386,7 +382,7 @@ Use these entry points when making changes:
 
 `activate()` resolves localization and constructs the extension synchronously, then returns without waiting for filesystem work. It exposes no public API in production. The integration API is returned only when `CODEBOOKMARK_INTEGRATION_TEST=1` and is omitted from the bundled production extension. Command handlers and the tree view are registered before background loading. Until the requested scope has been committed, mutating commands pass through `awaitScopeReady()` and fail with a clear message when loading failed.
 
-`CodeBookmarksViewProvider` remains the stable Facade used by commands, subscriptions, and tests. Storage-root activation, AI single-file and folder workflows, configuration management, and the automatic-marker lifecycle each belong to a dedicated Controller. Save, refresh, view, and document-change responsibilities live in focused Coordinators and Runners. `BookmarkRepository` is likewise a stable Facade; source-candidate indexing, script-envelope codecs, file-node codecs, and import-directory scanning are delegated to acyclic single-purpose modules. Architecture checks enforce size budgets for both Facades so implementation does not accumulate there again.
+`CodeBookmarksViewProvider` remains the stable Facade used by commands, subscriptions, and tests. Storage-root activation, AI workflows, configuration management, portable import, and the automatic-marker lifecycle belong to dedicated Controllers or Runners. Save, refresh, view, and document-change responsibilities live in focused Coordinators. `BookmarkRepository` is likewise a stable Facade; source-candidate indexing, script-envelope codecs, and file-node codecs are delegated to acyclic single-purpose modules. Architecture checks enforce size budgets for both Facades so implementation does not accumulate there again.
 
 The intended dependency direction is conceptual: `extension.ts` performs composition; `commands/` and `subscriptions/` adapt VS Code commands and events; `providers/` orchestrate complete workflows; `models/`, `repository/`, and `util/` supply domain, persistence, and foundational capabilities. New work should respect this maintenance boundary, although the directories are not a formal layer system. Current architecture guards prove that every production module is reachable, that the runtime dependency graph has no cycle, and that the two Facades stay within their line budgets.
 
@@ -421,16 +417,18 @@ View changes use a generation number, `AbortSignal`, and a serial preparation qu
 │  └─ <workspace-name_path-hash>/
 │     ├─ _workspace_layout.json
 │     └─ _workspace_order.json      present only for an unupgraded legacy order record
+├─ exchanges/
+│  └─ <exchangeId_scope-hash>.json  cross-device identity mappings and merge baseline
 ├─ .script-relocations/
 │  └─ <operationId>.json
 └─ .storage-transfer.json
 ```
 
-Every persistence family carries its own `format` identity and `schemaVersion: 1`: script envelopes, workspace order, script-relocation journals, storage-root transfer records, undo sessions, and recent icons. Only data with no version header at all is eligible for one-time migration. A partial header, wrong format, or future version is rejected explicitly so unknown data cannot be interpreted as the current schema. Irrecoverable legacy script data keeps a migration backup. Completed transaction journals and temporary migration backups are removed so historical metadata cannot prevent cleanup of an old directory.
+Every persistence family carries its own `format` identity and `schemaVersion: 1`: script envelopes, workspace order and layout, configuration exchange records, script-relocation journals, storage-root transfer records, undo sessions, and recent icons. Only data with no version header at all is eligible for one-time migration. A partial header, wrong format, or future version is rejected explicitly so unknown data cannot be interpreted as the current schema. Irrecoverable legacy script data keeps a migration backup. Completed transaction journals and temporary migration backups are removed so historical metadata cannot prevent cleanup of an old directory.
 
 A script envelope has the shape `{ format, schemaVersion, script, bookmarks }`. `script` holds `id`, absolute `path`, the last confirmation time, optional missing-since time or ordering position, and a source fingerprint. `bookmarks` contains only that script's bookmark tree. Workspace `_workspace_layout.json` stores cross-file order, parent relationships, hidden state, containers, and expansion without copying bookmark content. After a legacy `_workspace_order.json` is read, the first new-layout save writes the current record and removes the old order file. Opening a script through a workspace or by itself therefore always resolves to `scripts/<scriptId>.json`.
 
-Single-file import from an empty workspace view still targets the active script. Folder import strips `*.codebookmark.json` from each selected relative path and joins the remainder to the chosen workspace root. When the raw `scripts` directory is selected, envelope paths are used instead, but only when they still point inside that workspace. The batch validates configuration structure and destination source before import and asks once if fingerprints differ. Successful files commit as one undo action; damaged configurations, missing sources, and isolated write failures are counted separately without stopping the remaining candidates.
+Portable configuration uses a bounded `.codebookmark` ZIP container with a manifest, machine-path-free script bookmarks, optional workspace layout, and an optional merge baseline. Reading validates the format version, entry paths and counts, expanded size, SHA-256 digests, script identities, and recursive bookmark identities; old JSON, directories, unknown entries, and partially valid packages are rejected as a whole. Target resolution accepts only unique relative-path, raw or normalized source-digest, or bookmark-anchor evidence. Script, layout, and exchange writes expose reverse-order rollback operations.
 
 Script, bookmark, and relocation-operation identities are 128 cryptographically secure random bits rendered in a fixed five-part hexadecimal form. The text carries no version or device meaning, and `isScriptId()` validates only that stable format.
 
@@ -444,7 +442,7 @@ Workspace discovery is capped at 50,000 directory entries, and anchor fallback r
 
 A native rename first writes `.script-relocations/<operationId>.json`, then rebinds every affected envelope and updates workspace order before deleting the journal. Startup inspects incomplete journals; if an old path reappears while the new one does not, recovery may also complete in reverse. Delete marks every affected script as missing, including configurations containing only automatic markers, and then removes current-path nodes from the in-memory view. A later create or reconciliation can still recover them by fingerprint and anchors.
 
-`StorageRootTransfer` changes storage roots serially. It first flushes the source save queue, then copies or merges one file at a time. Records with the same script identity choose primary data by `lastSeenAt` and preserve unique bookmarks; bookmark identity collisions are rewritten; files that cannot be merged semantically become conflict copies named with a content hash. After all destination data is durable, `scripts`, `scopes`, `.script-relocations`, and the transfer journal are removed from the source root. Files not owned by CodeBookmark remain untouched. Real-path checks prevent source and destination from containing each other through symbolic links or directory junctions.
+`StorageRootTransfer` changes storage roots serially. It first flushes the source save queue, then copies or merges one file at a time. Records with the same script identity choose primary data by `lastSeenAt` and preserve unique bookmarks; the newer `updatedAt` wins for one exchange series; files that cannot be merged semantically become conflict copies named with a content hash. After all destination data is durable, `scripts`, `scopes`, `exchanges`, `.script-relocations`, and the transfer journal are removed from the source root. Files not owned by CodeBookmark remain untouched. Real-path checks prevent source and destination from containing each other through symbolic links or directory junctions.
 
 ## 6. Save Queue, External Edits, and Atomic Writes
 
@@ -508,30 +506,31 @@ npm ci
 npm run compile
 npm run lint
 npm run verify
+npm run verify:release
 npm run test:unit
 npm run test:contract
 npm run test:coverage
 npm run test:integration
 npm audit
 npm run package:list
-npm run package:vsix
 ```
 
 - `npm run compile` cleans `out/`, compiles TypeScript in strict mode, bundles extension runtime code into one entry, and generates `package.json` plus localization catalogs.
 - `npm run lint` checks `src/**/*.ts`, `scripts/**/*.js`, and `tests/**/*.js` with a zero-warning policy.
 - `npm run test:unit` and `npm run test:contract` use the standard Node `node:test` runner for unit and external behavior contracts, with no third-party test runner.
 - `npm run test:coverage` runs both standard suites with native Node coverage and enforces minimum thresholds.
-- `npm run verify` runs compile, zero-warning lint, standard unit and contract tests, and every focused `verify-*.js` script. The activation guard uses the TypeScript AST to identify real `AwaitExpression` nodes; loading-state and view-transition checks find method structure instead of treating comments as code boundaries.
+- `npm run verify` runs compile, zero-warning lint, standard unit and contract tests, and every focused `verify-*.js` check that is valid during development; it does not require an unreleased version to appear in the formal changelog. The activation guard uses the TypeScript AST to identify real `AwaitExpression` nodes; loading-state and view-transition checks find method structure instead of treating comments as code boundaries.
+- `npm run verify:release` runs only the changelog and release-readiness guards that depend on finalized version materials.
 - `npm run test:integration` compiles and then discovers and reuses an installed local VS Code, launching a real Extension Host with an isolated temporary user-data directory. It verifies manifest selection, activation, commands, and settings for all 13 languages: Simplified Chinese, Hong Kong Traditional Chinese, Taiwan Traditional Chinese, English, Japanese, Vietnamese, Korean, Spanish, French, Portuguese, Russian, German, and Italian. It also runs a Turkish host to verify the English fallback. Chinese and English runs exercise bookmark creation, undo and redo, persisted reload, identity following through both VS Code and external moves, automatic marker directives, and SVG metadata counterexamples. The command fails clearly if VS Code is absent and never downloads a separate test runtime.
 - To choose another VS Code installation, run `node scripts/integration/run-integration-tests.js "--vscode-executable=<path-to-Code.exe>"` or set `CODEBOOKMARK_VSCODE_EXECUTABLE_PATH`; an explicit path takes precedence over automatic discovery.
 - `npm run verify:icons` independently checks SVG names, safe content, and one-to-one dictionary coverage.
 - `npm run package:list` previews the VSIX file list with the pinned official VS Code packaging tool.
-- `npm run package:vsix` compiles and creates an installable VSIX; pass `-- --out <file-name>` to choose the output path.
-- `npm run check:release` runs complete verification, Extension Host integration tests, dependency audit, and package-list inspection in sequence.
+- `npm run package:vsix -- --out <temporary-path-outside-the-repository>` creates a VSIX only when a manual installation check is necessary. The output path is mandatory and must stay outside the repository; delete the package after use. Normal local development and verification retain no deliverable artifacts.
+- `npm run check:release` runs development verification, release-only guards, Extension Host integration tests, dependency audit, and package-list inspection in sequence.
 
-Current standard tests and focused checks cover activation order, workspace capabilities, persistence versions, AI address normalization, five AI protocol families, same-origin route fallback, credentials, byte limits, cancellation, automatic markers, imports and exports, manifest commands, storage-root transfer, relocation recovery, external configuration edits, save queues, scope handling, undo, view transitions, icon assets, and release supply chain. The module-graph guard currently proves that all 148 production TypeScript modules are reachable from declared entries and that the runtime graph has zero dependency cycles. Put pure logic in `tests/unit`, public manifest or cross-module constraints in `tests/contracts`, complex historical regressions in the corresponding `verify-*.js`, and VS Code API lifecycle behavior in a real Extension Host test.
+Current standard tests and focused checks cover activation order, workspace capabilities, persistence versions, AI address normalization, five AI protocol families, same-origin route fallback, credentials, byte limits, cancellation, automatic markers, imports and exports, manifest commands, storage-root transfer, relocation recovery, external configuration edits, save queues, scope handling, undo, view transitions, icon assets, and release supply chain. The module-graph guard currently proves that all 163 production TypeScript modules are reachable from declared entries and that the runtime graph has zero dependency cycles. Put pure logic in `tests/unit`, public manifest or cross-module constraints in `tests/contracts`, complex historical regressions in the corresponding `verify-*.js`, and VS Code API lifecycle behavior in a real Extension Host test.
 
-`scripts/verify-chinese-comments.js` currently covers 303 first-party TypeScript, JavaScript, MJS, and YAML scripts under `.github/`, `config/`, `scripts/`, `src/`, and `tests/`. Every module begins with at least two complete Chinese sentences that describe its actual responsibility. The guard rejects the former five-part template, English-only explanations, repeated sentences, and duplicate full headers. Third-party sources such as `resources/fuse.min.js`, plus ESLint, TypeScript, and coverage directives intended for tools, are outside that Chinese-comment rewrite.
+`scripts/verify-chinese-comments.js` currently covers 329 first-party TypeScript, JavaScript, MJS, and YAML scripts under `.github/`, `config/`, `scripts/`, `src/`, and `tests/`. Every module begins with at least two complete Chinese sentences that describe its actual responsibility. The guard rejects the former five-part template, English-only explanations, repeated sentences, and duplicate full headers. Third-party sources such as `resources/fuse.min.js`, plus ESLint, TypeScript, and coverage directives intended for tools, are outside that Chinese-comment rewrite.
 
 Icon maintenance sequence:
 

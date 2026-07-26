@@ -5,6 +5,7 @@
 import path = require('path')
 import type { BookmarkSet } from '../models/BookmarkSet'
 import { allBookmarks } from '../models/BookmarkOwnership'
+import { renameWorkspaceOrderPaths } from '../models/WorkspaceOrder'
 import type { ScriptRelocationChange } from '../repository/BookmarkRepository'
 import {
 	isSameOrDescendantAbsolutePath,
@@ -13,7 +14,6 @@ import {
 import {
 	bookmarkPathKey,
 	isSameOrDescendantBookmarkPath,
-	renamedBookmarkPath,
 } from '../util/BookmarkPath'
 
 export interface SourcePathChangeWorkflowPort {
@@ -48,6 +48,12 @@ export interface SourcePathChangeWorkflowPort {
 	cleanupEmptyScopeFolders(): Promise<void>
 }
 
+function scriptIdsUnderBookmarkPath(bookmarks: BookmarkSet, rootPath: string): Set<string> {
+	return new Set(allBookmarks(bookmarks)
+		.filter(bookmark => bookmark.scriptId && isSameOrDescendantBookmarkPath(bookmark.path, rootPath))
+		.map(bookmark => bookmark.scriptId as string))
+}
+
 function relocateWorkspaceOrderCache(
 	oldScope: string,
 	newScope: string,
@@ -60,10 +66,7 @@ function relocateWorkspaceOrderCache(
 	const oldBookmarkPath = port.absoluteToRelative(oldAbsolutePath)
 	const newBookmarkPath = port.absoluteToRelative(newAbsolutePath)
 	if (oldScope === port.currentStorageScope() && newScope === oldScope) {
-		port.setWorkspaceOrder(workspaceOrder.map(entry =>
-			isSameOrDescendantBookmarkPath(entry, oldBookmarkPath)
-				? renamedBookmarkPath(entry, oldBookmarkPath, newBookmarkPath)
-				: entry))
+		port.setWorkspaceOrder(renameWorkspaceOrderPaths(workspaceOrder, oldBookmarkPath, newBookmarkPath))
 		return
 	}
 	let changed = false
@@ -177,9 +180,7 @@ export async function runRenamedSourcePath(
 		const nextScope = port.storageScopeForAbsolutePath(nextRepresentative)
 		if (nextScope.startsWith('file:')) {
 			const bookmarks = port.bookmarks()
-			const movedScriptIds = new Set(allBookmarks(bookmarks)
-				.filter(bookmark => bookmark.scriptId && isSameOrDescendantBookmarkPath(bookmark.path, oldBookmarkPath))
-				.map(bookmark => bookmark.scriptId as string))
+			const movedScriptIds = scriptIdsUnderBookmarkPath(bookmarks, oldBookmarkPath)
 			if (bookmarks.containsPath(oldBookmarkPath)) {
 				bookmarks.renamePath(oldBookmarkPath, newBookmarkPath)
 				bookmarks.mergeDuplicateFileNodes(movedScriptIds)
@@ -214,9 +215,7 @@ export async function runRenamedSourcePath(
 		return
 	}
 	if (!bookmarks.containsPath(oldBookmarkPath)) return
-	const movedScriptIds = new Set(allBookmarks(bookmarks)
-		.filter(bookmark => bookmark.scriptId && isSameOrDescendantBookmarkPath(bookmark.path, oldBookmarkPath))
-		.map(bookmark => bookmark.scriptId as string))
+	const movedScriptIds = scriptIdsUnderBookmarkPath(bookmarks, oldBookmarkPath)
 	bookmarks.renamePath(oldBookmarkPath, newBookmarkPath)
 	bookmarks.mergeDuplicateFileNodes(movedScriptIds)
 	port.saveBookmarks([newAbsolutePath])

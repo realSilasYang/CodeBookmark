@@ -11,10 +11,12 @@ const { installModuleMocks } = require('./test-support/module-mocks')
 
 const commands = new Map()
 const informationMessages = []
+const errorMessages = []
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'codebookmark-export-workflow-'))
 const sourcePath = path.join(sandbox, 'source.ts')
 const outputPath = path.join(sandbox, 'bookmarks.md')
 const batchParent = path.join(sandbox, 'batch-output')
+let saveTarget = outputPath
 fs.writeFileSync(sourcePath, 'const root = true\nuse(root)\n', 'utf8')
 fs.mkdirSync(batchParent)
 
@@ -27,10 +29,11 @@ const { vscode } = createVscodeFake({
   },
   window: {
     activeTextEditor: { document: { uri: { scheme: 'file', fsPath: sourcePath } } },
-    showSaveDialog: async () => ({ scheme: 'file', fsPath: outputPath }),
+    showSaveDialog: async () => ({ scheme: 'file', fsPath: saveTarget }),
     showOpenDialog: async () => [{ scheme: 'file', fsPath: batchParent }],
     withProgress: async (_options, task) => task({ report() {} }),
     showInformationMessage: message => { informationMessages.push(message) },
+    showErrorMessage: message => { errorMessages.push(message) },
   },
   ProgressLocation: { Notification: 1 },
 })
@@ -39,6 +42,8 @@ const { Bookmark, CursorIndex } = require('../out/models/Bookmark')
 const { BookmarkSet } = require('../out/models/BookmarkSet')
 const { ContextBookmark } = require('../out/util/ContextValue')
 const { registerExportCommand } = require('../out/commands/exportCommand')
+const { storageRootState } = require('../out/util/StorageRootState')
+const { readPortableArchive } = require('../out/portable/PortableArchive')
 restoreModules()
 
 async function main() {
@@ -109,6 +114,48 @@ async function main() {
   assert.match(fs.readFileSync(outputB, 'utf8'), /Owned by B/)
   assert.doesNotMatch(fs.readFileSync(outputB, 'utf8'), /Owned by A/)
   assert.match(informationMessages.at(-1), /共 2 个书签：一级 2 个/)
+
+  const portableSource = path.join(sandbox, 'portable.ts')
+  const storageRoot = path.join(sandbox, 'portable-storage')
+  const portableOutput = path.join(sandbox, 'portable.codebookmark')
+  fs.writeFileSync(portableSource, 'export const portable = true\n')
+  storageRootState.activate(storageRoot)
+  const portableScriptId = '10000000-0000-4000-8000-000000000021'
+  const portableBookmarkId = '20000000-0000-4000-8000-000000000021'
+  const portableFile = new Bookmark({
+    id: `file_${portableScriptId}`, path: portableSource,
+    contextValue: ContextBookmark.File, scriptId: portableScriptId,
+  })
+  portableFile.subs.add(new Bookmark({
+    id: portableBookmarkId, path: portableSource, label: 'Portable export', ownerScriptId: portableScriptId,
+    content: 'export const portable = true', start: new CursorIndex(0, 0), end: new CursorIndex(0, 28),
+  }))
+  const portableBookmarks = new BookmarkSet([portableFile])
+  registerExportCommand(context, {
+    codeBookmarks: portableBookmarks,
+    flushPendingSaves: async () => {},
+    portableExportSnapshot: () => ({
+      bookmarks: portableBookmarks,
+      storageScope: `file:${portableSource}`,
+      scopeFilePath: portableSource,
+    }),
+  })
+  saveTarget = portableOutput
+  await commands.get('codebookmark.exportPortablePackage')()
+  const archive = await readPortableArchive(fs.readFileSync(portableOutput))
+  assert.equal(archive.scripts.get(portableScriptId).bookmarks[0].label, 'Portable export')
+  const exchangeFolder = path.join(storageRoot, 'exchanges')
+  const exchangeName = fs.readdirSync(exchangeFolder)[0]
+  const exchangePath = path.join(exchangeFolder, exchangeName)
+  const exchangeBeforeFailure = fs.readFileSync(exchangePath, 'utf8')
+
+  const directoryTarget = path.join(sandbox, 'directory-target.codebookmark')
+  fs.mkdirSync(directoryTarget)
+  saveTarget = directoryTarget
+  await commands.get('codebookmark.exportPortablePackage')()
+  assert.equal(fs.statSync(directoryTarget).isDirectory(), true)
+  assert.equal(fs.readFileSync(exchangePath, 'utf8'), exchangeBeforeFailure)
+  assert.match(errorMessages.at(-1), /导出失败/)
 }
 
 main().then(

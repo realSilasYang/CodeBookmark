@@ -17,10 +17,9 @@ assert.equal(iconPicker.includes('onclick='), false)
 assert.ok(provider.split(/\r?\n/).length <= 1_800, 'View Provider exceeded its composition-root size budget')
 assert.ok(repository.split(/\r?\n/).length <= 1_450, 'BookmarkRepository exceeded its repository-facade size budget')
 for (const boundary of [
-  'SourceCandidateIndex',
-  'ScriptEnvelopeCodec',
-  'BookmarkFileNodeCodec',
-  'BookmarkConfigurationImportScanner',
+	'SourceCandidateIndex',
+	'ScriptEnvelopeCodec',
+	'BookmarkFileNodeCodec',
 ]) {
   assert.match(repository, new RegExp(`from './${boundary}'`))
 }

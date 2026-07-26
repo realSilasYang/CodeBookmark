@@ -23,6 +23,7 @@ import {
 	type PersistenceHeader,
 } from '../util/PersistenceSchema'
 import type { WorkspaceLayout } from '../models/WorkspaceLayout'
+import { renameSerializedBookmarkPaths } from '../models/SerializedBookmarkTree'
 
 interface UndoBookmarkData extends Record<string, unknown> {
 	id?: string
@@ -461,18 +462,7 @@ export class UndoManager {
 		workspaceOrder: readonly string[] | null = null,
 		workspaceLayout: WorkspaceLayout | null = null,
 	): UndoApplyResult | undefined {
-		const key = this.scopeKey(scope ?? this.activeScope)
-		const stack = this.scopeHistory(key)
-		const previous = stack?.history[stack.history.length - 1]
-		if (!stack || !previous) return undefined
-		const currentState = this.serialize(currentBookmarks, workspaceOrder, workspaceLayout)
-		const restoredOrder = this.applyState(currentBookmarks, previous.state, 'undo')
-		if (restoredOrder === undefined) return undefined
-		this.removeEntry(stack.history, stack.history.length - 1)
-		this.pushBounded(stack.redoHistory, this.createEntry(currentState, previous.action))
-		this.schedulePersistence()
-		this.updateContexts()
-		return { action: previous.action, ...restoredOrder }
+		return this.applyHistoryOperation(currentBookmarks, scope, workspaceOrder, workspaceLayout, 'undo')
 	}
 
 	public redo(
@@ -481,18 +471,31 @@ export class UndoManager {
 		workspaceOrder: readonly string[] | null = null,
 		workspaceLayout: WorkspaceLayout | null = null,
 	): UndoApplyResult | undefined {
+		return this.applyHistoryOperation(currentBookmarks, scope, workspaceOrder, workspaceLayout, 'redo')
+	}
+
+	private applyHistoryOperation(
+		currentBookmarks: BookmarkSet,
+		scope: string | undefined,
+		workspaceOrder: readonly string[] | null,
+		workspaceLayout: WorkspaceLayout | null,
+		operation: 'undo' | 'redo',
+	): UndoApplyResult | undefined {
 		const key = this.scopeKey(scope ?? this.activeScope)
 		const stack = this.scopeHistory(key)
-		const next = stack?.redoHistory[stack.redoHistory.length - 1]
-		if (!stack || !next) return undefined
+		if (!stack) return undefined
+		const source = operation === 'undo' ? stack.history : stack.redoHistory
+		const target = operation === 'undo' ? stack.redoHistory : stack.history
+		const entry = source[source.length - 1]
+		if (!entry) return undefined
 		const currentState = this.serialize(currentBookmarks, workspaceOrder, workspaceLayout)
-		const restoredOrder = this.applyState(currentBookmarks, next.state, 'redo')
+		const restoredOrder = this.applyState(currentBookmarks, entry.state, operation)
 		if (restoredOrder === undefined) return undefined
-		this.removeEntry(stack.redoHistory, stack.redoHistory.length - 1)
-		this.pushBounded(stack.history, this.createEntry(currentState, next.action))
+		this.removeEntry(source, source.length - 1)
+		this.pushBounded(target, this.createEntry(currentState, entry.action))
 		this.schedulePersistence()
 		this.updateContexts()
-		return { action: next.action, ...restoredOrder }
+		return { action: entry.action, ...restoredOrder }
 	}
 
 	private applyState(
@@ -516,15 +519,7 @@ export class UndoManager {
 			const parsed = JSON.parse(state) as unknown
 			if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return state
 			const envelope = parsed as Partial<SerializedUndoState>
-			const rewriteItem = (value: unknown): void => {
-				if (typeof value !== 'object' || value === null || Array.isArray(value)) return
-				const item = value as Record<string, unknown>
-				if (typeof item.path === 'string' && isSameOrDescendantBookmarkPath(item.path, oldBookmarkPath)) {
-					item.path = renamedBookmarkPath(item.path, oldBookmarkPath, newBookmarkPath)
-				}
-				if (Array.isArray(item.subs)) item.subs.forEach(rewriteItem)
-			}
-			if (Array.isArray(envelope.bookmarks)) envelope.bookmarks.forEach(rewriteItem)
+			if (Array.isArray(envelope.bookmarks)) renameSerializedBookmarkPaths(envelope.bookmarks, oldBookmarkPath, newBookmarkPath)
 			if (Array.isArray(envelope.workspaceOrder)) {
 				envelope.workspaceOrder = envelope.workspaceOrder.map(item => isSameOrDescendantBookmarkPath(item, oldBookmarkPath)
 					? renamedBookmarkPath(item, oldBookmarkPath, newBookmarkPath)
@@ -556,15 +551,7 @@ export class UndoManager {
 			envelope.bookmarks = envelope.bookmarks.filter(item => isAffected(item) === keepAffected)
 			if (envelope.bookmarks.length === 0) return undefined
 			if (keepAffected) {
-				const rewriteItem = (value: unknown): void => {
-					if (typeof value !== 'object' || value === null || Array.isArray(value)) return
-					const item = value as Record<string, unknown>
-					if (typeof item.path === 'string' && isSameOrDescendantBookmarkPath(item.path, oldBookmarkPath)) {
-						item.path = renamedBookmarkPath(item.path, oldBookmarkPath, newBookmarkPath)
-					}
-					if (Array.isArray(item.subs)) item.subs.forEach(rewriteItem)
-				}
-				envelope.bookmarks.forEach(rewriteItem)
+				renameSerializedBookmarkPaths(envelope.bookmarks, oldBookmarkPath, newBookmarkPath)
 			}
 			if (Array.isArray(envelope.workspaceOrder)) {
 				envelope.workspaceOrder = envelope.workspaceOrder

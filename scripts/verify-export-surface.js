@@ -66,6 +66,7 @@ const buildEntryPoints = [
 const directTestSeams = [
 	'util/AIIconCatalog.ts#AI_BOOKMARK_ICON_OPTIONS',
 	'models/SerializedBookmarkTree.ts#serializedBookmarkContentIdentity',
+	'models/SerializedBookmarkTree.ts#mergeSerializedBookmarksWithIdMap',
 	'providers/AIWorkflowGuard.ts#AIStorageScopeChangedError',
   'providers/UndoManager.ts#UndoManager',
   'repository/ScriptRelocationJournal.ts#createScriptRelocation',

@@ -68,9 +68,9 @@ Tệp tạm biến mất vẫn giữ khả năng khôi phục. Khi xuất hiện
 
 ## 7. Nhập, xuất và quản lý cấu hình
 
-Có thể nhập cấu hình cho một tệp hoặc nhập cả thư mục cấu hình của workspace. Định dạng xuất gồm JSON có thể nhập lại, văn bản phân cấp, Markdown, HTML và CSV. Xuất hàng loạt quét đệ quy thư mục hiện tại, chỉ xử lý tệp có dấu trang và tạo đầu ra riêng cho từng tệp nguồn.
+Mục “Nhập／xuất dấu trang” lưu script hiện tại hoặc toàn bộ workspace thành một cấu hình dấu trang di động `.codebookmark`. Bạn có thể nhập tệp này vào thư mục khác trên máy hoặc trên thiết bị Windows, macOS và Linux, tiếp tục chỉnh sửa rồi chia sẻ lại. Gói giữ nguyên nhãn, biểu tượng, phân cấp, neo mã nguồn, cách hiển thị nút tệp và bố cục xuyên tệp, nhưng không chứa đường dẫn tuyệt đối hay định danh hệ thống tệp của máy. JSON và thư mục cấu hình kiểu cũ không còn là định dạng nhập.
 
-Trang “Quản lý tệp cấu hình dấu trang” hiển thị cấu hình tệp lệnh, bố cục workspace hiện tại, bản ghi thứ tự cũ, nhật ký di chuyển nơi lưu, bản sao xung đột và phần dư tạm. Di chuột lên các trường để xem đầy đủ. Chỉ các loại dữ liệu nằm trong danh sách an toàn mới được phép xóa; thư mục scope rỗng sẽ tự biến mất khi lịch sử undo/redo không còn cần đến.
+Khi nhập, CodeBookmark tự nhận biết gói dành cho một script hay workspace và chỉ liên kết khi tìm được đúng một đích đáng tin cậy bằng đường dẫn tương đối, dấu vân tay nội dung hoặc ngữ cảnh dấu trang. Trường hợp mơ hồ được báo là xung đột; nếu đích đã có dấu trang, bạn có thể chọn nối thêm hoặc ghi đè. Markdown, HTML, CSV và văn bản phân cấp chỉ để đọc. Trang quản lý còn hiển thị bản ghi trao đổi giữa thiết bị, bố cục, nhật ký di chuyển, bản sao xung đột và phần dư tạm để kiểm tra hoặc dọn dẹp.
 
 ## 8. Trợ lý AI
 
@@ -118,7 +118,7 @@ Undo dùng snapshot miền hoàn chỉnh. Một thao tác liên tệp phải đ�
 
 ## 7. Build, kiểm thử và phát hành
 
-Dùng Node.js 24. `npm run verify` chạy biên dịch, ESLint, unit test, contract test và mọi kiểm tra chuyên biệt. `npm run test:integration` tái sử dụng VS Code đã cài, cách ly dữ liệu người dùng và kiểm tra 13 ngôn ngữ cùng fallback tiếng Anh. `npm run check:release` bổ sung audit phụ thuộc và kiểm tra nội dung VSIX.
+Dùng Node.js 24. `npm run verify` chạy biên dịch, ESLint, unit test, contract test và mọi kiểm tra chuyên biệt có hiệu lực trong giai đoạn phát triển; `npm run verify:release` kiểm tra các tài liệu phiên bản đã hoàn tất. `npm run test:integration` tái sử dụng VS Code đã cài, cách ly dữ liệu người dùng và kiểm tra 13 ngôn ngữ cùng cơ chế dự phòng tiếng Anh. `npm run check:release` kết hợp toàn bộ các bước này với audit phụ thuộc và kiểm tra nội dung VSIX.
 
 Chỉ tag có chú thích thuộc lịch sử `main` mới được phát hành. GitHub Actions dùng thông tin xác thực OIDC ngắn hạn để đăng Marketplace, so khớp hash của VSIX trực tuyến, rồi tạo GitHub Release có VSIX, CycloneDX SBOM và `SHA256SUMS`. Xem [hướng dẫn phát hành](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 

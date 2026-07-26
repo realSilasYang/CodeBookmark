@@ -40,10 +40,9 @@ Marketplace 上的扩展身份已经固定为 Publisher `realSilasYang` 下的 `
 ```bash
 npm ci
 npm run check:release
-npm run package:vsix -- --out codebookmark-3.0.0.vsix
 ```
 
-`package:list` 和 VSIX 打包使用 `devDependencies` 与 `package-lock.json` 中精确固定的 `@vscode/vsce`，发布工作流不临时下载另一份工具。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、13 语 README、中英文 CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。扩展没有运行时依赖或原生模块，生成的 VSIX 是跨平台通用包，不需要 `--target`。
+本地发布准备不生成或保留 VSIX。`package:vsix` 只接受显式的仓库外 `--out` 路径，供 CI、Release 或临时人工检查使用；临时检查完成后应删除产物。CI 与 Release 均写入 runner 临时目录。`package:list` 和 VSIX 打包使用 `devDependencies` 与 `package-lock.json` 中精确固定的 `@vscode/vsce`，发布工作流不临时下载另一份工具。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、13 语 README、中英文 CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。纯 JavaScript 依赖 `fflate` 会被内联到运行时入口，VSIX 不携带外部运行时依赖或原生模块，因此仍是跨平台通用包，不需要 `--target`。
 
 ## 3. 联动发布 Marketplace 与 GitHub Release
 

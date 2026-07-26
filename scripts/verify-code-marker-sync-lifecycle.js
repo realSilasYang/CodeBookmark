@@ -5,37 +5,13 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const { CodeMarkerSyncLifecycle } = require('../out/providers/CodeMarkerSyncLifecycle')
+const { ManualScheduler } = require('./test-support/manual-scheduler')
+const { flushAsyncWork } = require('./test-support/async-work')
 
 const workspacePath = path.resolve('workspace')
 
 function workspaceFile(...segments) {
   return path.join(workspacePath, ...segments)
-}
-
-class FakeScheduling {
-  constructor(events) {
-    this.events = events
-    this.timers = []
-  }
-
-  setTimer(callback, delay) {
-    const timer = { callback, delay }
-    this.timers.push(timer)
-    this.events.push(`timer:${delay}`)
-    return timer
-  }
-
-  clearTimer(timer) {
-    const index = this.timers.indexOf(timer)
-    if (index >= 0) this.timers.splice(index, 1)
-    this.events.push('timer:clear')
-  }
-
-  runNext() {
-    const timer = this.timers.shift()
-    assert.ok(timer, 'Expected a scheduled code-marker task')
-    timer.callback()
-  }
 }
 
 function uri(filePath, scheme = 'file') {
@@ -44,7 +20,7 @@ function uri(filePath, scheme = 'file') {
 
 function createHarness(options = {}) {
   const events = []
-  const scheduling = new FakeScheduling(events)
+  const scheduling = new ManualScheduler(events)
   const lifecycle = new CodeMarkerSyncLifecycle(scheduling)
   let viewGeneration = options.viewGeneration ?? 1
   let loadingGeneration = options.loadingGeneration
@@ -111,11 +87,6 @@ function createHarness(options = {}) {
   }
 }
 
-async function flushAsyncWork() {
-  await new Promise(resolve => setImmediate(resolve))
-  await new Promise(resolve => setImmediate(resolve))
-}
-
 async function main() {
   const ignored = createHarness()
   ignored.lifecycle.scheduleFileSync(uri(workspaceFile('virtual.ts'), 'untitled'), false, ignored.port)
@@ -129,7 +100,7 @@ async function main() {
   debounced.lifecycle.scheduleFileSync(sourceUri, false, debounced.port)
   debounced.lifecycle.scheduleFileSync(sourceUri, false, debounced.port)
   assert.equal(debounced.scheduling.timers.length, 1)
-  assert.deepEqual(debounced.events, ['timer:250', 'timer:clear', 'timer:250'])
+  assert.deepEqual(debounced.events, ['timer:250', 'timer:clear:250', 'timer:250'])
   debounced.scheduling.runNext()
   await flushAsyncWork()
   assert.equal(debounced.events.at(-1), `sync:${sourceUri.fsPath}`)

@@ -4,28 +4,45 @@
  */
 import { createBookmarkId } from '../util/ScriptIdentity'
 import { isJsonRecord } from '../util/JsonRecord'
+import { isSameOrDescendantBookmarkPath, renamedBookmarkPath } from '../util/BookmarkPath'
+
+/**
+ * 以前序方式访问序列化书签及其 subs。非对象和数组中的无效成员会被跳过，
+ * 让身份、路径和迁移逻辑共享同一棵“有效结构树”，不各自形成不同的容错边界。
+ */
+function visitSerializedBookmarkTree(
+	value: unknown,
+	visitor: (item: Record<string, unknown>) => void,
+): void {
+	if (Array.isArray(value)) {
+		value.forEach(item => visitSerializedBookmarkTree(item, visitor))
+		return
+	}
+	if (!isJsonRecord(value)) return
+	visitor(value)
+	if (Array.isArray(value.subs)) visitSerializedBookmarkTree(value.subs, visitor)
+}
 
 function collectSerializedBookmarkIds(value: unknown, output: Set<string>): void {
-	if (!isJsonRecord(value)) return
-	if (typeof value.id === 'string') output.add(value.id)
-	if (Array.isArray(value.subs)) value.subs.forEach(item => collectSerializedBookmarkIds(item, output))
+	visitSerializedBookmarkTree(value, item => {
+		if (typeof item.id === 'string') output.add(item.id)
+	})
 }
 
 function recordSerializedBookmarkIds(value: unknown, output: Map<string, string>): void {
-	if (!isJsonRecord(value)) return
-	if (typeof value.id === 'string') output.set(value.id, value.id)
-	if (Array.isArray(value.subs)) value.subs.forEach(item => recordSerializedBookmarkIds(item, output))
+	visitSerializedBookmarkTree(value, item => {
+		if (typeof item.id === 'string') output.set(item.id, item.id)
+	})
 }
 
-export function rewriteSerializedBookmarkIdsWithMap(value: unknown, output: Map<string, string>): void {
-	if (!isJsonRecord(value)) return
-	if (typeof value.id === 'string') {
-		const previous = value.id
+function rewriteSerializedBookmarkIdsWithMap(value: unknown, output: Map<string, string>): void {
+	visitSerializedBookmarkTree(value, item => {
+		if (typeof item.id !== 'string') return
+		const previous = item.id
 		const next = createBookmarkId()
-		value.id = next
+		item.id = next
 		output.set(previous, next)
-	}
-	if (Array.isArray(value.subs)) value.subs.forEach(item => rewriteSerializedBookmarkIdsWithMap(item, output))
+	})
 }
 
 function mapEquivalentBookmarkTreeIds(source: unknown, target: unknown, output: Map<string, string>): void {
@@ -40,22 +57,25 @@ function mapEquivalentBookmarkTreeIds(source: unknown, target: unknown, output: 
 
 export function serializedBookmarkContentIdentity(value: unknown): string {
 	const clone = structuredClone(value)
-	const removeIdentity = (item: unknown): void => {
-		if (!isJsonRecord(item)) return
+	visitSerializedBookmarkTree(clone, item => {
 		delete item.id
 		delete item.path
-		if (Array.isArray(item.subs)) item.subs.forEach(removeIdentity)
-	}
-	removeIdentity(clone)
+	})
 	return JSON.stringify(clone)
 }
 
 export function setSerializedBookmarkPaths(items: unknown[], bookmarkPath: string): void {
-	for (const item of items) {
-		if (!isJsonRecord(item)) continue
+	visitSerializedBookmarkTree(items, item => {
 		item.path = bookmarkPath
-		if (Array.isArray(item.subs)) setSerializedBookmarkPaths(item.subs, bookmarkPath)
-	}
+	})
+}
+
+export function renameSerializedBookmarkPaths(value: unknown, oldBookmarkPath: string, newBookmarkPath: string): void {
+	visitSerializedBookmarkTree(value, item => {
+		if (typeof item.path === 'string' && isSameOrDescendantBookmarkPath(item.path, oldBookmarkPath)) {
+			item.path = renamedBookmarkPath(item.path, oldBookmarkPath, newBookmarkPath)
+		}
+	})
 }
 
 export function mergeSerializedBookmarks(

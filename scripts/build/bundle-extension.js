@@ -16,7 +16,6 @@ async function main() {
     format: 'cjs',
     target: 'node20',
     external: ['vscode'],
-    packages: 'external',
     sourcemap: true,
     sourcesContent: true,
     treeShaking: true,

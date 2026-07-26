@@ -10,7 +10,7 @@ import { createOperationId } from '../util/ScriptIdentity'
 import { isJsonRecord } from '../util/JsonRecord'
 import { atomicWriteFile } from '../util/AtomicFile'
 import {
-	persistLegacyJsonMigration,
+	persistLegacyJsonMigrationAtomically,
 	removeLegacyJsonMigrationBackup,
 } from '../util/PersistenceMigration'
 import {
@@ -19,6 +19,7 @@ import {
 	PersistenceFormats,
 	type PersistenceHeader,
 } from '../util/PersistenceSchema'
+import { isFileNotFoundError } from '../util/FileSystem'
 
 const JOURNAL_DIRECTORY = '.script-relocations'
 
@@ -114,7 +115,7 @@ export async function readPendingScriptRelocations(storageRoot: string): Promise
 	try {
 		files = await fs.promises.readdir(directory)
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+		if (isFileNotFoundError(error)) return []
 		throw error
 	}
 	const pending: PendingScriptRelocation[] = []
@@ -129,10 +130,7 @@ export async function readPendingScriptRelocations(storageRoot: string): Promise
 			const record = parseRecord(decoded.value)
 			if (record) {
 				if (decoded.migrated) {
-					await persistLegacyJsonMigration(journalPath, record, async (target, migrated) => {
-						await atomicWriteFile(target, JSON.stringify(migrated, null, 2))
-						return true
-					})
+					await persistLegacyJsonMigrationAtomically(journalPath, record)
 				}
 				pending.push({ record, journalPath })
 			}

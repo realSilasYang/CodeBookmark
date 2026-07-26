@@ -65,7 +65,7 @@ const unavailableAI = viewTitle.find(item => item.command === 'codebookmark.ai.u
 assert.equal(activeAI.when, '(view == codebookmarkTreeView)')
 assert.equal(unavailableAI, undefined)
 assert.equal(commands.has('codebookmark.ai.unavailable'), false)
-assert.equal(commands.get('codebookmark.importBookmarkConfig')?.enablement, '!codebookmark.activeFileHasBookmark')
+assert.equal(commands.get('codebookmark.importPortablePackage')?.enablement, undefined)
 assert.equal(manifest.contributes.menus.commandPalette.some(item =>
   item.command === 'codebookmark.ai.optimizeDirect' && item.when === 'false'), true)
 assert.equal(manifest.contributes.menus.commandPalette.some(item =>

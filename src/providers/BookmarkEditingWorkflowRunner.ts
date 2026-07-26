@@ -11,6 +11,7 @@ import { ContextBookmark } from '../util/ContextValue'
 import { Helper } from '../util/Helper'
 import { logger } from '../util/Logger'
 import { localize } from '../i18n/Localization'
+import { errorMessage } from '../util/ErrorMessage'
 
 type BookmarkEditingUndoAction =
 	| 'renameBookmarks'
@@ -41,10 +42,6 @@ export interface BookmarkEditingWorkflowPort {
 	saveBookmarks(filePaths: string[]): void
 	refreshDecoration(): void
 	commitTopology(): Promise<void>
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
 }
 
 function resolveEditableTargets(

@@ -9,7 +9,7 @@ export const basePackage = {
 	"name": "codebookmark",
 	"displayName": "代码书签 - CodeBookmark",
 	"description": "为代码智能导航而生，符合你的直觉。自研粘性引擎，让书签准确跟随代码并持续绑定脚本。采用本地保存方案，拥有强大的 AI 辅助功能，支持丰富的图标和自定义选项。",
-	"version": "3.1.1",
+	"version": "3.2.0",
 	"publisher": "realSilasYang",
 	"author": "阳熙来",
 	"private": true,
@@ -106,11 +106,16 @@ export const basePackage = {
 		"test:contract:compiled": "node --test --test-reporter=spec \"tests/contracts/*.test.js\"",
 		"test:coverage": "npm run compile && node --test --experimental-test-coverage --test-coverage-include=out/models/BookmarkCodec.js --test-coverage-include=out/models/WorkspaceOrder.js --test-coverage-include=out/util/PersistenceMigration.js --test-coverage-include=out/util/PersistenceSchema.js --test-coverage-include=out/util/WorkspaceCapabilities.js --test-coverage-lines=90 --test-coverage-branches=75 --test-coverage-functions=85 --test-reporter=spec \"tests/unit/*.test.js\" \"tests/contracts/*.test.js\"",
 		"verify": "npm run compile && npm run lint && npm run test:unit:compiled && npm run test:contract:compiled && node scripts/verify-all.js",
+		"verify:release": "node scripts/verify-all.js --release-only",
 		"test:integration": "npm run compile && node scripts/integration/run-integration-tests.js",
+		"benchmark:markers": "npm run compile && node scripts/performance/run-code-marker-benchmark.js",
 		"verify:icons": "node scripts/verify-icon-assets.js",
 		"package:list": "vsce ls --no-dependencies",
-		"package:vsix": "vsce package --no-dependencies",
+		"package:vsix": "node scripts/release/package-vsix.js",
 		"sbom": "node scripts/release/write-sbom.js",
-		"check:release": "npm run verify && npm run test:integration && npm audit --audit-level=low && npm run package:list"
+		"check:release": "npm run verify && npm run verify:release && npm run test:integration && npm audit --audit-level=low && npm run package:list"
+	},
+	"dependencies": {
+		"fflate": "0.8.3"
 	}
 }

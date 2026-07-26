@@ -131,6 +131,26 @@ async function main() {
   assert.deepEqual(harness.files.get(orderPath(scope)), ['stale.ts'])
 
   harness = createHarness()
+  harness.files.set(orderPath(scope), ['src/original.ts'])
+  const restoreExisting = await harness.store.captureRollback(scope)
+  await harness.store.append(scope, 'src/imported.ts')
+  await restoreExisting()
+  assert.deepEqual(persistedOrder(harness.files, scope), ['src/original.ts'])
+
+  harness = createHarness()
+  const restoreMissing = await harness.store.captureRollback(scope)
+  await harness.store.append(scope, 'src/imported.ts')
+  await restoreMissing()
+  assert.equal(harness.files.has(orderPath(scope)), false)
+
+  harness = createHarness()
+  harness.files.set(layoutPath(scope), { format: 'codebookmark.workspace-layout' })
+  const restoreLayout = await harness.store.captureRollback(scope)
+  await restoreLayout()
+  assert.equal(harness.writes.length, 0)
+  assert.equal(harness.deletes.length, 0)
+
+  harness = createHarness()
   harness.failWrites()
   await assert.rejects(
     harness.store.append(scope, 'src/a.ts', 'custom order failure'),

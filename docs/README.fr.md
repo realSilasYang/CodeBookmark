@@ -51,7 +51,9 @@ L’identité combine l’ID du script, son chemin relatif, des caractéristique
 
 ## 7. Import, export et gestion des configurations
 
-Vous pouvez importer un script ou un dossier de configuration complet. Les exports disponibles sont le JSON réimportable, le texte hiérarchique, Markdown, HTML et CSV. L’export en lot parcourt récursivement le dossier courant, ne traite que les scripts possédant des signets et crée un résultat par fichier source. Le gestionnaire présente configurations, disposition actuelle, anciens ordres, migrations, copies en conflit et résidus temporaires ; le survol affiche les valeurs complètes et seules les catégories autorisées peuvent être nettoyées. Un scope vide disparaît lorsque l’historique annuler／rétablir n’en a plus besoin.
+« Importer／exporter les signets » enregistre le script courant ou l’espace de travail dans un unique fichier de configuration `.codebookmark`. Ce fichier peut être importé dans un autre dossier local ou sur un appareil Windows, macOS ou Linux, puis modifié et repartagé sans perdre libellés, icônes, hiérarchie, ancres de code, apparence des nœuds de fichier ni disposition entre fichiers. Il ne contient aucun chemin absolu ni identifiant propre au système de fichiers ; les anciens JSON et dossiers de configuration ne sont plus acceptés à l’importation.
+
+L’importation reconnaît automatiquement un paquet de script ou d’espace de travail et ne lie qu’une cible certaine, d’après le chemin relatif, l’empreinte du code ou le contexte des signets. Les correspondances ambiguës sont signalées comme conflits ; si des signets existent déjà, vous choisissez Ajouter ou Écraser. Markdown, HTML, CSV et le texte hiérarchique restent des formats de lecture. Le gestionnaire affiche aussi les états d’échange entre appareils, les dispositions, migrations, copies en conflit et résidus temporaires.
 
 ## 8. Assistance IA
 
@@ -83,7 +85,7 @@ Le moteur n’accepte qu’un candidat de position unique et solide. L’annulat
 
 ## 4. Build, tests et publication
 
-Le projet utilise Node.js 24. `npm run verify` lance compilation, ESLint, tests unitaires, tests contractuels et vérificateurs ; `npm run test:integration` réutilise VS Code dans des environnements isolés pour 13 langues et le repli anglais ; `npm run check:release` ajoute l’audit et le contenu VSIX.
+Le projet utilise Node.js 24. `npm run verify` lance la compilation, ESLint, les tests unitaires et contractuels ainsi que tous les contrôles valables pendant le développement ; `npm run verify:release` vérifie les documents définitifs de la version. `npm run test:integration` réutilise VS Code dans des environnements isolés pour 13 langues et le repli anglais ; `npm run check:release` réunit ces contrôles, l’audit et le contenu VSIX.
 
 Seuls les tags annotés appartenant à `main` sont publiables. GitHub Actions utilise des identifiants OIDC éphémères, publie sur Marketplace, compare le hash du VSIX distant, puis crée une Release avec VSIX, CycloneDX SBOM et `SHA256SUMS`. Voir le [guide de publication](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 

@@ -138,7 +138,7 @@ assert.deepEqual(
 )
 const englishManifestSource = sourceManifestCatalogs.get('en')
 const sourceManifestKeys = Object.keys(sourceManifestCatalogs.get('zh-cn')).sort()
-assert.equal(sourceManifestKeys.length, 122, 'Every manifest source catalog must contain all 122 stable keys')
+assert.equal(sourceManifestKeys.length, 126, 'Every manifest source catalog must contain all 126 stable keys')
 const manifestGenerationPromptKey = 'codebookmark.contributes.configuration.main.properties.codebookmark.AI.prompt.default'
 const manifestOptimizationPromptKey = 'codebookmark.contributes.configuration.main.properties.codebookmark.AI.optimizePrompt.default'
 for (const [locale, messages] of sourceManifestCatalogs) {
@@ -747,10 +747,11 @@ for (const [locale, documentPath] of Object.entries(README_DOCUMENT_BY_LANGUAGE)
   assert.match(content, /CodeBookmark/u, `${documentPath} must identify the product`)
   for (const requiredTopic of [
     'globalStoragePath', 'Ctrl+B', '_workspace_layout.json', 'TODO', 'FIXME', 'BUG',
-    'APIKey', 'test:integration', 'CycloneDX', 'SHA256SUMS',
+    'APIKey', '.codebookmark', 'test:integration', 'CycloneDX', 'SHA256SUMS',
   ]) {
     assert.ok(content.includes(requiredTopic), `${documentPath} must document ${requiredTopic}`)
   }
+  assert.doesNotMatch(content, /\.codebookmark\.json/u, `${documentPath} must not document the removed JSON import format`)
   assert.match(content, new RegExp(`<strong>${({
     'zh-cn': '简体中文', 'zh-hk': '繁體中文（香港）', 'zh-tw': '繁體中文（台灣）', en: 'English',
     ja: '日本語', vi: 'Tiếng Việt', ko: '한국어', es: 'Español', fr: 'Français', pt: 'Português',

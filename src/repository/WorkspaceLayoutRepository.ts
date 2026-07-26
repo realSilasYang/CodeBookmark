@@ -2,7 +2,6 @@
  * 处理工作区布局文件的导入、脚本身份重映射和工作区根目录迁移。
  * 遇到目标冲突时保留可恢复副本，防止目录移动或导入过程静默覆盖已有布局。
  */
-import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import { localize } from '../i18n/Localization'
@@ -10,14 +9,15 @@ import {
 	decodeWorkspaceLayoutPersistence,
 	workspaceLayoutPersistence,
 	workspaceNodeReferenceKey,
+	type WorkspaceLayout,
 	type WorkspaceNodeReference,
 } from '../models/WorkspaceLayout'
+import type { PortableImportMode } from '../portable/PortableMerge'
+import { atomicWriteFile } from '../util/AtomicFile'
 import { fileUtils } from '../util/FileUtils'
 import type { ScriptRelocationRecord } from './ScriptRelocationJournal'
-
-async function exists(filePath: string): Promise<boolean> {
-	try { await fs.promises.access(filePath); return true } catch { return false }
-}
+import { pathExists, readFileIfExists } from '../util/FileSystem'
+import { sha256Hex } from '../util/Sha256'
 
 export async function relocateWorkspaceLayoutFile(
 	record: ScriptRelocationRecord,
@@ -25,27 +25,27 @@ export async function relocateWorkspaceLayoutFile(
 ): Promise<void> {
 	if (foldersReferToSameFile) return
 	const source = path.join(record.oldBookmarkFolder, '_workspace_layout.json')
-	if (!await exists(source)) return
+	if (!await pathExists(source)) return
 	await fs.promises.mkdir(record.newBookmarkFolder, { recursive: true })
 	const target = path.join(record.newBookmarkFolder, '_workspace_layout.json')
-	if (!await exists(target)) {
+	if (!await pathExists(target)) {
 		await fs.promises.rename(source, target)
 		return
 	}
 	const content = await fs.promises.readFile(source)
-	const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 12)
+	const hash = sha256Hex(content).slice(0, 12)
 	const conflict = path.join(record.newBookmarkFolder, `_workspace_layout.relocation-conflict_${hash}.json`)
-	if (!await exists(conflict)) await fs.promises.writeFile(conflict, content)
+	if (!await pathExists(conflict)) await fs.promises.writeFile(conflict, content)
 	await fs.promises.unlink(source)
 }
 
-export async function importWorkspaceLayoutFile(
-	layoutPath: string,
+export async function importPortableWorkspaceLayout(
+	source: WorkspaceLayout,
 	workspaceRootPath: string,
 	identities: ReadonlyMap<string, { scriptId: string, bookmarkIds: ReadonlyMap<string, string> }>,
 	storageRoot: string,
-): Promise<void> {
-	const source = decodeWorkspaceLayoutPersistence(await fileUtils.readJsonFileAsync(layoutPath)).layout
+	mode: PortableImportMode,
+): Promise<() => Promise<void>> {
 	const remap = (reference: WorkspaceNodeReference): WorkspaceNodeReference | undefined => {
 		const identity = identities.get(reference.scriptId)
 		if (!identity) return undefined
@@ -68,18 +68,27 @@ export async function importWorkspaceLayoutFile(
 		return node ? [{ node, expanded: state.expanded }] : []
 	})
 	const folder = fileUtils.getWorkspaceBookmarkFolder(workspaceRootPath, storageRoot)
-	if (!folder) return
+	if (!folder) return async () => {}
 	const targetPath = path.join(folder, '_workspace_layout.json')
+	const previous = await readFileIfExists(targetPath)
 	let existingEntries: typeof importedEntries = []
 	let existingHidden: string[] = []
 	let existingExpansionStates: typeof importedExpansionStates = []
 	let pinned = source.pinnedContainer ? remap(source.pinnedContainer) ?? null : null
-	if (await exists(targetPath)) {
+	const importedLocalScriptIds = new Set([...identities.values()].map(identity => identity.scriptId))
+	if (await pathExists(targetPath)) {
 		const existing = decodeWorkspaceLayoutPersistence(await fileUtils.readJsonFileAsync(targetPath)).layout
-		existingEntries = existing.entries
-		existingHidden = existing.hiddenFiles
-		existingExpansionStates = existing.expansionStates
-		pinned = existing.pinnedContainer ?? pinned
+		existingEntries = mode === 'append' ? existing.entries
+			: existing.entries.filter(entry => !importedLocalScriptIds.has(entry.node.scriptId))
+		existingHidden = mode === 'append' ? existing.hiddenFiles
+			: existing.hiddenFiles.filter(scriptId => !importedLocalScriptIds.has(scriptId))
+		existingExpansionStates = mode === 'append' ? existing.expansionStates
+			: existing.expansionStates.filter(state => !importedLocalScriptIds.has(state.node.scriptId))
+		pinned = mode === 'append' && existing.pinnedContainer
+			? existing.pinnedContainer
+			: existing.pinnedContainer && !importedLocalScriptIds.has(existing.pinnedContainer.scriptId)
+				? existing.pinnedContainer
+				: pinned
 	}
 	const keys = new Set(existingEntries.map(entry => workspaceNodeReferenceKey(entry.node)))
 	for (const entry of importedEntries) {
@@ -88,6 +97,9 @@ export async function importWorkspaceLayoutFile(
 		existingEntries.push(entry)
 		keys.add(key)
 	}
+	const mergedEntries = existingEntries.map(entry => entry.parent && !keys.has(workspaceNodeReferenceKey(entry.parent))
+		? { ...entry, parent: null }
+		: entry)
 	const hidden = [...new Set([
 		...existingHidden,
 		...source.hiddenFiles.flatMap(scriptId => identities.get(scriptId)?.scriptId ?? []),
@@ -95,12 +107,16 @@ export async function importWorkspaceLayoutFile(
 	const expansionByKey = new Map(importedExpansionStates.map(state => [workspaceNodeReferenceKey(state.node), state]))
 	for (const state of existingExpansionStates) expansionByKey.set(workspaceNodeReferenceKey(state.node), state)
 	if (!await fileUtils.writeJsonFileAsync(targetPath, workspaceLayoutPersistence(
-		existingEntries,
+		mergedEntries,
 		hidden,
 		pinned,
 		Date.now(),
 		[...expansionByKey.values()],
 	))) {
 		throw new Error(localize("repository.WorkspaceLayoutRepository.unableToWriteTheImportedWorkspaceBookmarkLayout"))
+	}
+	return async () => {
+		if (previous) await atomicWriteFile(targetPath, previous)
+		else await fs.promises.rm(targetPath, { force: true })
 	}
 }

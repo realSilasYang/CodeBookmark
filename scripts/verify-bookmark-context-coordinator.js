@@ -5,32 +5,8 @@
 const assert = require('node:assert/strict')
 const { Commands } = require('../out/util/constants/Commands')
 const { BookmarkContextCoordinator } = require('../out/providers/BookmarkContextCoordinator')
-
-class FakeScheduling {
-  constructor(events) {
-    this.events = events
-    this.timers = []
-  }
-
-  setTimer(callback, delay) {
-    const timer = { callback, delay }
-    this.timers.push(timer)
-    this.events.push(`timer:${delay}`)
-    return timer
-  }
-
-  clearTimer(timer) {
-    const index = this.timers.indexOf(timer)
-    if (index >= 0) this.timers.splice(index, 1)
-    this.events.push('timer:clear')
-  }
-
-  runNext() {
-    const timer = this.timers.shift()
-    assert.ok(timer, 'Expected a scheduled context update')
-    timer.callback()
-  }
-}
+const { flushAsyncWork } = require('./test-support/async-work')
+const { ManualScheduler } = require('./test-support/manual-scheduler')
 
 function fileUri(filePath) {
   return { fsPath: filePath, key: `file:${filePath}` }
@@ -38,7 +14,7 @@ function fileUri(filePath) {
 
 function createHarness(options = {}) {
   const events = []
-  const scheduling = new FakeScheduling(events)
+  const scheduling = new ManualScheduler(events, { clearEvent: () => 'timer:clear' })
   const coordinator = new BookmarkContextCoordinator(scheduling, 100)
   let activeEditor = options.activeEditor
   let activeTab = options.activeTab
@@ -81,11 +57,6 @@ function createHarness(options = {}) {
     setFolderScan: value => { folderScan = value },
     setSetContext: value => { setContext = value },
   }
-}
-
-async function flushAsyncWork() {
-  await new Promise(resolve => setImmediate(resolve))
-  await new Promise(resolve => setImmediate(resolve))
 }
 
 async function main() {

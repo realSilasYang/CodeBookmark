@@ -5,7 +5,7 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { localize, UserCancelledError } from '../i18n/Localization'
+import { localize } from '../i18n/Localization'
 import { fileUtils } from '../util/FileUtils'
 import { logger } from '../util/Logger'
 import { Bookmark } from '../models/Bookmark'
@@ -26,8 +26,6 @@ import {
 } from '../util/AbsolutePath'
 import {
 	mergeSerializedBookmarks,
-	mergeSerializedBookmarksWithIdMap,
-	rewriteSerializedBookmarkIdsWithMap,
 	setSerializedBookmarkPaths,
 } from '../models/SerializedBookmarkTree'
 import { SerialTaskQueue } from '../util/SerialTaskQueue'
@@ -55,12 +53,7 @@ import {
 	createBookmarkFileNode,
 	updateBookmarkFileNodePath,
 } from './BookmarkFileNodeCodec'
-import {
-	collectBookmarkConfigurationImportCandidates,
-	findWorkspaceLayoutConfiguration,
-	type BookmarkConfigurationImportCandidate,
-} from './BookmarkConfigurationImportScanner'
-import { importWorkspaceLayoutFile, relocateWorkspaceLayoutFile } from './WorkspaceLayoutRepository'
+import { relocateWorkspaceLayoutFile } from './WorkspaceLayoutRepository'
 import {
 	removeBookmarkConfigurationFiles,
 	type BookmarkConfigurationDeleteRequest,
@@ -72,6 +65,10 @@ import {
 	summarizeBookmarkTrees,
 	type BookmarkLevelSummary,
 } from '../util/BookmarkStatistics'
+import type { PortableScript } from '../portable/PortablePackage'
+import { mergePortableBookmarks, type PortableImportMode } from '../portable/PortableMerge'
+import { atomicWriteFile } from '../util/AtomicFile'
+import { pathExists, readFileIfExists } from '../util/FileSystem'
 
 interface MissingReconciliation {
 	ambiguousTargets: Set<string>
@@ -86,13 +83,15 @@ export interface ScriptRelocationChange {
 	newAbsolutePath: string
 	scriptId: string
 }
-export interface BookmarkConfigurationFolderImportResult {
-	total: number
-	imported: number
-	skipped: number
-	failed: number
-	cancelled: boolean
-	bookmarkSummary: BookmarkLevelSummary
+interface PortableScriptImportResult {
+	fileNode: Bookmark
+	localScriptId: string
+	bookmarkMappings: Record<string, string>
+	added: number
+	updated: number
+	removed: number
+	conflicts: number
+	rollback(): Promise<void>
 }
 class BookmarkReadCancelledError extends Error {
 	constructor() {
@@ -107,15 +106,6 @@ function throwIfReadCancelled(signal?: AbortSignal): void {
 
 function isBookmarkReadCancelled(error: unknown): boolean {
 	return error instanceof BookmarkReadCancelledError
-}
-
-async function pathExists(filePath: string): Promise<boolean> {
-	try {
-		await fs.promises.access(filePath)
-		return true
-	} catch {
-		return false
-	}
 }
 
 class CodeBookmarksRepository {
@@ -299,14 +289,7 @@ class CodeBookmarksRepository {
 	}
 
 	private async deleteFile(filePath: string): Promise<void> {
-		fileChangeFingerprints.markDeleteIntent(filePath)
-		try {
-			await fs.promises.unlink(filePath)
-			fileChangeFingerprints.markDeleteComplete(filePath)
-		} catch (error) {
-			fileChangeFingerprints.markDeleteFailed(filePath)
-			throw error
-		}
+		await fileUtils.deleteJsonFileAsync(filePath)
 	}
 
 	private async archiveSupersededConfig(filePath: string): Promise<void> {
@@ -315,14 +298,7 @@ class CodeBookmarksRepository {
 		let preserved = `${filePath}.superseded`
 		let suffix = 1
 		while (await pathExists(preserved)) preserved = `${filePath}.superseded_${suffix++}`
-		fileChangeFingerprints.markDeleteIntent(filePath)
-		try {
-			await fs.promises.rename(filePath, preserved)
-			fileChangeFingerprints.markDeleteComplete(filePath)
-		} catch (error) {
-			fileChangeFingerprints.markDeleteFailed(filePath)
-			throw error
-		}
+		await fileChangeFingerprints.trackDeletion(filePath, () => fs.promises.rename(filePath, preserved))
 	}
 
 	private async reconcileDuplicatePath(
@@ -1174,168 +1150,61 @@ class CodeBookmarksRepository {
 		await this.removeOrderPath(absolutePath)
 	}
 
-	async importBookmarkConfiguration(configPath: string, targetAbsolutePath: string): Promise<Bookmark> {
-		return this.enqueueRelocation(() => this.performBookmarkConfigurationImport(configPath, targetAbsolutePath))
-	}
-
-	async importBookmarkConfigurationsFromFolder(
-		configFolderPath: string,
-		workspaceRootPath: string,
-	): Promise<BookmarkConfigurationFolderImportResult> {
-		return this.enqueueRelocation(() => this.performBookmarkConfigurationFolderImport(configFolderPath, workspaceRootPath))
-	}
-
-	private async performBookmarkConfigurationFolderImport(
-		configFolderPath: string,
-		workspaceRootPath: string,
-	): Promise<BookmarkConfigurationFolderImportResult> {
-		const storageRoot = this.storageRoot()
-		if (!storageRoot) throw new Error(localize("repository.BookmarkRepository.theBookmarkStorageFolderIsNotConfigured"))
-		await this.ensureIndex(storageRoot)
-		const candidates = await collectBookmarkConfigurationImportCandidates(configFolderPath, workspaceRootPath)
-		const result: BookmarkConfigurationFolderImportResult = {
-			total: candidates.length,
-			imported: 0,
-			skipped: 0,
-			failed: 0,
-			cancelled: false,
-			bookmarkSummary: { total: 0, levelCounts: [] },
-		}
-		const valid: BookmarkConfigurationImportCandidate[] = []
-		const sourceScriptIds = new Map<string, string>()
-		let fingerprintMismatches = 0
-		for (const candidate of candidates) {
-			try {
-				const { data: importedValue } = decodeScriptConfiguration(await fileUtils.readJsonFileAsync(candidate.configPath))
-				const importedMetadata = scriptMetadata(importedValue)
-				const importedItems = bookmarkItems(importedValue)
-				const targetFingerprint = await fingerprintSourceFile(candidate.targetAbsolutePath)
-				if (!importedMetadata || !importedItems || !targetFingerprint) {
-					result.skipped++
-					continue
-				}
-				if (importedMetadata.fingerprint && importedMetadata.fingerprint.sha256 !== targetFingerprint.sha256) fingerprintMismatches++
-				valid.push(candidate)
-				sourceScriptIds.set(candidate.configPath, importedMetadata.id)
-			} catch (error) {
-				result.skipped++
-				logger.error(localize("repository.BookmarkRepository.failedToInspectABookmarkConfigurationImportCandidate", { configPath: candidate.configPath, error }))
-			}
-		}
-		if (fingerprintMismatches > 0) {
-			const actions = [
-				{ title: localize("repository.BookmarkRepository.importAndBindAnyway"), action: 'continue' as const },
-				{ title: localize("repository.BookmarkRepository.cancel"), action: 'cancel' as const },
-			]
-			const choice = await vscode.window.showWarningMessage(
-				localize("repository.BookmarkRepository.configurationsHaveSourceFingerprintsThatDifferFromTheCurrent", { fingerprintMismatches }),
-				{ modal: true },
-				...actions,
-			)
-			if (choice?.action !== 'continue') {
-				result.cancelled = true
-				return result
-			}
-		}
-		const importedIdentities = new Map<string, { scriptId: string, bookmarkIds: Map<string, string> }>()
-		for (const candidate of valid) {
-			try {
-				const bookmarkIds = new Map<string, string>()
-				const importedFileNode = await this.performBookmarkConfigurationImport(
-					candidate.configPath,
-					candidate.targetAbsolutePath,
-					fingerprintMismatches > 0,
-					bookmarkIds,
-				)
-				result.bookmarkSummary = mergeBookmarkLevelSummaries(
-					result.bookmarkSummary,
-					summarizeBookmarkTrees(importedFileNode.subs),
-				)
-				result.imported++
-				const sourceId = sourceScriptIds.get(candidate.configPath)
-				if (sourceId && importedFileNode.scriptId) {
-					importedIdentities.set(sourceId, { scriptId: importedFileNode.scriptId, bookmarkIds })
-				}
-			} catch (error) {
-				result.failed++
-				logger.error(localize("repository.BookmarkRepository.failedToImportABookmarkConfiguration", { configPath: candidate.configPath, targetAbsolutePath: candidate.targetAbsolutePath, error }))
-			}
-		}
-		const layoutPath = await findWorkspaceLayoutConfiguration(configFolderPath)
-		if (layoutPath && importedIdentities.size > 0) {
-			try {
-				const storageRoot = this.storageRoot()
-				if (storageRoot) await importWorkspaceLayoutFile(layoutPath, workspaceRootPath, importedIdentities, storageRoot)
-			} catch (error) {
-				logger.error(localize("repository.BookmarkRepository.failedToImportTheWorkspaceBookmarkLayout", { layoutPath, error }))
-			}
-		}
-		return result
-	}
-
-	private async performBookmarkConfigurationImport(
-		configPath: string,
+	async importPortableScript(
+		portable: PortableScript,
 		targetAbsolutePath: string,
-		fingerprintMismatchConfirmed = false,
-		importedBookmarkIds?: Map<string, string>,
-	): Promise<Bookmark> {
+		base: PortableScript | undefined,
+		previousScriptId: string | undefined,
+		previousBookmarkMappings: Readonly<Record<string, string>>,
+		mode: PortableImportMode,
+	): Promise<PortableScriptImportResult> {
+		return this.enqueueRelocation(() => this.performPortableScriptImport(
+			portable,
+			targetAbsolutePath,
+			base,
+			previousScriptId,
+			previousBookmarkMappings,
+			mode,
+		))
+	}
+
+	private async performPortableScriptImport(
+		portable: PortableScript,
+		targetAbsolutePath: string,
+		base: PortableScript | undefined,
+		previousScriptId: string | undefined,
+		previousBookmarkMappings: Readonly<Record<string, string>>,
+		mode: PortableImportMode,
+	): Promise<PortableScriptImportResult> {
 		const storageRoot = this.storageRoot()
 		if (!storageRoot) throw new Error(localize("repository.BookmarkRepository.theBookmarkStorageFolderIsNotConfigured"))
 		await this.ensureIndex(storageRoot)
 		const targetPath = normalizedAbsolutePath(targetAbsolutePath)
-		const { data: importedValue } = decodeScriptConfiguration(await fileUtils.readJsonFileAsync(configPath))
-		const importedMetadata = scriptMetadata(importedValue)
-		const importedItems = bookmarkItems(importedValue)
-		if (!importedMetadata || !importedItems) {
-			throw new Error(localize("repository.BookmarkRepository.theSelectedFileIsNotAValidBookmarkConfiguration"))
-		}
-		this.createFileNode(importedValue, importedMetadata.path, true)
 		const targetFingerprint = await fingerprintSourceFile(targetPath)
 		if (!targetFingerprint) throw new Error(localize("repository.BookmarkRepository.unableToReadTheCurrentScriptContent"))
-		if (!fingerprintMismatchConfirmed && importedMetadata.fingerprint && importedMetadata.fingerprint.sha256 !== targetFingerprint.sha256) {
-			const actions = [
-				{ title: localize("repository.BookmarkRepository.importAndBindAnyway"), action: 'continue' as const },
-				{ title: localize("repository.BookmarkRepository.cancel"), action: 'cancel' as const },
-			]
-			const choice = await vscode.window.showWarningMessage(
-				localize("repository.BookmarkRepository.theSelectedConfigurationHasADifferentSourceFingerprintFrom"),
-				{ modal: true },
-				...actions,
-			)
-			if (choice?.action !== 'continue') {
-				throw new UserCancelledError("repository.BookmarkRepository.theUserCancelledTheBookmarkConfigurationImport")
-			}
-		}
-
 		let existingTarget: ScriptIndexEntry | undefined = this.entriesAtAbsolutePath(targetPath)[0]
-		if (existingTarget?.metadata.missingSince !== undefined
-			&& existingTarget.metadata.fingerprint?.sha256 !== targetFingerprint.sha256) {
-			await this.archiveSupersededConfig(existingTarget.filePath)
-			this.removeIndexEntry(existingTarget.id)
-			existingTarget = undefined
+		if (!existingTarget && previousScriptId) {
+			const previous = this.scriptIndex.get(previousScriptId)
+			if (previous && !await this.originalPathIsAvailable(previous)) existingTarget = previous
 		}
-		let targetId = importedMetadata.id
-		let bookmarks = importedItems.map(item => structuredClone(item))
+		let targetId = portable.scriptId
+		let existingBookmarks: unknown[] = []
 		if (existingTarget) {
 			const existingData = (await this.readBookmarkFile(existingTarget.filePath)).data
 			targetId = existingTarget.id
-			const merged = mergeSerializedBookmarksWithIdMap(existingData.bookmarks, bookmarks, targetPath)
-			bookmarks = merged.bookmarks
-			for (const [sourceId, targetId] of merged.idMap) importedBookmarkIds?.set(sourceId, targetId)
+			existingBookmarks = existingData.bookmarks
 		} else if (this.scriptIndex.has(targetId)) {
 			targetId = createScriptId()
-			bookmarks.forEach(item => rewriteSerializedBookmarkIdsWithMap(item, importedBookmarkIds ?? new Map()))
-		} else {
-			const mapped = mergeSerializedBookmarksWithIdMap([], bookmarks, targetPath)
-			bookmarks = mapped.bookmarks
-			for (const [sourceId, targetId] of mapped.idMap) importedBookmarkIds?.set(sourceId, targetId)
 		}
+		const merged = mergePortableBookmarks(existingBookmarks, portable, base, previousBookmarkMappings, mode)
+		let bookmarks = merged.bookmarks
 		setSerializedBookmarkPaths(bookmarks, targetPath)
 		const output = createScriptEnvelope({
 				id: targetId,
 				path: targetPath,
 				fingerprint: targetFingerprint,
 				lastSeenAt: Date.now(),
+				presentation: portable.presentation,
 			}, bookmarks)
 		const display = this.displayPath(targetPath, vscode.Uri.file(targetPath))
 		let fileNode = this.createFileNode(output, display, true)
@@ -1356,18 +1225,56 @@ class CodeBookmarksRepository {
 		}
 		const scriptFolder = this.scriptFolder(storageRoot)
 		const outputPath = path.join(scriptFolder, `${targetId}.json`)
-		await this.writeEnvelope(outputPath, output)
 		const orderInfo = this.scopeOrderInfo(targetPath)
-		if (orderInfo) {
-			await this.workspaceOrders.append(
-				orderInfo.folder,
-				orderInfo.bookmarkPath,
-				localize("repository.BookmarkRepository.unableToUpdateTheWorkspaceBookmarkOrder"),
-			)
+		const restoreOrder = orderInfo
+			? await this.workspaceOrders.captureRollback(orderInfo.folder)
+			: async (): Promise<void> => {}
+		const previousOutput = await readFileIfExists(outputPath)
+		let rolledBack = false
+		const restore = async (): Promise<void> => {
+			if (rolledBack) return
+			rolledBack = true
+			if (previousOutput) await atomicWriteFile(outputPath, previousOutput)
+			else await fs.promises.rm(outputPath, { force: true })
+			await restoreOrder()
+			await this.rebuildIndex(storageRoot)
+		}
+		try {
+			await this.writeEnvelope(outputPath, output)
+			if (orderInfo) {
+				await this.workspaceOrders.append(
+					orderInfo.folder,
+					orderInfo.bookmarkPath,
+					localize("repository.BookmarkRepository.unableToUpdateTheWorkspaceBookmarkOrder"),
+				)
+			}
+		} catch (error) {
+			await restore()
+			throw error
 		}
 		fileNode = this.createFileNode(output, display, true)
 		if (!fileNode) throw new Error(localize("repository.BookmarkRepository.theImportResultContainsNoValidBookmarks"))
-		return fileNode
+		return {
+			fileNode,
+			localScriptId: targetId,
+			bookmarkMappings: merged.bookmarkMappings,
+			added: merged.added,
+			updated: merged.updated,
+			removed: merged.removed,
+			conflicts: merged.conflicts,
+			rollback: restore,
+		}
+	}
+
+	async portableTargetHasBookmarks(targetAbsolutePath: string): Promise<boolean> {
+		return this.enqueueRelocation(async () => {
+			const storageRoot = this.storageRoot()
+			if (!storageRoot) return false
+			await this.ensureIndex(storageRoot)
+			const target = this.entriesAtAbsolutePath(normalizedAbsolutePath(targetAbsolutePath))[0]
+			if (!target) return false
+			return (await this.readBookmarkFile(target.filePath)).data.bookmarks.length > 0
+		})
 	}
 }
 

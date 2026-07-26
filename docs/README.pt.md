@@ -51,7 +51,9 @@ A identidade combina ID do script, caminho relativo, características do conteú
 
 ## 7. Importação, exportação e gerenciamento
 
-É possível importar um script ou uma pasta completa de configurações. A exportação oferece JSON reimportável, texto hierárquico, Markdown, HTML e CSV. A exportação em lote percorre a pasta atual, processa somente scripts com favoritos e produz um resultado por arquivo-fonte. O gerenciador mostra configurações, layout atual, registros antigos, migrações, cópias conflitantes e resíduos temporários; o hover revela valores completos e somente tipos autorizados podem ser limpos. Scopes vazios desaparecem quando o histórico de desfazer／refazer não precisa mais deles.
+“Importar／exportar favoritos” salva o script atual ou o workspace em um único arquivo de configuração `.codebookmark`. Ele pode ser importado em outra pasta local ou em dispositivos Windows, macOS e Linux, editado e compartilhado novamente sem perder rótulos, ícones, hierarquia, âncoras de código, aparência dos nós de arquivo nem layout entre arquivos. O pacote não inclui caminhos absolutos nem identidades do sistema de arquivos; os antigos JSON e diretórios de configuração não são mais aceitos na importação.
+
+A importação reconhece automaticamente pacotes de script ou workspace e só vincula um destino inequívoco por caminho relativo, resumo do código ou contexto dos favoritos. Correspondências ambíguas são apresentadas como conflitos; quando já há favoritos, é possível escolher Anexar ou Sobrescrever. Markdown, HTML, CSV e texto hierárquico continuam disponíveis apenas para leitura. O gerenciador também mostra registros de intercâmbio entre dispositivos, layouts, migrações, cópias conflitantes e resíduos temporários.
 
 ## 8. Assistência de IA
 
@@ -83,7 +85,7 @@ O mecanismo só aceita um candidato de posição único e sólido. O desfazer us
 
 ## 4. Build, testes e publicação
 
-O projeto usa Node.js 24. `npm run verify` executa compilação, ESLint, testes unitários e contratuais e verificadores; `npm run test:integration` reutiliza o VS Code em ambientes isolados para 13 idiomas e fallback em inglês; `npm run check:release` acrescenta auditoria e listagem do VSIX.
+O projeto usa Node.js 24. `npm run verify` executa compilação, ESLint, testes unitários e contratuais e todas as verificações válidas durante o desenvolvimento; `npm run verify:release` confere os materiais definitivos da versão. `npm run test:integration` reutiliza o VS Code em ambientes isolados para 13 idiomas e fallback em inglês; `npm run check:release` reúne todas essas verificações, a auditoria e a listagem do VSIX.
 
 Somente tags anotadas pertencentes a `main` podem ser publicadas. O GitHub Actions usa credenciais OIDC temporárias, publica no Marketplace, compara o hash do VSIX remoto e cria uma Release com VSIX, CycloneDX SBOM e `SHA256SUMS`. Consulte o [guia de publicação](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 

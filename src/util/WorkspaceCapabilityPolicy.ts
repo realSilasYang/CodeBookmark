@@ -5,6 +5,7 @@
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
 import { workspaceAllowsAI } from './WorkspaceCapabilities'
+import { errorMessage } from './ErrorMessage'
 
 export function assertAIWorkspaceTrusted(): void {
 	if (workspaceAllowsAI(vscode.workspace.isTrusted !== false)) return
@@ -16,7 +17,7 @@ export function ensureAIWorkspaceTrusted(): boolean {
 		assertAIWorkspaceTrusted()
 		return true
 	} catch (error) {
-		void vscode.window.showWarningMessage(error instanceof Error ? error.message : String(error))
+		void vscode.window.showWarningMessage(errorMessage(error))
 		return false
 	}
 }

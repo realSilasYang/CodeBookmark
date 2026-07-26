@@ -3,9 +3,10 @@
  * 脚本在临时目录中调用编译后的 `PathHash`、`BookmarkRepository`、`BookmarkSet` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
-const crypto = require('node:crypto')
 const fs = require('node:fs')
 const { installModuleMocks } = require('./test-support/module-mocks')
+const { scriptEnvelope } = require('./test-support/bookmark-fixtures')
+const { createRepositoryVscodeMock } = require('./test-support/repository-vscode-mock')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -18,47 +19,8 @@ const scriptFolder = path.join(storageRoot, 'scripts')
 fs.mkdirSync(oldDirectory, { recursive: true })
 fs.mkdirSync(scriptFolder, { recursive: true })
 
-class TreeItem {
-  constructor(label, collapsibleState) {
-    this.label = label
-    this.collapsibleState = collapsibleState
-  }
-}
-class MarkdownString {
-  appendMarkdown() {}
-  appendText() {}
-  appendCodeblock() {}
-}
 const workspaceFolder = { uri: { scheme: 'file', fsPath: workspaceRoot } }
-const vscodeMock = {
-  TreeItem,
-  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
-  ThemeIcon: class {}, ThemeColor: class {}, MarkdownString,
-  Uri: { file: fsPath => ({ scheme: 'file', fsPath }) },
-  workspace: {
-    workspaceFolders: [workspaceFolder], textDocuments: [],
-    getWorkspaceFolder: uri => {
-      const relative = path.relative(workspaceRoot, path.resolve(uri.fsPath))
-      return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative)) ? workspaceFolder : undefined
-    },
-    getConfiguration: section => ({
-      get: key => {
-        if (section === 'codebookmark' && key === 'globalStoragePath') return storageRoot
-        if (section === 'codebookmark' && key === 'autoSpace') return true
-        return undefined
-      },
-    }),
-  },
-  window: {
-    activeTextEditor: undefined,
-    createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
-    showErrorMessage: async () => undefined,
-    showWarningMessage: async () => undefined,
-    showInformationMessage: async () => undefined,
-    showQuickPick: async items => items[0],
-  },
-  commands: { executeCommand: async () => undefined },
-}
+const vscodeMock = createRepositoryVscodeMock({ storageRoot, workspaceFolders: [workspaceFolder] })
 installModuleMocks({ vscode: vscodeMock })
 
 const { stableWorkspacePathHash } = require('../out/util/PathHash')
@@ -66,30 +28,7 @@ const { bookmarkRepository } = require('../out/repository/BookmarkRepository')
 const { BookmarkSet } = require('../out/models/BookmarkSet')
 
 function envelope(id, scriptPath, content) {
-  return {
-    script: {
-      id,
-      path: scriptPath,
-      fingerprint: {
-        sha256: crypto.createHash('sha256').update(content).digest('hex'),
-        size: Buffer.byteLength(content),
-      },
-      lastSeenAt: Date.now(),
-    },
-    bookmarks: [{
-      id: `bookmark-${id}`,
-      createdAt: Date.now(),
-      label: path.basename(scriptPath),
-      path: scriptPath,
-      collapsibleState: 0,
-      pinned: false,
-      content: content.trim(),
-      iconName: '',
-      isInvalid: false,
-      params: '0,0,0,0',
-      subs: [],
-    }],
-  }
+	return scriptEnvelope({ scriptId: id, sourcePath: scriptPath, content })
 }
 
 async function main() {

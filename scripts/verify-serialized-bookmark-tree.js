@@ -8,6 +8,7 @@ const {
   mergeSerializedBookmarks,
   mergeSerializedBookmarksWithIdMap,
   serializedBookmarkContentIdentity,
+  renameSerializedBookmarkPaths,
 } = require('../out/models/SerializedBookmarkTree')
 
 const primary = [{
@@ -61,4 +62,10 @@ assert.notEqual(nestedMerged.bookmarks[1].subs[0].id, 'child-a')
 assert.equal(nestedMerged.idMap.get('bookmark-c'), nestedMerged.bookmarks[1].id)
 assert.equal(nestedMerged.idMap.get('child-a'), nestedMerged.bookmarks[1].subs[0].id)
 assert.equal(serializedBookmarkContentIdentity(primary[0]), serializedBookmarkContentIdentity(duplicate[0]))
+
+const renamed = [{ path: 'src/folder/a.ts', subs: [null, { path: 'src/folder/a.ts', subs: ['invalid'] }] }, { path: 'src/other.ts' }, 42]
+renameSerializedBookmarkPaths(renamed, 'src/folder', 'src/moved')
+assert.equal(renamed[0].path, 'src/moved/a.ts')
+assert.equal(renamed[0].subs[1].path, 'src/moved/a.ts')
+assert.equal(renamed[1].path, 'src/other.ts')
 assert.equal(JSON.stringify({ primary, duplicate, conflict }), original)

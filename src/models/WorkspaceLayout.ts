@@ -50,6 +50,19 @@ export function workspaceNodeReferenceKey(reference: WorkspaceNodeReference): st
 		: `bookmark:${reference.scriptId}:${reference.bookmarkId}`
 }
 
+/**
+ * 返回只反映视觉结构的稳定身份，刻意忽略持久化格式头和更新时间。
+ * 保存协调器与加载规范化逻辑必须共用同一比较边界，避免一处认为已变化、另一处认为未变化。
+ */
+export function workspaceLayoutStructuralIdentity(layout: WorkspaceLayout): string {
+	return JSON.stringify({
+		entries: layout.entries,
+		hiddenFiles: layout.hiddenFiles,
+		pinnedContainer: layout.pinnedContainer,
+		expansionStates: layout.expansionStates,
+	})
+}
+
 function nodeReference(value: unknown): WorkspaceNodeReference | undefined {
 	if (!isJsonRecord(value) || !isScriptId(value.scriptId)) return undefined
 	if (value.kind === 'script') return { kind: 'script', scriptId: value.scriptId }

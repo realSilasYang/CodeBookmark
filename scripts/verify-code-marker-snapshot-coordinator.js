@@ -36,7 +36,6 @@ try {
       profileFor: () => currentProfile,
       warnFileTruncated: (filePath, limit) => events.push(`warning:truncated:${filePath}:${limit}`),
       warnFileCapacityLimited: filePath => events.push(`warning:capacity:${filePath}`),
-      warnWorkspaceDiscoveryTruncated: (scope, limit) => events.push(`warning:workspace:${scope}:${limit}`),
       invalidatePathIndex: () => events.push('index:invalidate'),
       saveBookmarks: paths => events.push(`save:${paths.join(',')}`),
       refreshDecorations: () => events.push('refresh'),
@@ -70,7 +69,19 @@ try {
   )
   assert.equal(synchronized.events.length, 1)
   assert.equal(synchronized.bookmarks.size, 1)
-  assert.equal(synchronized.coordinator.fileNodeHasCodeMarkers(synchronized.bookmarks.values[0]), true)
+  const synchronizedFileNode = synchronized.bookmarks.values[0]
+  assert.equal(synchronized.coordinator.fileNodeHasCodeMarkers(synchronizedFileNode, synchronized.bookmarks), true)
+
+  // 工作区布局可以把自动标记显示到其他文件节点或根级；是否属于某个脚本必须按
+  // ownerScriptId 在整棵树中判断，不能只检查原文件节点当前的视觉子树。
+  const visuallyMovedMarker = synchronizedFileNode.subs.values[0]
+  synchronizedFileNode.subs.delete(0)
+  visuallyMovedMarker.parent = undefined
+  synchronized.bookmarks.add(visuallyMovedMarker)
+  assert.equal(synchronized.coordinator.fileNodeHasCodeMarkers(synchronizedFileNode, synchronized.bookmarks), true)
+  synchronized.bookmarks.fastDelete(visuallyMovedMarker)
+  synchronizedFileNode.subs.add(visuallyMovedMarker)
+  visuallyMovedMarker.parent = synchronizedFileNode
 
   const removedAfterDirectiveBecameProse = synchronized.coordinator.synchronizeSnapshot(
     uri,
@@ -115,10 +126,6 @@ try {
   const beforeNoopPersist = synchronized.events.length
   synchronized.coordinator.persistChanges([], synchronized.port)
   assert.equal(synchronized.events.length, beforeNoopPersist)
-
-  synchronized.coordinator.warnWorkspaceDiscoveryTruncated('workspace:one', 2000, synchronized.port)
-  synchronized.coordinator.warnWorkspaceDiscoveryTruncated('workspace:one', 2000, synchronized.port)
-  assert.equal(synchronized.events.filter(event => event === 'warning:workspace:workspace:one:2000').length, 1)
 
   assert.equal(synchronized.coordinator.removeMarkers(uri, synchronized.port), true)
   assert.equal(synchronized.bookmarks.size, 0)

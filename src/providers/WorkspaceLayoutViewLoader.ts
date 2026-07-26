@@ -10,10 +10,12 @@ import {
 } from '../models/BookmarkOwnership'
 import {
 	decodeWorkspaceLayoutPersistence,
+	workspaceLayoutStructuralIdentity,
 	type WorkspaceLayout,
 } from '../models/WorkspaceLayout'
 import { bookmarkPathKey } from '../util/BookmarkPath'
 import type { PreparedBookmarkView } from './BookmarkViewPreparation'
+import { isFileNotFoundError } from '../util/FileSystem'
 
 interface WorkspaceLayoutSnapshot {
 	layout: WorkspaceLayout | null
@@ -54,15 +56,6 @@ export async function prepareBookmarkViewWithWorkspaceLayout(
 	}
 }
 
-function structuralValue(layout: WorkspaceLayout): string {
-	return JSON.stringify({
-		entries: layout.entries,
-		hiddenFiles: layout.hiddenFiles,
-		pinnedContainer: layout.pinnedContainer,
-		expansionStates: layout.expansionStates,
-	})
-}
-
 function reorderLegacyRoots(bookmarks: BookmarkSet, order: readonly string[]): void {
 	if (order.length === 0) return
 	const indices = new Map(order.map((value, index) => [bookmarkPathKey(value), index]))
@@ -92,7 +85,7 @@ async function readWorkspaceLayoutForView(
 		const decoded = decodeWorkspaceLayoutPersistence(JSON.parse(await port.readFile(filePath)))
 		if (signal?.aborted) return { layout: null, needsPersist: false, writeBlocked: false }
 		const normalized = applyWorkspaceLayout(bookmarks, decoded.layout)
-		const changed = structuralValue(normalized) !== structuralValue(decoded.layout)
+		const changed = workspaceLayoutStructuralIdentity(normalized) !== workspaceLayoutStructuralIdentity(decoded.layout)
 		if (!changed) normalized.updatedAt = decoded.layout.updatedAt
 		return {
 			layout: normalized,
@@ -102,7 +95,7 @@ async function readWorkspaceLayoutForView(
 			writeBlocked: false,
 		}
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+		if (!isFileNotFoundError(error)) {
 			port.reportReadFailure(error)
 			return {
 				layout: captureWorkspaceLayout(bookmarks),

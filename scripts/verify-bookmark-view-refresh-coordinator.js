@@ -5,32 +5,7 @@
 const assert = require('node:assert/strict')
 
 const { BookmarkViewRefreshCoordinator } = require('../out/providers/BookmarkViewRefreshCoordinator')
-
-class FakeScheduling {
-  constructor(events) {
-    this.events = events
-    this.timers = []
-  }
-
-  setTimer(callback, delay) {
-    const timer = { callback, delay }
-    this.timers.push(timer)
-    this.events.push(`timer:${delay}`)
-    return timer
-  }
-
-  clearTimer(timer) {
-    const index = this.timers.indexOf(timer)
-    if (index >= 0) this.timers.splice(index, 1)
-    this.events.push('timer:clear')
-  }
-
-  runNext() {
-    const timer = this.timers.shift()
-    assert.ok(timer, 'Expected a scheduled refresh')
-    timer.callback()
-  }
-}
+const { ManualScheduler } = require('./test-support/manual-scheduler')
 
 function fileEditor(filePath) {
   return { document: { uri: { scheme: 'file', fsPath: filePath } } }
@@ -38,7 +13,7 @@ function fileEditor(filePath) {
 
 function createHarness(options = {}) {
   const events = []
-  const scheduling = new FakeScheduling(events)
+  const scheduling = new ManualScheduler(events, { clearEvent: () => 'timer:clear' })
   const coordinator = new BookmarkViewRefreshCoordinator(scheduling)
   let generation = options.generation ?? 0
   let revealGeneration = 0

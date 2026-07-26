@@ -2,7 +2,6 @@
  * 把脚本配置、顺序、迁移记录和受管元数据从旧存储根目录合并到新目录。
  * 每次覆盖都留下可恢复快照；迁移完成后只删除 CodeBookmark 明确拥有的旧文件。
  */
-import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import { localize } from '../i18n/Localization'
@@ -15,8 +14,9 @@ import {
 import { atomicCopyFile, atomicWriteFile } from '../util/AtomicFile'
 import { mergeSerializedBookmarks } from '../models/SerializedBookmarkTree'
 import { workspaceOrderPersistence } from '../models/WorkspaceOrder'
+import { decodePortableExchangeRecord } from '../portable/PortableExchangeStore'
 import {
-	persistLegacyJsonMigration,
+	persistLegacyJsonMigrationAtomically,
 	removeLegacyJsonMigrationBackup,
 } from '../util/PersistenceMigration'
 import {
@@ -26,9 +26,11 @@ import {
 	PersistenceFormats,
 	type PersistenceHeader,
 } from '../util/PersistenceSchema'
+import { pathExists } from '../util/FileSystem'
+import { sha256Hex } from '../util/Sha256'
 
 const TRANSFER_STATE_FILE = '.storage-transfer.json'
-const OWNED_STORAGE_DIRECTORIES = ['scripts', 'scopes', '.script-relocations'] as const
+const OWNED_STORAGE_DIRECTORIES = ['scripts', 'scopes', 'exchanges', '.script-relocations'] as const
 
 interface StorageRootTransferResult {
 	copiedFiles: number
@@ -42,15 +44,6 @@ interface StorageRootTransferJournal extends StorageRootTransferResult, Persiste
 	target: string
 	startedAt: string
 	completedAt?: string
-}
-
-async function exists(target: string): Promise<boolean> {
-	try {
-		await fs.promises.access(target)
-		return true
-	} catch {
-		return false
-	}
 }
 
 async function canonicalAbsolute(value: string): Promise<string> {
@@ -82,6 +75,15 @@ function scriptIdentity(value: unknown): { id: string, lastSeenAt: number } | un
 }
 
 function mergeJson(source: unknown, target: unknown): unknown | undefined {
+	try {
+		const sourceExchange = decodePortableExchangeRecord(source)
+		const targetExchange = decodePortableExchangeRecord(target)
+		if (sourceExchange.exchangeId !== targetExchange.exchangeId
+			|| sourceExchange.scopeKey !== targetExchange.scopeKey) return undefined
+		return sourceExchange.updatedAt > targetExchange.updatedAt ? sourceExchange : targetExchange
+	} catch {
+		// 普通脚本配置和工作区顺序并不是交换记录，继续按各自格式尝试合并。
+	}
 	try {
 		const sourceOrder = decodePersistenceList(source, PersistenceFormats.workspaceOrder, 'order').value.order
 		const targetOrder = decodePersistenceList(target, PersistenceFormats.workspaceOrder, 'order').value.order
@@ -120,23 +122,23 @@ function mergeJson(source: unknown, target: unknown): unknown | undefined {
 
 async function backupOnce(target: string): Promise<void> {
 	const backup = `${target}.transfer-base`
-	if (!await exists(backup)) await fs.promises.copyFile(target, backup, fs.constants.COPYFILE_EXCL)
+	if (!await pathExists(backup)) await fs.promises.copyFile(target, backup, fs.constants.COPYFILE_EXCL)
 }
 
 async function preserveTransferSnapshot(target: string, content: Buffer): Promise<void> {
 	await backupOnce(target)
-	const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 12)
+	const hash = sha256Hex(content).slice(0, 12)
 	const backup = `${target}.transfer-copy_${hash}`
-	if (!await exists(backup)) await atomicWriteFile(backup, content)
+	if (!await pathExists(backup)) await atomicWriteFile(backup, content)
 }
 
 async function conflictTarget(target: string, sourceContent: Buffer): Promise<string> {
 	const extension = path.extname(target)
 	const stem = extension ? target.slice(0, -extension.length) : target
-	const hash = crypto.createHash('sha256').update(sourceContent).digest('hex').slice(0, 12)
+	const hash = sha256Hex(sourceContent).slice(0, 12)
 	let candidate = `${stem}.transfer-conflict_${hash}${extension}`
 	let suffix = 1
-	while (await exists(candidate)) {
+	while (await pathExists(candidate)) {
 		const current = await fs.promises.readFile(candidate)
 		if (current.equals(sourceContent)) return candidate
 		candidate = `${stem}.transfer-conflict_${hash}_${suffix++}${extension}`
@@ -157,7 +159,7 @@ async function listFiles(root: string): Promise<string[]> {
 	}
 	for (const directory of OWNED_STORAGE_DIRECTORIES) {
 		const absolute = path.join(root, directory)
-		if (await exists(absolute)) await visit(absolute)
+		if (await pathExists(absolute)) await visit(absolute)
 	}
 	return files
 }
@@ -219,10 +221,7 @@ async function readJournal(targetRoot: string): Promise<StorageRootTransferJourn
 			conflictFiles,
 		}
 		if (decoded.migrated) {
-			await persistLegacyJsonMigration(journalPath, journal, async (target, migrated) => {
-				await atomicWriteFile(target, JSON.stringify(migrated, null, 2))
-				return true
-			})
+			await persistLegacyJsonMigrationAtomically(journalPath, journal)
 		}
 		return journal
 	} catch {
@@ -270,7 +269,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 	const startedAt = resumable ? previousJournal.startedAt : new Date().toISOString()
 	const checkpoint = () => writeJournal(target, { status: 'in_progress', source, target, startedAt, ...result })
 	await checkpoint()
-	if (!await exists(source)) {
+	if (!await pathExists(source)) {
 		await completeJournal(target, { status: 'complete', source, target, startedAt, completedAt: new Date().toISOString(), ...result })
 		return result
 	}
@@ -278,7 +277,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 	for (const sourceFile of sourceFiles) {
 		const relative = path.relative(source, sourceFile)
 		const targetFile = path.join(target, relative)
-		if (!await exists(targetFile)) {
+		if (!await pathExists(targetFile)) {
 			await atomicCopyFile(sourceFile, targetFile)
 			result.copiedFiles++
 			await checkpoint()
@@ -301,7 +300,11 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		}
 		if (merged !== undefined) {
 			const mergedContent = JSON.stringify(merged, null, 2)
-			if (targetContent.toString('utf8') === mergedContent) continue
+			try {
+				if (JSON.stringify(JSON.parse(targetContent.toString('utf8'))) === JSON.stringify(merged)) continue
+			} catch {
+				if (targetContent.toString('utf8') === mergedContent) continue
+			}
 			// 每一次覆盖都对应不同的目标现状，所以必须当场保存快照。
 			// 复用上一次迁移的备份会让本轮失败时只能恢复到更早、已经过期的数据。
 			await preserveTransferSnapshot(targetFile, targetContent)
@@ -312,7 +315,7 @@ export async function transferStorageRoot(sourceRoot: string, targetRoot: string
 		}
 
 		const preservedTarget = await conflictTarget(targetFile, sourceContent)
-		if (!await exists(preservedTarget)) await atomicWriteFile(preservedTarget, sourceContent)
+		if (!await pathExists(preservedTarget)) await atomicWriteFile(preservedTarget, sourceContent)
 		result.conflictFiles++
 		await checkpoint()
 	}

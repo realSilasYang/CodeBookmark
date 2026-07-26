@@ -75,6 +75,7 @@ const requiredPaths = [
 	'scripts/i18n/catalogs/manifest.zh-cn.json',
 	'scripts/i18n/catalogs/manifest.en.json',
   'scripts/release/build-release-notes.js',
+  'scripts/release/package-vsix.js',
   'scripts/release/write-sbom.js',
   'scripts/release/write-sha256sums.js',
   'tests/integration/fixture/sample.ts',

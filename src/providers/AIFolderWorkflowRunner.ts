@@ -9,7 +9,6 @@ import type { Bookmark } from '../models/Bookmark'
 import { AIService, isAIAuthenticationError, isAIRateLimitError } from '../util/AIService'
 import { Helper } from '../util/Helper'
 import { applyAIOptimizationChanges, resolveAIOptimizationChanges } from '../util/AIOptimizationMutations'
-import { normalizedAbsolutePath } from '../util/AbsolutePath'
 import { listAISourceFilesInFolder } from '../util/AISourceFolderScanner'
 import { assertAISourceSnapshot, readAISourceSnapshot, type AIFileSnapshot } from '../util/AISourceSnapshot'
 import { formatBookmarkLevelSummary, summarizeBookmarks, summarizeBookmarkTrees } from '../util/BookmarkStatistics'
@@ -17,6 +16,9 @@ import { logger } from '../util/Logger'
 import { buildAIBookmarks, expandGeneratedBookmarkTree } from './AIBookmarkBuilder'
 import type { AIGenerationMode, AISingleFileWorkflowPort } from './AISingleFileWorkflowRunner'
 import { isAIStorageScopeChangedError } from './AIWorkflowGuard'
+import { errorMessage } from '../util/ErrorMessage'
+import { findOpenFileDocument } from '../util/VscodeDocument'
+import { ReplaceableDisposable } from '../util/ReplaceableDisposable'
 
 export interface AIFolderWorkflowPort extends Omit<AISingleFileWorkflowPort, 'documentLines'> {
 	currentStorageScope(): string | undefined
@@ -25,15 +27,6 @@ export interface AIFolderWorkflowPort extends Omit<AISingleFileWorkflowPort, 'do
 export interface AIFolderWorkflowTarget {
 	readonly directory: string
 	readonly storageScope: string
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
-}
-
-function openDocumentForPath(filePath: string): vscode.TextDocument | undefined {
-	return vscode.workspace.textDocuments.find(document => document.uri.scheme === 'file'
-		&& normalizedAbsolutePath(document.uri.fsPath) === normalizedAbsolutePath(filePath))
 }
 
 function shouldGenerateForFolderMode(mode: AIGenerationMode, bookmarkCount: number): boolean {
@@ -69,6 +62,7 @@ export async function runGenerateBookmarksForFolder(
 		vscode.window.showWarningMessage(localize("providers.AIFolderWorkflowRunner.anAiFolderTaskIsAlreadyRunningInThe"))
 		return
 	}
+	const statusMessage = new ReplaceableDisposable<vscode.Disposable>()
 	try {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
@@ -78,7 +72,6 @@ export async function runGenerateBookmarksForFolder(
 			let fileCount = 0
 			let failedFilesCount = 0
 			const changedPaths: string[] = []
-			let statusDisposable: vscode.Disposable | undefined
 			let hasSavedUndoState = false
 			let scopeChanged = false
 			let userStopped = false
@@ -106,7 +99,7 @@ export async function runGenerateBookmarksForFolder(
 
 				let sourceSnapshot: AIFileSnapshot
 				try {
-					sourceSnapshot = await readAISourceSnapshot(filePath, openDocumentForPath)
+					sourceSnapshot = await readAISourceSnapshot(filePath, findOpenFileDocument)
 				} catch (error) {
 					port.taskRegistry.finishFile(taskKey)
 					const message = errorMessage(error)
@@ -125,8 +118,7 @@ export async function runGenerateBookmarksForFolder(
 
 				try {
 					const aiBookmarks = await AIService.generateBookmarks(codeContent, filePath, (message: string) => {
-						if (statusDisposable) statusDisposable.dispose()
-						statusDisposable = vscode.window.setStatusBarMessage(`AI: ${message}`)
+						statusMessage.replace(vscode.window.setStatusBarMessage(`AI: ${message}`))
 					}, token)
 					consecutiveRequestFailures = 0
 					await assertAISourceSnapshot(filePath, sourceSnapshot)
@@ -217,9 +209,9 @@ export async function runGenerateBookmarksForFolder(
 				vscode.window.showInformationMessage(localize("providers.AIFolderWorkflowRunner.aiProcessingCompletedWithoutGeneratingNewBookmarks", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(generatedSummary), failMsg }))
 			}
 			if (scopeChanged) vscode.window.showInformationMessage(localize("providers.AIFolderWorkflowRunner.theBookmarkScopeChangedSoTheAiFolderTask", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(generatedSummary) }))
-			if (statusDisposable) statusDisposable.dispose()
 		})
 	} finally {
+		statusMessage.dispose()
 		port.taskRegistry.finishFolder(taskScope)
 	}
 }
@@ -252,6 +244,7 @@ export async function runOptimizeBookmarksForFolder(
 		vscode.window.showWarningMessage(localize("providers.AIFolderWorkflowRunner.anAiFolderTaskIsAlreadyRunningInThe"))
 		return
 	}
+	const statusMessage = new ReplaceableDisposable<vscode.Disposable>()
 	try {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
@@ -261,7 +254,6 @@ export async function runOptimizeBookmarksForFolder(
 			let fileCount = 0
 			let failedFilesCount = 0
 			const changedPaths: string[] = []
-			let statusDisposable: vscode.Disposable | undefined
 			let hasSavedUndoState = false
 			let scopeChanged = false
 			let userStopped = false
@@ -291,7 +283,7 @@ export async function runOptimizeBookmarksForFolder(
 
 				let sourceSnapshot: AIFileSnapshot
 				try {
-					sourceSnapshot = await readAISourceSnapshot(filePath, openDocumentForPath)
+					sourceSnapshot = await readAISourceSnapshot(filePath, findOpenFileDocument)
 				} catch (error) {
 					port.taskRegistry.finishFile(taskKey)
 					const message = errorMessage(error)
@@ -314,8 +306,7 @@ export async function runOptimizeBookmarksForFolder(
 						filePath,
 						existingBookmarks,
 						(message: string) => {
-							if (statusDisposable) statusDisposable.dispose()
-							statusDisposable = vscode.window.setStatusBarMessage(`AI: ${message}`)
+							statusMessage.replace(vscode.window.setStatusBarMessage(`AI: ${message}`))
 						},
 						token,
 					)
@@ -392,9 +383,9 @@ export async function runOptimizeBookmarksForFolder(
 				vscode.window.showInformationMessage(localize("providers.AIFolderWorkflowRunner.aiProcessingCompletedWithoutUpdatingAnyBookmarks", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(optimizedSummary), failMsg }))
 			}
 			if (scopeChanged) vscode.window.showInformationMessage(localize("providers.AIFolderWorkflowRunner.theBookmarkScopeChangedSoTheAiFolderTask", { formatBookmarkLevelSummary: formatBookmarkLevelSummary(optimizedSummary) }))
-			if (statusDisposable) statusDisposable.dispose()
 		})
 	} finally {
+		statusMessage.dispose()
 		port.taskRegistry.finishFolder(taskScope)
 	}
 }

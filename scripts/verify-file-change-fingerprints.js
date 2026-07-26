@@ -37,10 +37,22 @@ async function main() {
     fs.writeFileSync(path.join(folder, 'external.json'), '{"new":true}', 'utf8')
     assert.equal(await fileChangeFingerprints.hasExternalChange(folder, null), true)
 
-    fileChangeFingerprints.markDeleteIntent(file)
-    fs.unlinkSync(file)
-    fileChangeFingerprints.markDeleteComplete(file)
+		let deletionRan = false
+		await fileChangeFingerprints.trackDeletion(file, async () => {
+			deletionRan = true
+			fs.unlinkSync(file)
+		})
+		assert.equal(deletionRan, true)
     assert.equal(await fileChangeFingerprints.hasExternalChange(folder, 'bookmarks.json'), false)
+
+		fs.writeFileSync(file, '{"restored":true}', 'utf8')
+		await fileChangeFingerprints.rememberDirectory(folder)
+		const failure = new Error('delete failed')
+		await assert.rejects(
+			fileChangeFingerprints.trackDeletion(file, async () => { throw failure }),
+			error => error === failure,
+		)
+		assert.equal(await fileChangeFingerprints.hasExternalChange(folder, 'bookmarks.json'), false)
   } finally {
     fs.rmSync(folder, { recursive: true, force: true })
   }

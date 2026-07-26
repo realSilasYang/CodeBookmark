@@ -21,6 +21,7 @@ intentional graphical changes are made.
 | Component | Version | Author | License | Source |
 | --- | --- | --- | --- | --- |
 | Fuse.js | 7.2.0 | Kiro Risk | Apache-2.0 | https://github.com/krisk/Fuse |
+| fflate | 0.8.3 | Arjun Barrett | MIT | https://github.com/101arrowz/fflate |
 
 The packaged `fxemoji` files are graphical works covered by the upstream
 CC-BY-4.0 visual-design license. The separate Apache-2.0 license for Firefox
@@ -42,6 +43,7 @@ License copies distributed with this project:
 - CC0 1.0（SVG Logos）: `licenses/CC0-1.0.txt`
 - Flat Color Icons MIT license: `licenses/Flat-Color-Icons-MIT.txt`
 - Fluent Emoji MIT license: `licenses/Fluent-Emoji-MIT.txt`
+- fflate MIT license: `licenses/fflate-MIT.txt`
 - VSCode Icons MIT license: `licenses/VSCode-Icons-MIT.txt`
 
 Names and logos can be trademarks of their respective owners. Their inclusion

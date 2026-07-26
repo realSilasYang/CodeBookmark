@@ -14,6 +14,8 @@ import {
 } from './AIRequestPolicy'
 import { aiErrorPreview } from './AIResponseCodec'
 import { isJsonRecord } from './JsonRecord'
+import { formatBinaryByteSize } from './ByteSize'
+import { errorMessage } from './ErrorMessage'
 
 interface AIHttpRequest {
 	url: URL
@@ -56,11 +58,6 @@ function serviceErrorCode(responseBody: string): string | undefined {
 	}
 }
 
-function formatByteSize(bytes: number): string {
-	if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MiB`
-	return `${Math.ceil(bytes / 1024)} KiB`
-}
-
 function safeRequestUrl(url: URL): string {
 	return `${url.origin}${url.pathname}`
 }
@@ -68,7 +65,7 @@ function safeRequestUrl(url: URL): string {
 export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 	const payloadBytes = Buffer.byteLength(request.payload)
 	if (payloadBytes > AI_REQUEST_MAX_BYTES) {
-		throw new Error(localize("util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit", { formatByteSize: formatByteSize(payloadBytes), formatByteSize2: formatByteSize(AI_REQUEST_MAX_BYTES) }))
+		throw new Error(localize("util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit", { formatByteSize: formatBinaryByteSize(payloadBytes), formatByteSize2: formatBinaryByteSize(AI_REQUEST_MAX_BYTES) }))
 	}
 
 	const timeoutMs = request.timeoutS * 1000
@@ -104,7 +101,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 				response.on('aborted', () => finish(reject, new Error(localize("util.AIHttpTransport.theAiResponseWasInterruptedBeforeItWasFully"))))
 				const declaredLength = Number(response.headers['content-length'])
 				if (Number.isFinite(declaredLength) && declaredLength > AI_RESPONSE_MAX_BYTES) {
-					const error = new Error(localize("util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe", { formatByteSize: formatByteSize(declaredLength), formatByteSize2: formatByteSize(AI_RESPONSE_MAX_BYTES) }))
+					const error = new Error(localize("util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe", { formatByteSize: formatBinaryByteSize(declaredLength), formatByteSize2: formatBinaryByteSize(AI_RESPONSE_MAX_BYTES) }))
 					finish(reject, error)
 					response.destroy(error)
 					return
@@ -112,7 +109,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 
 				response.on('data', (chunk: Buffer) => {
 					if (receivedBytes + chunk.length > AI_RESPONSE_MAX_BYTES) {
-						const error = new Error(localize("util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit", { formatByteSize: formatByteSize(AI_RESPONSE_MAX_BYTES) }))
+						const error = new Error(localize("util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit", { formatByteSize: formatBinaryByteSize(AI_RESPONSE_MAX_BYTES) }))
 						finish(reject, error)
 						response.destroy(error)
 						return
@@ -132,7 +129,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 							{ title: localize("util.AIHttpTransport.cancel"), action: 'cancel' as const },
 						]
 						const approval = vscode.window.showWarningMessage(
-							localize("util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold", { formatByteSize: formatByteSize(receivedBytes), formatByteSize2: formatByteSize(AI_RESPONSE_WARNING_BYTES) }),
+							localize("util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold", { formatByteSize: formatBinaryByteSize(receivedBytes), formatByteSize2: formatBinaryByteSize(AI_RESPONSE_WARNING_BYTES) }),
 							{ modal: true },
 							...actions,
 						).then(choice => choice?.action === 'continue')
@@ -201,7 +198,7 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 			clientRequest.write(request.payload)
 			clientRequest.end()
 		} catch (error) {
-			finish(reject, new Error(localize("util.AIHttpTransport.failedToConstructTheRequest", { errorMessage: error instanceof Error ? error.message : String(error) })))
+			finish(reject, new Error(localize("util.AIHttpTransport.failedToConstructTheRequest", { errorMessage: errorMessage(error) })))
 		}
 	})
 }

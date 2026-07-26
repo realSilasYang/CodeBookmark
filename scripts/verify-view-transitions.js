@@ -65,7 +65,7 @@ assert.match(committer, /port\.setBookmarks\(prepared\.bookmarks\)/)
 assert.match(committer, /port\.rebuildFileNodeCache\(prepared\.bookmarks\.values\)/)
 assert.match(committer, /port\.invalidatePathIndex\(\)/)
 
-const publish = section('private async publishCommittedViewTransition(', 'async importBookmarkConfiguration(')
+const publish = section('private async publishCommittedViewTransition(', 'async importPortablePackage(')
 assert.match(publish, /publishViewTransition\(transition, generation/)
 assert.doesNotMatch(publish, /planViewTransition\(/)
 assert.match(publisher, /planViewTransition\(/)

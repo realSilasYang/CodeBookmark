@@ -10,6 +10,7 @@ import type {
 	BookmarkConfigurationEntry,
 } from '../repository/BookmarkConfigurationCatalog'
 import { logger } from '../util/Logger'
+import { errorMessage } from '../util/ErrorMessage'
 
 interface BookmarkConfigurationManagerSnapshot {
 	storageRoot: string
@@ -95,7 +96,7 @@ export class BookmarkConfigurationManagerWebview {
 			}
 		} catch (error) {
 			logger.error(localize("providers.BookmarkConfigurationManagerWebview.failedToProcessABookmarkConfigurationManagerMessage", { error }))
-			void vscode.window.showErrorMessage(localize("providers.BookmarkConfigurationManagerWebview.bookmarkConfigurationManagerFailed", { errorMessage: error instanceof Error ? error.message : String(error) }))
+			void vscode.window.showErrorMessage(localize("providers.BookmarkConfigurationManagerWebview.bookmarkConfigurationManagerFailed", { errorMessage: errorMessage(error) }))
 			this.post({ type: 'operationComplete' })
 		}
 	}
@@ -148,7 +149,7 @@ export class BookmarkConfigurationManagerWebview {
 			logger.error(localize("providers.BookmarkConfigurationManagerWebview.failedToReadTheBookmarkConfigurationFolder", { error }))
 			this.post({
 				type: 'loadError',
-				message: error instanceof Error ? error.message : String(error),
+				message: errorMessage(error),
 			})
 		}
 	}
@@ -193,8 +194,8 @@ export class BookmarkConfigurationManagerWebview {
 				localize("providers.BookmarkConfigurationManagerWebview.allStatuses"), localize("providers.BookmarkConfigurationManagerWebview.primaryConfigurations"),
 				localize("providers.BookmarkConfigurationManagerWebview.bound"), localize("providers.BookmarkConfigurationManagerWebview.emptyConfigurations"),
 				localize("providers.BookmarkConfigurationManagerWebview.scriptMissing"), localize("providers.BookmarkConfigurationManagerWebview.currentWorkspaceData"),
-				localize("providers.BookmarkConfigurationManagerWebview.backupsAndConflicts"), localize("providers.BookmarkConfigurationManagerWebview.storageTransferJournals"),
-				localize("providers.BookmarkConfigurationManagerWebview.temporaryArtifacts"), localize("providers.BookmarkConfigurationManagerWebview.unparseable"),
+				localize("providers.BookmarkConfigurationManagerWebview.backupsAndConflicts"), localize('providers.BookmarkConfigurationManagerWebview.portableExchangeRecords'),
+				localize("providers.BookmarkConfigurationManagerWebview.storageTransferJournals"), localize("providers.BookmarkConfigurationManagerWebview.temporaryArtifacts"), localize("providers.BookmarkConfigurationManagerWebview.unparseable"),
 			],
 			sortAria: localize("providers.BookmarkConfigurationManagerWebview.sortConfigurationFiles"),
 			sorts: [
@@ -219,6 +220,7 @@ export class BookmarkConfigurationManagerWebview {
 				primary: localize("providers.BookmarkConfigurationManagerWebview.primaryConfiguration"), backup: localize("providers.BookmarkConfigurationManagerWebview.transferBackup"),
 				conflict: localize("providers.BookmarkConfigurationManagerWebview.conflictCopy"), superseded: localize("providers.BookmarkConfigurationManagerWebview.superseded"),
 				workspaceOrder: localize("providers.BookmarkConfigurationManagerWebview.workspaceOrder"), workspaceLayout: localize("providers.BookmarkConfigurationManagerWebview.workspaceLayout"), transferJournal: localize("providers.BookmarkConfigurationManagerWebview.storageTransferJournal"),
+				portableExchange: localize('providers.BookmarkConfigurationManagerWebview.portableExchangeRecord'),
 				batchRenameTemporary: localize("providers.BookmarkConfigurationManagerWebview.batchRenameTemporaryFile"),
 				unknown: localize("providers.BookmarkConfigurationManagerWebview.otherFile"),
 			},
@@ -243,6 +245,7 @@ export class BookmarkConfigurationManagerWebview {
 			deleteWorkspaceDetails: localize("providers.BookmarkConfigurationManagerWebview.workspaceOrderRecordsAffectsFileOrderOnlyBookmarksAre"),
 			deleteLayoutDetails: localize("providers.BookmarkConfigurationManagerWebview.workspaceLayoutRecordsLocalScriptHierarchiesAreRestoredAfter"),
 			deleteTransferDetails: localize("providers.BookmarkConfigurationManagerWebview.storageTransferJournalsRemovesHistoryOnlyCurrentBookmarksAre"),
+			deleteExchangeDetails: localize('providers.BookmarkConfigurationManagerWebview.portableExchangeRecordsRemovalEffect'),
 			deleteTemporaryDetails: localize("providers.BookmarkConfigurationManagerWebview.batchRenameTemporaryArtifactsUnappliedLabelDraftsInThem"),
 			deleteWarning: localize("providers.BookmarkConfigurationManagerWebview.deletedBookmarkConfigurationsCannotBeRestoredWithBookmarkUndo"),
 			deleteSelectedCount: localize("providers.BookmarkConfigurationManagerWebview.deleteSelected2"),
@@ -251,6 +254,13 @@ export class BookmarkConfigurationManagerWebview {
 			pathHash: localize("providers.BookmarkConfigurationManagerWebview.pathHash"),
 			additionalRecords: localize("providers.BookmarkConfigurationManagerWebview.more"),
 			transferJournal: localize("providers.BookmarkConfigurationManagerWebview.storageTransferJournal"),
+			portableExchangeRecord: localize('providers.BookmarkConfigurationManagerWebview.portableExchangeRecord'),
+			exchangeIdentity: localize('providers.BookmarkConfigurationManagerWebview.exchangeIdentity'),
+			exchangeScope: localize('providers.BookmarkConfigurationManagerWebview.exchangeScope'),
+			exchangeRevision: localize('providers.BookmarkConfigurationManagerWebview.exchangeRevision'),
+			exchangeMappings: localize('providers.BookmarkConfigurationManagerWebview.exchangeMappings'),
+			exchangePurpose: localize('providers.BookmarkConfigurationManagerWebview.exchangePurpose'),
+			exchangeUpdated: localize('providers.BookmarkConfigurationManagerWebview.exchangeUpdated'),
 			batchRenameTemporary: localize("providers.BookmarkConfigurationManagerWebview.batchRenameTemporaryArtifact"),
 			temporaryDraftPurpose: localize("providers.BookmarkConfigurationManagerWebview.retainedAfterAnInterruptionOrAnEditorThatDid"),
 			source: localize("providers.BookmarkConfigurationManagerWebview.source"),
@@ -424,9 +434,10 @@ export class BookmarkConfigurationManagerWebview {
 				<button class="dropdown-option" id="filter-option-missing" type="button" role="option" data-value="missing" aria-selected="false">${text.filters[4]}</button>
 				<button class="dropdown-option" id="filter-option-workspace-data" type="button" role="option" data-value="workspaceData" aria-selected="false">${text.filters[5]}</button>
 				<button class="dropdown-option" id="filter-option-snapshot" type="button" role="option" data-value="snapshot" aria-selected="false">${text.filters[6]}</button>
-				<button class="dropdown-option" id="filter-option-transfer" type="button" role="option" data-value="transfer" aria-selected="false">${text.filters[7]}</button>
-				<button class="dropdown-option" id="filter-option-temporary" type="button" role="option" data-value="temporary" aria-selected="false">${text.filters[8]}</button>
-				<button class="dropdown-option" id="filter-option-invalid" type="button" role="option" data-value="invalid" aria-selected="false">${text.filters[9]}</button>
+				<button class="dropdown-option" id="filter-option-exchange" type="button" role="option" data-value="exchange" aria-selected="false">${text.filters[7]}</button>
+				<button class="dropdown-option" id="filter-option-transfer" type="button" role="option" data-value="transfer" aria-selected="false">${text.filters[8]}</button>
+				<button class="dropdown-option" id="filter-option-temporary" type="button" role="option" data-value="temporary" aria-selected="false">${text.filters[9]}</button>
+				<button class="dropdown-option" id="filter-option-invalid" type="button" role="option" data-value="invalid" aria-selected="false">${text.filters[10]}</button>
 			</div>
 		</div>
 		<div class="dropdown" id="sort" data-value="modified">
@@ -535,11 +546,13 @@ export class BookmarkConfigurationManagerWebview {
 			const workspaceOrders = entries.filter(entry => entry.kind === 'workspaceOrder');
 			const workspaceLayouts = entries.filter(entry => entry.kind === 'workspaceLayout');
 			const transferJournals = entries.filter(entry => entry.kind === 'transferJournal');
+			const portableExchanges = entries.filter(entry => entry.kind === 'portableExchange');
 			const temporaryArtifacts = entries.filter(entry => entry.kind === 'temporaryArtifact');
 			if (scripts.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteScriptDetails, { count: formatNumber(scripts.length), summary: aggregateLevelSummary(scripts) })));
 			if (workspaceOrders.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteWorkspaceDetails, { count: formatNumber(workspaceOrders.length) })));
 			if (workspaceLayouts.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteLayoutDetails, { count: formatNumber(workspaceLayouts.length) })));
 			if (transferJournals.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteTransferDetails, { count: formatNumber(transferJournals.length) })));
+			if (portableExchanges.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteExchangeDetails, { count: formatNumber(portableExchanges.length) })));
 			if (temporaryArtifacts.length) details.appendChild(create('li', 'modal-detail', formatText(text.deleteTemporaryDetails, { count: formatNumber(temporaryArtifacts.length) })));
 			const warning = byId('delete-dialog-warning');
 			warning.hidden = scripts.length === 0;
@@ -560,6 +573,7 @@ export class BookmarkConfigurationManagerWebview {
 			if (filter === 'primary') return entry.role === 'primary';
 			if (filter === 'snapshot') return ['backup', 'conflict', 'superseded'].includes(entry.role);
 			if (filter === 'workspaceData') return isCurrentWorkspaceData(entry);
+			if (filter === 'exchange') return entry.kind === 'portableExchange';
 			if (filter === 'transfer') return entry.kind === 'transferJournal';
 			if (filter !== 'all') return entry.health === filter;
 			return true;
@@ -570,7 +584,8 @@ export class BookmarkConfigurationManagerWebview {
 				if (!matchesFilter(entry)) return false;
 				if (!query) return true;
 				return [entry.storagePath, entry.fileName, entry.filePath, entry.scriptPath, entry.workspaceName,
-					entry.workspacePathHash, entry.transferSource, entry.transferTarget, ...(entry.orderedPaths || []), ...(entry.labelPreview || [])]
+					entry.workspacePathHash, entry.transferSource, entry.transferTarget, entry.exchangeId, entry.exchangeScope,
+					entry.exchangeRevisionId, ...(entry.orderedPaths || []), ...(entry.labelPreview || [])]
 					.filter(Boolean).some(value => String(value).toLocaleLowerCase(locale).includes(query));
 			});
 			const sort = byId('sort').dataset.value;
@@ -627,6 +642,13 @@ export class BookmarkConfigurationManagerWebview {
 			appendDetailedValue(cell, 'secondary-text', formatText(text.target, { value: entry.transferTarget || text.unknown }));
 			appendDetailedValue(cell, 'secondary-text', entry.storagePath);
 		}
+		function appendExchangeDetails(cell, entry) {
+			appendDetailedValue(cell, 'primary-text', text.portableExchangeRecord);
+			appendDetailedValue(cell, 'secondary-text', formatText(text.exchangeIdentity, { value: entry.exchangeId || text.unknown }));
+			appendDetailedValue(cell, 'secondary-text', formatText(text.exchangeScope, { value: entry.exchangeScope || text.unknown }));
+			appendDetailedValue(cell, 'secondary-text', formatText(text.exchangeRevision, { value: entry.exchangeRevisionId || text.unknown }));
+			appendDetailedValue(cell, 'secondary-text', entry.storagePath);
+		}
 		function appendTemporaryArtifactDetails(cell, entry) {
 			appendDetailedValue(cell, 'primary-text', text.batchRenameTemporary);
 			appendDetailedValue(cell, 'secondary-text', formatText(text.workspace, { value: entry.workspaceName || text.unknown }));
@@ -654,6 +676,13 @@ export class BookmarkConfigurationManagerWebview {
 				appendDetailedValue(cell, 'levels', formatText(text.transferCounts, { copied: formatNumber(entry.transferCopiedFiles), merged: formatNumber(entry.transferMergedFiles), conflicts: formatNumber(entry.transferConflictFiles) }));
 				return;
 			}
+			if (entry.kind === 'portableExchange') {
+				appendDetailedValue(cell, 'count', formatText(text.exchangeMappings, {
+					scripts: formatNumber(entry.exchangeScriptMappingCount), bookmarks: formatNumber(entry.exchangeBookmarkMappingCount), bases: formatNumber(entry.exchangeBaseScriptCount),
+				}));
+				appendDetailedValue(cell, 'levels', text.exchangePurpose);
+				return;
+			}
 			if (entry.kind === 'temporaryArtifact') {
 				appendDetailedValue(cell, 'count', text.batchRenameTemporary);
 				appendDetailedValue(cell, 'levels', text.temporaryDraftPurpose);
@@ -675,6 +704,7 @@ export class BookmarkConfigurationManagerWebview {
 			selectCell.appendChild(checkbox); row.appendChild(selectCell);
 			const scriptCell = document.createElement('td');
 			if (entry.kind === 'workspaceOrder' || entry.kind === 'workspaceLayout') appendWorkspaceDetails(scriptCell, entry);
+			else if (entry.kind === 'portableExchange') appendExchangeDetails(scriptCell, entry);
 			else if (entry.kind === 'transferJournal') appendTransferDetails(scriptCell, entry);
 			else if (entry.kind === 'temporaryArtifact') appendTemporaryArtifactDetails(scriptCell, entry);
 			else appendScriptDetails(scriptCell, entry);
@@ -693,7 +723,8 @@ export class BookmarkConfigurationManagerWebview {
 			else if (entry.kind === 'transferJournal') {
 				appendDetailedValue(infoCell, 'time-line', formatText(text.transferStarted, { date: formatDate(entry.transferStartedAt) }));
 				appendDetailedValue(infoCell, 'time-line', formatText(text.transferCompleted, { date: formatDate(entry.transferCompletedAt) }));
-			} else appendDetailedValue(infoCell, 'time-line', formatText(text.recordType, { type: roleLabels[entry.role] || entry.role }));
+			} else if (entry.kind === 'portableExchange') appendDetailedValue(infoCell, 'time-line', formatText(text.exchangeUpdated, { date: formatDate(entry.exchangeUpdatedAt) }));
+			else appendDetailedValue(infoCell, 'time-line', formatText(text.recordType, { type: roleLabels[entry.role] || entry.role }));
 			appendDetailedValue(infoCell, 'time-line', formatText(text.fileModified, { date: formatDate(entry.modifiedAt) }));
 			appendDetailedValue(infoCell, 'time-line', formatText(text.size, { size: formatSize(entry.sizeBytes) }));
 			row.appendChild(infoCell);

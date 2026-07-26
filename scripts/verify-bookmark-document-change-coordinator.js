@@ -5,34 +5,8 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { BookmarkDocumentChangeCoordinator } = require('../out/providers/BookmarkDocumentChangeCoordinator')
-
-class FakeScheduling {
-  constructor(events) {
-    this.events = events
-    this.timers = []
-    this.clearedTimers = []
-  }
-
-  setTimer(callback, delay) {
-    const timer = { callback, delay }
-    this.timers.push(timer)
-    this.events.push(`timer:${delay}`)
-    return timer
-  }
-
-  clearTimer(timer) {
-    const index = this.timers.indexOf(timer)
-    if (index >= 0) this.timers.splice(index, 1)
-    this.clearedTimers.push(timer)
-    this.events.push(`timer:clear:${timer.delay}`)
-  }
-
-  runNext() {
-    const timer = this.timers.shift()
-    assert.ok(timer, 'Expected a document change timer')
-    timer.callback()
-  }
-}
+const { ManualScheduler } = require('./test-support/manual-scheduler')
+const { flushAsyncWork } = require('./test-support/async-work')
 
 function document(filePath, options = {}) {
   return {
@@ -44,7 +18,7 @@ function document(filePath, options = {}) {
 
 function createHarness(options = {}) {
   const events = []
-  const scheduling = new FakeScheduling(events)
+  const scheduling = new ManualScheduler(events)
   const coordinator = new BookmarkDocumentChangeCoordinator(scheduling, 300)
   let generation = 1
   let bookmarkState = { id: 'state-1' }
@@ -88,11 +62,6 @@ function createHarness(options = {}) {
     setMarkerChanged: value => { markerChanged = value },
     setRelocate: value => { relocate = value },
   }
-}
-
-async function flushAsyncWork() {
-  await new Promise(resolve => setImmediate(resolve))
-  await new Promise(resolve => setImmediate(resolve))
 }
 
 async function main() {

@@ -87,4 +87,4 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run package:vsix -- --out codebookmark-ci.vsix
+      - run: npm run package:vsix -- --out "${{ runner.temp }}/codebookmark-ci.vsix"

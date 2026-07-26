@@ -22,7 +22,7 @@ describe('release supply chain', () => {
     assert.equal(manifest.devDependencies['@vscode/vsce'], '3.9.2')
     assert.equal(lockfile.packages['node_modules/@vscode/vsce'].version, '3.9.2')
     assert.equal(manifest.scripts['package:list'], 'vsce ls --no-dependencies')
-    assert.equal(manifest.scripts['package:vsix'], 'vsce package --no-dependencies')
+    assert.equal(manifest.scripts['package:vsix'], 'node scripts/release/package-vsix.js')
   })
 
   it('pins every third-party action to a full commit SHA', () => {
@@ -36,10 +36,14 @@ describe('release supply chain', () => {
 
   it('requires main-history provenance and publishes verifiable artifacts', () => {
     const workflow = read('.github/workflows/release.yml')
+    const ci = read('.github/workflows/ci.yml')
+    assert.match(ci, /runner\.temp.*codebookmark-ci\.vsix/)
     assert.match(workflow, /git merge-base --is-ancestor \$tagCommit origin\/main/)
     assert.match(workflow, /actions\/attest-build-provenance@[0-9a-f]{40}/)
     assert.match(workflow, /actions\/attest-sbom@[0-9a-f]{40}/)
-    assert.match(workflow, /write-sha256sums\.js SHA256SUMS/)
-    assert.match(workflow, /\$vsix \$sbom SHA256SUMS/)
+    assert.match(workflow, /write-sha256sums\.js \$sums \$vsix \$sbom/)
+    assert.match(workflow, /\$vsix \$sbom \$sums/)
+    assert.match(workflow, /Join-Path \$env:RUNNER_TEMP "codebookmark-release"/)
+    assert.doesNotMatch(workflow, /\$vsix = "codebookmark-\$version\.vsix"/)
   })
 })

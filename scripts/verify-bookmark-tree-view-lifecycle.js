@@ -5,37 +5,11 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { BookmarkTreeViewLifecycle } = require('../out/providers/BookmarkTreeViewLifecycle')
-
-class FakeScheduling {
-  constructor(events) {
-    this.events = events
-    this.timers = []
-  }
-
-  setTimer(callback, delay) {
-    const timer = { callback, delay }
-    this.timers.push(timer)
-    this.events.push(`timer:${delay}`)
-    return timer
-  }
-
-  clearTimer(timer) {
-    const index = this.timers.indexOf(timer)
-    if (index >= 0) this.timers.splice(index, 1)
-    this.events.push(`timer:clear:${timer.delay}`)
-  }
-
-  runDelay(delay) {
-    const index = this.timers.findIndex(timer => timer.delay === delay)
-    assert.ok(index >= 0, `Expected a ${delay}ms timer`)
-    const [timer] = this.timers.splice(index, 1)
-    timer.callback()
-  }
-}
+const { ManualScheduler } = require('./test-support/manual-scheduler')
 
 function createHarness() {
   const events = []
-  const scheduling = new FakeScheduling(events)
+  const scheduling = new ManualScheduler(events)
   const lifecycle = new BookmarkTreeViewLifecycle(scheduling, 8000, 1500, 10, 50)
   const treeView = { id: 'tree' }
   const fileNode = { id: 'file' }

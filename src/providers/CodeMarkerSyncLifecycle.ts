@@ -3,13 +3,13 @@
  * 生命周期集中持有定时器和 Disposable，扩展停用或规则重载时可以完整取消旧任务。
  */
 import { isSameOrDescendantAbsolutePath, normalizedAbsolutePath } from '../util/AbsolutePath'
+import {
+	defaultTimerScheduling,
+	KeyedTimerStore,
+	type TimerScheduling,
+} from '../util/KeyedTimerStore'
 
 type CodeMarkerSyncTimer = ReturnType<typeof setTimeout>
-
-interface CodeMarkerSyncScheduling {
-	setTimer(callback: () => void, delay: number): CodeMarkerSyncTimer
-	clearTimer(timer: CodeMarkerSyncTimer): void
-}
 
 interface CodeMarkerSyncDisposable {
 	dispose(): void
@@ -42,20 +42,17 @@ export interface CodeMarkerSyncLifecyclePort<Uri, Disposable extends CodeMarkerS
 	reportWorkspaceScanFailure(error: unknown): void
 }
 
-const defaultScheduling: CodeMarkerSyncScheduling = {
-	setTimer: (callback, delay) => setTimeout(callback, delay),
-	clearTimer: timer => clearTimeout(timer),
-}
-
 export class CodeMarkerSyncLifecycle<Uri, Disposable extends CodeMarkerSyncDisposable> {
-	private readonly fileTimers = new Map<string, CodeMarkerSyncTimer>()
+	private readonly fileTimers: KeyedTimerStore<string, CodeMarkerSyncTimer>
 	private watcherDisposables: Disposable[] = []
 	private watcherSignature = ''
 	private workspaceScanTimer: CodeMarkerSyncTimer | undefined
 	private workspaceScanGeneration = 0
 	private lastWorkspaceScanScope: string | undefined
 
-	constructor(private readonly scheduling: CodeMarkerSyncScheduling = defaultScheduling) {}
+	constructor(private readonly scheduling: TimerScheduling<CodeMarkerSyncTimer> = defaultTimerScheduling) {
+		this.fileTimers = new KeyedTimerStore(scheduling)
+	}
 
 	scheduleFileSync(
 		uri: Uri,
@@ -67,10 +64,7 @@ export class CodeMarkerSyncLifecycle<Uri, Disposable extends CodeMarkerSyncDispo
 		if (!deleted && port.profilesInitialized() && !port.supportsFile(filePath)) return
 		const key = normalizedAbsolutePath(filePath)
 		const viewGeneration = port.currentViewGeneration()
-		const previous = this.fileTimers.get(key)
-		if (previous) this.scheduling.clearTimer(previous)
-		const timer = this.scheduling.setTimer(() => {
-			this.fileTimers.delete(key)
+		this.fileTimers.replace(key, () => {
 			void (async () => {
 				if (viewGeneration !== port.currentViewGeneration()) return
 				if (!port.isCurrentScope(uri)) return
@@ -81,15 +75,10 @@ export class CodeMarkerSyncLifecycle<Uri, Disposable extends CodeMarkerSyncDispo
 				await port.synchronizeUris([uri])
 			})().catch(error => port.reportFileSyncFailure(uri, error))
 		}, 250)
-		this.fileTimers.set(key, timer)
 	}
 
 	cancelPath(absolutePath: string): void {
-		for (const [key, timer] of this.fileTimers) {
-			if (!isSameOrDescendantAbsolutePath(key, absolutePath)) continue
-			this.scheduling.clearTimer(timer)
-			this.fileTimers.delete(key)
-		}
+		this.fileTimers.cancelWhere(key => isSameOrDescendantAbsolutePath(key, absolutePath))
 	}
 
 	setupFileWatchers(port: CodeMarkerSyncLifecyclePort<Uri, Disposable>): void {
@@ -157,7 +146,6 @@ export class CodeMarkerSyncLifecycle<Uri, Disposable extends CodeMarkerSyncDispo
 		if (this.workspaceScanTimer) this.scheduling.clearTimer(this.workspaceScanTimer)
 		this.workspaceScanTimer = undefined
 		this.workspaceScanGeneration++
-		for (const timer of this.fileTimers.values()) this.scheduling.clearTimer(timer)
 		this.fileTimers.clear()
 	}
 }

@@ -43,7 +43,9 @@ Die Identität kombiniert Skript-ID, relativen Pfad, Inhaltsmerkmale, Verschiebu
 
 ## 5. Import, Export und Verwaltung
 
-Importiert werden können ein Skript oder ein kompletter Konfigurationsordner. Exporte stehen als erneut importierbares JSON, hierarchischer Text, Markdown, HTML und CSV bereit. Der Stapelexport durchsucht den aktuellen Ordner rekursiv, verarbeitet nur Skripte mit Lesezeichen und erzeugt eine Datei je Quelle. Die Verwaltung zeigt Konfigurationen, aktuelles Layout, alte Ordnungsdaten, Migrationen, Konfliktkopien und temporäre Reste; Hover zeigt vollständige Werte, gelöscht werden nur freigegebene Typen. Leere Scopes verschwinden, sobald Undo／Redo sie nicht mehr benötigt.
+„Lesezeichen importieren／exportieren“ speichert das aktuelle Skript oder den Workspace als eine einzige übertragbare `.codebookmark`-Lesezeichenkonfiguration. Sie lässt sich in einen anderen lokalen Ordner oder auf Windows-, macOS- und Linux-Geräte importieren, dort bearbeiten und erneut weitergeben. Beschriftungen, Symbole, Hierarchie, Codeanker, Darstellung der Dateiknoten und das dateiübergreifende Layout bleiben erhalten; gerätespezifische absolute Pfade oder Dateisystemkennungen werden nicht gespeichert. Frühere JSON-Dateien und Konfigurationsordner werden nicht mehr importiert.
+
+Der Import erkennt Skript- und Workspace-Pakete automatisch und bindet nur ein eindeutig bestimmtes Ziel anhand von relativem Pfad, Quelltext-Prüfsumme oder Lesezeichenkontext. Mehrdeutige Treffer werden als Konflikt gemeldet; vorhandene Lesezeichen können angehängt oder überschrieben werden. Markdown, HTML, CSV und hierarchischer Text bleiben reine Leseformate. Die Verwaltung zeigt zusätzlich geräteübergreifende Austauschstände, Layouts, Migrationen, Konfliktkopien und temporäre Reste.
 
 ## 6. KI-Unterstützung
 
@@ -67,7 +69,7 @@ Alle Änderungen einschließlich Drag-and-drop, KI, Import und Stapelaktionen er
 
 `AIService` verarbeitet Adressen und Transport, Schemas prüfen nicht vertrauenswürdige Antworten, der Katalog autorisiert Symbole semantisch. Automarker benötigen grammar und Kommentarregeln. Webviews verwenden nonce, strikte CSP und strukturierte Nachrichten.
 
-Das Projekt verwendet Node.js 24. `npm run verify` führt Kompilierung, ESLint, Unit-, Vertrags- und Spezialprüfungen aus; `npm run test:integration` testet den installierten VS Code isoliert in 13 Sprachen samt englischem Fallback; `npm run check:release` ergänzt Audit und VSIX-Liste. Nur annotierte Tags aus `main` werden veröffentlicht. GitHub Actions nutzt kurzlebige OIDC-Anmeldedaten, gleicht den Marketplace-VSIX-Hash ab und erstellt eine Release mit VSIX, CycloneDX SBOM und `SHA256SUMS`. Siehe [Veröffentlichungsleitfaden](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
+Das Projekt verwendet Node.js 24. `npm run verify` führt Kompilierung, ESLint, Unit-, Vertrags- und alle entwicklungsgeeigneten Spezialprüfungen aus; `npm run verify:release` prüft die finalisierten Versions- und Veröffentlichungsunterlagen. `npm run test:integration` testet den installierten VS Code isoliert in 13 Sprachen samt englischem Fallback; `npm run check:release` verbindet alle Prüfungen mit Audit und VSIX-Liste. Nur annotierte Tags aus `main` werden veröffentlicht. GitHub Actions nutzt kurzlebige OIDC-Anmeldedaten, gleicht den Marketplace-VSIX-Hash ab und erstellt eine Release mit VSIX, CycloneDX SBOM und `SHA256SUMS`. Siehe [Veröffentlichungsleitfaden](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 
 # Star-Verlauf
 

@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -120,12 +120,17 @@
     "test:contract:compiled": "node --test --test-reporter=spec \"tests/contracts/*.test.js\"",
     "test:coverage": "npm run compile && node --test --experimental-test-coverage --test-coverage-include=out/models/BookmarkCodec.js --test-coverage-include=out/models/WorkspaceOrder.js --test-coverage-include=out/util/PersistenceMigration.js --test-coverage-include=out/util/PersistenceSchema.js --test-coverage-include=out/util/WorkspaceCapabilities.js --test-coverage-lines=90 --test-coverage-branches=75 --test-coverage-functions=85 --test-reporter=spec \"tests/unit/*.test.js\" \"tests/contracts/*.test.js\"",
     "verify": "npm run compile && npm run lint && npm run test:unit:compiled && npm run test:contract:compiled && node scripts/verify-all.js",
+    "verify:release": "node scripts/verify-all.js --release-only",
     "test:integration": "npm run compile && node scripts/integration/run-integration-tests.js",
+    "benchmark:markers": "npm run compile && node scripts/performance/run-code-marker-benchmark.js",
     "verify:icons": "node scripts/verify-icon-assets.js",
     "package:list": "vsce ls --no-dependencies",
-    "package:vsix": "vsce package --no-dependencies",
+    "package:vsix": "node scripts/release/package-vsix.js",
     "sbom": "node scripts/release/write-sbom.js",
-    "check:release": "npm run verify && npm run test:integration && npm audit --audit-level=low && npm run package:list"
+    "check:release": "npm run verify && npm run verify:release && npm run test:integration && npm audit --audit-level=low && npm run package:list"
+  },
+  "dependencies": {
+    "fflate": "0.8.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -139,7 +144,6 @@
     "typescript": "~6.0.0",
     "typescript-eslint": "^8.65.0"
   },
-  "dependencies": {},
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -288,10 +292,9 @@
         "category": "%codebookmark.common.commandCategory%"
       },
       {
-        "command": "codebookmark.importBookmarkConfig",
-        "title": "%codebookmark.contributes.commands.codebookmark.importBookmarkConfig.title%",
+        "command": "codebookmark.importPortablePackage",
+        "title": "%codebookmark.contributes.commands.codebookmark.importPortablePackage.title%",
         "icon": "$(file-symlink-file)",
-        "enablement": "!codebookmark.activeFileHasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
       {
@@ -433,8 +436,14 @@
         "category": "%codebookmark.common.commandCategory%"
       },
       {
-        "command": "codebookmark.exportSourceFiles",
-        "title": "%codebookmark.contributes.commands.codebookmark.exportSourceFiles.title%",
+        "command": "codebookmark.exportPortablePackage",
+        "title": "%codebookmark.contributes.commands.codebookmark.exportPortablePackage.title%",
+        "enablement": "bookmarks.var.bookmark.hasBookmark",
+        "category": "%codebookmark.common.commandCategory%"
+      },
+      {
+        "command": "codebookmark.batchExportPortablePackage",
+        "title": "%codebookmark.contributes.commands.codebookmark.batchExportPortablePackage.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
@@ -459,12 +468,6 @@
       {
         "command": "codebookmark.batchExportToText",
         "title": "%codebookmark.contributes.commands.codebookmark.batchExportToText.title%",
-        "enablement": "bookmarks.var.bookmark.hasBookmark",
-        "category": "%codebookmark.common.commandCategory%"
-      },
-      {
-        "command": "codebookmark.batchExportSourceFiles",
-        "title": "%codebookmark.contributes.commands.codebookmark.batchExportSourceFiles.title%",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
@@ -1206,7 +1209,7 @@
           "when": "false"
         },
         {
-          "command": "codebookmark.batchExportSourceFiles",
+          "command": "codebookmark.batchExportPortablePackage",
           "when": "false"
         }
       ],
@@ -1243,7 +1246,7 @@
           "group": "1_primary@1"
         },
         {
-          "submenu": "codebookmark.exportSubmenu",
+          "submenu": "codebookmark.exchangeSubmenu",
           "group": "1_primary@2"
         },
         {
@@ -1259,7 +1262,48 @@
           "group": "2_secondary@3"
         }
       ],
+      "codebookmark.exchangeSubmenu": [
+        {
+          "command": "codebookmark.importPortablePackage",
+          "group": "1_items@1"
+        },
+        {
+          "submenu": "codebookmark.exportSubmenu",
+          "group": "1_items@2",
+          "when": "workspaceFolderCount == 0 && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)"
+        },
+        {
+          "submenu": "codebookmark.exportCurrentScriptSubmenu",
+          "group": "1_items@2",
+          "when": "workspaceFolderCount > 0 && (codebookmark.activeFileAvailable && codebookmark.activeFileHasBookmark)"
+        },
+        {
+          "submenu": "codebookmark.exportCurrentFolderSubmenu",
+          "group": "1_items@3",
+          "when": "workspaceFolderCount > 0 && codebookmark.currentFolderHasBookmarkedScript"
+        }
+      ],
       "codebookmark.exportSubmenu": [
+        {
+          "command": "codebookmark.exportPortablePackage",
+          "group": "1_items@1"
+        },
+        {
+          "submenu": "codebookmark.exportOtherFormatsSubmenu",
+          "group": "1_items@2"
+        }
+      ],
+      "codebookmark.exportCurrentScriptSubmenu": [
+        {
+          "command": "codebookmark.exportPortablePackage",
+          "group": "1_items@1"
+        },
+        {
+          "submenu": "codebookmark.exportOtherFormatsSubmenu",
+          "group": "1_items@2"
+        }
+      ],
+      "codebookmark.exportOtherFormatsSubmenu": [
         {
           "command": "codebookmark.exportToMarkdown",
           "group": "1_formats@1"
@@ -1275,17 +1319,19 @@
         {
           "command": "codebookmark.exportToText",
           "group": "1_formats@4"
-        },
-        {
-          "command": "codebookmark.exportSourceFiles",
-          "group": "1_formats@5"
-        },
-        {
-          "submenu": "codebookmark.batchExportSubmenu",
-          "group": "2_batch@1"
         }
       ],
-      "codebookmark.batchExportSubmenu": [
+      "codebookmark.exportCurrentFolderSubmenu": [
+        {
+          "command": "codebookmark.batchExportPortablePackage",
+          "group": "1_items@1"
+        },
+        {
+          "submenu": "codebookmark.exportCurrentFolderOtherFormatsSubmenu",
+          "group": "1_items@2"
+        }
+      ],
+      "codebookmark.exportCurrentFolderOtherFormatsSubmenu": [
         {
           "command": "codebookmark.batchExportToMarkdown",
           "group": "1_items@1"
@@ -1301,10 +1347,6 @@
         {
           "command": "codebookmark.batchExportToText",
           "group": "1_items@4"
-        },
-        {
-          "command": "codebookmark.batchExportSourceFiles",
-          "group": "1_items@5"
         }
       ],
       "codebookmark.aiSubmenu": [
@@ -1461,13 +1503,29 @@
         "icon": "$(three-bars)"
       },
       {
-        "id": "codebookmark.exportSubmenu",
-        "label": "%codebookmark.contributes.submenus.codebookmark.exportSubmenu.label%",
-        "icon": "$(export)"
+        "id": "codebookmark.exchangeSubmenu",
+        "label": "%codebookmark.contributes.submenus.codebookmark.exchangeSubmenu.label%",
+        "icon": "$(arrow-swap)"
       },
       {
-        "id": "codebookmark.batchExportSubmenu",
-        "label": "%codebookmark.contributes.submenus.codebookmark.batchExportSubmenu.label%"
+        "id": "codebookmark.exportSubmenu",
+        "label": "%codebookmark.contributes.submenus.codebookmark.exportSubmenu.label%"
+      },
+      {
+        "id": "codebookmark.exportCurrentScriptSubmenu",
+        "label": "%codebookmark.contributes.submenus.codebookmark.exportCurrentScriptSubmenu.label%"
+      },
+      {
+        "id": "codebookmark.exportOtherFormatsSubmenu",
+        "label": "%codebookmark.contributes.submenus.codebookmark.exportOtherFormatsSubmenu.label%"
+      },
+      {
+        "id": "codebookmark.exportCurrentFolderSubmenu",
+        "label": "%codebookmark.contributes.submenus.codebookmark.exportCurrentFolderSubmenu.label%"
+      },
+      {
+        "id": "codebookmark.exportCurrentFolderOtherFormatsSubmenu",
+        "label": "%codebookmark.contributes.submenus.codebookmark.exportCurrentFolderOtherFormatsSubmenu.label%"
       },
       {
         "id": "codebookmark.aiSubmenu",

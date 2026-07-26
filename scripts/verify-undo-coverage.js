@@ -13,7 +13,7 @@ const manualBookmarkRunner = fs.readFileSync('src/providers/ManualBookmarkWorkfl
 const bookmarkEditingRunner = fs.readFileSync('src/providers/BookmarkEditingWorkflowRunner.ts', 'utf8')
 const bookmarkDeletionRunner = fs.readFileSync('src/providers/BookmarkDeletionWorkflowRunner.ts', 'utf8')
 const bookmarkTreeInteractionRunner = fs.readFileSync('src/providers/BookmarkTreeInteractionRunner.ts', 'utf8')
-const bookmarkImportRunner = fs.readFileSync('src/providers/BookmarkImportWorkflowRunner.ts', 'utf8')
+const bookmarkImportRunner = fs.readFileSync('src/providers/PortableImportWorkflowRunner.ts', 'utf8')
 const sourcePathChangeRunner = fs.readFileSync('src/providers/SourcePathChangeWorkflowRunner.ts', 'utf8')
 const bookmarkHistoryRunner = fs.readFileSync('src/providers/BookmarkHistoryWorkflowRunner.ts', 'utf8')
 const undoImplementation = provider + singleFileAIRunner + folderAIRunner + selectedBookmarksAIRunner
@@ -35,7 +35,7 @@ assert.match(provider, /private saveUndoState\(action: UndoAction\)/)
 // 撤销作用域要等新树和上下文一起提交后才能公布。若在视图仍处于准备阶段时抢先更新，
 // 命令标题会短暂引用旧文件夹的历史，用户便可能对错误的作用域执行撤销。
 assert.doesNotMatch(method('private commitPreparedBookmarkView(', 'private async publishCommittedViewTransition('), /undoManager\.setActiveScope\(/)
-assert.match(method('private async publishCommittedViewTransition(', 'async importBookmarkConfiguration('), /undoManager\.setActiveScope\(this\.currentStorageScope\)/)
+assert.match(method('private async publishCommittedViewTransition(', 'async importPortablePackage('), /undoManager\.setActiveScope\(this\.currentStorageScope\)/)
 assert.match(provider, /relocateUndoPath:[\s\S]*?undoManager\.relocatePath\(/)
 assert.match(sourcePathChangeRunner, /port\.relocateUndoPath\(/)
 assert.match(bookmarkHistoryRunner, /const affectedPaths = new Set\(\[\.\.\.previousPaths, \.\.\.port\.bookmarkSourcePaths\(\)\]\)/)
@@ -75,7 +75,7 @@ assert.equal(count(folderAIRunner, /let hasSavedUndoState = false/g), 2)
 const drop = sourceMethod(bookmarkTreeInteractionRunner, 'async function moveNodes(', 'export async function runBookmarkTreeDrop(')
 assert.match(drop, /commitUndoState\(captured, isFileReorder \? 'reorderFiles' : 'moveBookmarks'\)/)
 
-const importMethod = bookmarkImportRunner.slice(bookmarkImportRunner.indexOf('export async function runImportBookmarkConfiguration('))
+const importMethod = bookmarkImportRunner.slice(bookmarkImportRunner.indexOf('export async function runPortablePackageImport('))
 assert.match(importMethod, /const captured = port\.captureUndoState\(\)/)
 assert.match(importMethod, /port\.commitImportUndo\(captured\)/)
 

@@ -4,6 +4,7 @@
  */
 import * as vscode from 'vscode'
 import { localize } from '../i18n/Localization'
+import { errorMessage } from '../util/ErrorMessage'
 import type { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
 import { SortModeBookmark } from '../models/ViewMode'
@@ -35,10 +36,6 @@ export interface BookmarkTreeInteractionPort {
 	treeViewAvailable(): boolean
 	revealTreeItem(bookmark: Bookmark, options: BookmarkTreeRevealOptions): Thenable<void> | undefined
 	setExpandCollapseContext(expanded: boolean): Promise<void>
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
 }
 
 export function sortBookmarkTreeItems(items: Bookmark[]): Bookmark[] {

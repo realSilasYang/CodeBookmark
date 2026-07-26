@@ -24,6 +24,7 @@ import { decodeAIProtocolResponse, encodeAIProtocolRequest, type AIMessage } fro
 import { AIHttpStatusError, postAIJson } from './AIHttpTransport'
 import { parseAIJsonReply } from './AIResponseCodec'
 import { assertAIWorkspaceTrusted } from './WorkspaceCapabilityPolicy'
+import { formatBinaryByteSize } from './ByteSize'
 
 export type { AIBookmark } from './AIBookmarkSchema';
 export { AIHttpStatusError } from './AIHttpTransport'
@@ -69,11 +70,6 @@ function labelText(label: string | vscode.TreeItemLabel | undefined): string {
 	return typeof label === 'string' ? label : label?.label ?? ''
 }
 
-function formatByteSize(bytes: number): string {
-	if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MiB`
-	return `${Math.ceil(bytes / 1024)} KiB`
-}
-
 export class AIService {
 	private static approvedInsecureEndpoints = new Set<string>();
 
@@ -82,7 +78,7 @@ export class AIService {
 			throw new Error(localize("util.AIService.unableToDetermineTheAiSourceSize"))
 		}
 		if (bytes > AI_SOURCE_MAX_BYTES) {
-			throw new Error(localize("util.AIService.theScriptIsWhichExceedsTheAiProcessingLimit", { fileName: path.basename(filePath), formatByteSize: formatByteSize(bytes), formatByteSize2: formatByteSize(AI_SOURCE_MAX_BYTES) }))
+			throw new Error(localize("util.AIService.theScriptIsWhichExceedsTheAiProcessingLimit", { fileName: path.basename(filePath), formatByteSize: formatBinaryByteSize(bytes), formatByteSize2: formatBinaryByteSize(AI_SOURCE_MAX_BYTES) }))
 		}
 	}
 
@@ -95,7 +91,7 @@ export class AIService {
 			{ title: localize("util.AIService.cancel"), action: 'cancel' as const },
 		]
 		const choice = await vscode.window.showWarningMessage(
-			localize("util.AIService.theSourceOfIsAboveTheWarningThresholdContinuing", { fileName: path.basename(filePath), formatByteSize: formatByteSize(bytes), formatByteSize2: formatByteSize(AI_SOURCE_WARNING_BYTES) }),
+			localize("util.AIService.theSourceOfIsAboveTheWarningThresholdContinuing", { fileName: path.basename(filePath), formatByteSize: formatBinaryByteSize(bytes), formatByteSize2: formatBinaryByteSize(AI_SOURCE_WARNING_BYTES) }),
 			{ modal: true },
 			...actions,
 		)

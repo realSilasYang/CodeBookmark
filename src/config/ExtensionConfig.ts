@@ -8,6 +8,7 @@ import * as path from 'path';
 import { normalizeAIRequestTimeoutSeconds } from '../util/AIRequestPolicy';
 import { resolveStoragePath } from '../util/StoragePath';
 import { localize } from '../i18n/Localization';
+import { errorMessage } from '../util/ErrorMessage'
 export class ExtensionConfig {
 	private static validatedStoragePath: string | undefined
 	private static snapshot: {
@@ -130,7 +131,7 @@ export class ExtensionConfig {
 		try {
 			folder = ExtensionConfig.resolveStoragePath();
 		} catch (error) {
-			void vscode.window.showErrorMessage(localize("config.ExtensionConfig.theBookmarkStoragePathIsInvalid", { errorMessage: error instanceof Error ? error.message : String(error) }))
+			void vscode.window.showErrorMessage(localize("config.ExtensionConfig.theBookmarkStoragePathIsInvalid", { errorMessage: errorMessage(error) }))
 			return false
 		}
 		if (!path.isAbsolute(folder)) {

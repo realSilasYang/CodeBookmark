@@ -79,7 +79,7 @@ assert.doesNotMatch(
   /sticky tracking|代碼書籤|程式碼書籤|コードブックマーク|코드 북마크|Dấu trang|Marcadores|Signets|Закладки|Lesezeichen|Segnalibri/iu,
   'Multilingual discovery terms belong in keywords, not the visible description',
 )
-assert.deepEqual(manifest.dependencies, {})
+assert.deepEqual(manifest.dependencies, { fflate: '0.8.3' })
 assert.equal(lockfile.version, manifest.version)
 assert.equal(lockfile.packages[''].version, manifest.version)
 assert.deepEqual(manifest.dependencies, lockfile.packages[''].dependencies ?? {})
@@ -99,12 +99,14 @@ assert.deepEqual(manifest.files, [
   'docs/legal/licenses',
 ])
 assert.equal(manifest.scripts['package:list'], 'vsce ls --no-dependencies')
-assert.equal(manifest.scripts['package:vsix'], 'vsce package --no-dependencies')
+assert.equal(manifest.scripts['package:vsix'], 'node scripts/release/package-vsix.js')
 assert.equal(manifest.scripts.sbom, 'node scripts/release/write-sbom.js')
 assert.match(manifest.scripts['test:coverage'], /--test-coverage-lines=90/)
 assert.match(manifest.scripts['test:coverage'], /--test-coverage-branches=75/)
 assert.match(manifest.scripts['test:coverage'], /--test-coverage-functions=85/)
 assert.match(manifest.scripts['check:release'], /npm run verify/)
+assert.equal(manifest.scripts['verify:release'], 'node scripts/verify-all.js --release-only')
+assert.match(manifest.scripts['check:release'], /npm run verify:release/)
 assert.match(manifest.scripts['check:release'], /npm run test:integration/)
 assert.equal(manifest.scripts.bundle, 'node scripts/build/bundle-extension.js')
 assert.match(manifest.scripts.compile, /npm run bundle/)
@@ -150,6 +152,7 @@ const requiredLicenseFiles = [
   'CC0-1.0.txt',
   'Flat-Color-Icons-MIT.txt',
   'Fluent-Emoji-MIT.txt',
+  'fflate-MIT.txt',
   'VSCode-Icons-MIT.txt',
 ].map(file => path.join('docs', 'legal', 'licenses', file))
 for (const relativePath of [...requiredSourceDocuments, ...requiredLicenseFiles]) {
@@ -254,6 +257,7 @@ assert.match(license, /Copyright \(c\) 2026 阳熙来/)
 assert.match(readme, /\[发布指南\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.md\)/)
 assert.match(englishReadme, /\[release guide\]\(https:\/\/github\.com\/realSilasYang\/CodeBookmark\/blob\/main\/docs\/release\/RELEASING\.en\.md\)/i)
 assert.match(notices, /`fxemoji`[^\n]+CC-BY-4\.0/)
+assert.match(notices, /fflate[^\n]+0\.8\.3[^\n]+MIT/)
 for (const [documentName, content] of [...README_DOCUMENTS.map(documentPath => [documentPath, read(documentPath)]), ['CHANGELOG.md', changelog], ['docs/CHANGELOG.en.md', englishChangelog]]) {
   const markdownImages = [...content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)]
   const htmlImages = [...content.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
@@ -280,6 +284,7 @@ assert.match(ci, /CODEBOOKMARK_ALLOW_VSCODE_DOWNLOAD: 'true'/)
 assert.match(ci, /CODEBOOKMARK_VSCODE_TEST_VERSION: '1\.130\.0'/)
 assert.match(ci, /npm audit --audit-level=low/)
 assert.match(ci, /npm run package:vsix/)
+assert.match(ci, /runner\.temp.*codebookmark-ci\.vsix/)
 const dependabot = read(path.join('.github', 'dependabot.yml'))
 assert.match(dependabot, /package-ecosystem: npm[\s\S]*dependency-name: typescript[\s\S]*">=7\.0\.0 <8\.0\.0"/)
 const releaseWorkflow = read(path.join('.github', 'workflows', 'release.yml'))
@@ -342,7 +347,7 @@ assert.match(releaseWorkflow, /fetch-depth: 0/)
 assert.match(releaseWorkflow, /git cat-file -t \$env:GITHUB_REF_NAME/)
 assert.match(releaseWorkflow, /git merge-base --is-ancestor \$tagCommit origin\/main/)
 assert.match(releaseWorkflow, /npm run sbom -- \$sbom/)
-assert.match(releaseWorkflow, /write-sha256sums\.js SHA256SUMS/)
+assert.match(releaseWorkflow, /write-sha256sums\.js \$sums \$vsix \$sbom/)
 assert.match(releaseWorkflow, /actions\/attest-build-provenance@[0-9a-f]{40} # v3/)
 assert.match(releaseWorkflow, /actions\/attest-sbom@[0-9a-f]{40} # v3/)
 assert.match(releaseWorkflow, /scripts\/release\/build-release-notes\.js/)
@@ -352,8 +357,10 @@ assert.match(releaseWorkflow, /--notes-file/)
 assert.match(releaseWorkflow, /gh release edit/)
 assert.match(releaseWorkflow, /gh release create/)
 assert.match(releaseWorkflow, /gh release upload/)
-assert.match(releaseWorkflow, /\$vsix \$sbom SHA256SUMS --clobber/)
-assert.match(releaseWorkflow, /\$vsix \$sbom SHA256SUMS `/)
+assert.match(releaseWorkflow, /Join-Path \$env:RUNNER_TEMP "codebookmark-release"/)
+assert.match(releaseWorkflow, /\$vsix \$sbom \$sums --clobber/)
+assert.match(releaseWorkflow, /\$vsix \$sbom \$sums `/)
+assert.doesNotMatch(releaseWorkflow, /\$vsix = "codebookmark-\$version\.vsix"/)
 assert.doesNotMatch(releaseWorkflow, /--generate-notes/)
 assert.match(releaseWorkflow, /group: release/)
 const publishStep = releaseWorkflow.indexOf('Publish to VS Code Marketplace')

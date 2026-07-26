@@ -11,6 +11,7 @@ import { AIService } from '../util/AIService'
 import { currentLanguage, isUserCancelledError, localize } from '../i18n/Localization'
 import { readmeDocumentForLanguage } from '../i18n/ReadmeDocuments'
 import { ensureAIWorkspaceTrusted } from '../util/WorkspaceCapabilityPolicy'
+import { errorMessage } from '../util/ErrorMessage'
 
 export function bookmarkCommands(
 	context: vscode.ExtensionContext,
@@ -53,7 +54,7 @@ export function bookmarkCommands(
 			await provider.ensureEditorScope(editor)
 			await handler(editor)
 		} catch (error) {
-			vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiOperationFailed", { errorMessage: error instanceof Error ? error.message : String(error) }))
+			vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiOperationFailed", { errorMessage: errorMessage(error) }))
 		}
 	}
 
@@ -64,7 +65,7 @@ export function bookmarkCommands(
 			if (!ExtensionConfig.ensureGlobalStoragePathConfigured()) return
 			await handler()
 		} catch (error) {
-			vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiOperationFailed", { errorMessage: error instanceof Error ? error.message : String(error) }))
+			vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiOperationFailed", { errorMessage: errorMessage(error) }))
 		}
 	}
 
@@ -93,15 +94,15 @@ export function bookmarkCommands(
 		() => vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark'))
 	register(Commands.bookmarkCommands.aiOpenSettings.command,
 		() => vscode.commands.executeCommand('workbench.action.openSettings', 'codebookmark.AI'))
-	register(Commands.bookmarkCommands.importBookmarkConfig.command,
+	register(Commands.bookmarkCommands.importPortablePackage.command,
 		requireStorage(async () => {
 			try {
-				await provider.importBookmarkConfiguration()
+				await provider.importPortablePackage()
 			} catch (error) {
 				if (isUserCancelledError(error)) {
-					vscode.window.showInformationMessage(localize("commands.bookmarkCommands.bookmarkConfigurationImportWasCancelled"))
+					vscode.window.showInformationMessage(localize("commands.bookmarkCommands.portablePackageImportWasCancelled"))
 				} else {
-					vscode.window.showErrorMessage(localize("commands.bookmarkCommands.failedToImportBookmarkConfiguration", { errorMessage: error instanceof Error ? error.message : String(error) }))
+					vscode.window.showErrorMessage(localize("commands.bookmarkCommands.failedToImportPortablePackage", { errorMessage: errorMessage(error) }))
 				}
 			}
 		}))
@@ -154,7 +155,7 @@ export function bookmarkCommands(
 		try {
 			successfulAddress = await AIService.testConnection()
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
+			const message = errorMessage(error)
 			void vscode.window.showErrorMessage(localize("commands.bookmarkCommands.aiConnectionTestFailed", { message }))
 			return
 		}
@@ -165,7 +166,7 @@ export function bookmarkCommands(
 				? localize("commands.bookmarkCommands.aiConnectionTestSucceededTheAddressWasUpdatedTo")
 				: localize("commands.bookmarkCommands.aiConnectionTestSucceeded"))
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
+			const message = errorMessage(error)
 			void vscode.window.showWarningMessage(localize("commands.bookmarkCommands.aiConnectionTestSucceededButTheAddressCouldNot", { message }))
 		}
 	})

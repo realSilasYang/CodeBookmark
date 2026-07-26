@@ -3,13 +3,13 @@
  * 合并期间不依赖逐次行号增减，而是使用文档最终内容，避免快速编辑积累位置误差。
  */
 import { bookmarkPathKey, isSameOrDescendantBookmarkPath } from '../util/BookmarkPath'
+import {
+	defaultTimerScheduling,
+	KeyedTimerStore,
+	type TimerScheduling,
+} from '../util/KeyedTimerStore'
 
 type DocumentChangeTimer = ReturnType<typeof setTimeout>
-
-interface BookmarkDocumentChangeScheduling {
-	setTimer(callback: () => void, delay: number): DocumentChangeTimer
-	clearTimer(timer: DocumentChangeTimer): void
-}
 
 interface BookmarkDocumentMarkerResult {
 	changed: boolean
@@ -34,18 +34,15 @@ export interface BookmarkDocumentChangePort<Document, Uri, BookmarkState> {
 	reportFailure(error: unknown): void
 }
 
-const defaultScheduling: BookmarkDocumentChangeScheduling = {
-	setTimer: (callback, delay) => setTimeout(callback, delay),
-	clearTimer: timer => clearTimeout(timer),
-}
-
 export class BookmarkDocumentChangeCoordinator<Document, Uri, BookmarkState> {
-	private readonly timers = new Map<string, DocumentChangeTimer>()
+	private readonly timers: KeyedTimerStore<string, DocumentChangeTimer>
 
 	constructor(
-		private readonly scheduling: BookmarkDocumentChangeScheduling = defaultScheduling,
+		scheduling: TimerScheduling<DocumentChangeTimer> = defaultTimerScheduling,
 		private readonly debounceMs = 300,
-	) {}
+	) {
+		this.timers = new KeyedTimerStore(scheduling)
+	}
 
 	handleChange(
 		document: Document,
@@ -60,27 +57,17 @@ export class BookmarkDocumentChangeCoordinator<Document, Uri, BookmarkState> {
 		const bookmarkPath = port.relativeBookmarkPath(absolutePath)
 		const timerKey = bookmarkPathKey(bookmarkPath)
 		const viewGeneration = port.currentViewGeneration()
-		const pendingTimer = this.timers.get(timerKey)
-		if (pendingTimer) this.scheduling.clearTimer(pendingTimer)
-
-		const timer = this.scheduling.setTimer(() => {
-			if (this.timers.get(timerKey) === timer) this.timers.delete(timerKey)
+		this.timers.replace(timerKey, () => {
 			void this.processChange(document, uri, absolutePath, bookmarkPath, viewGeneration, port)
 				.catch(error => port.reportFailure(error))
 		}, this.debounceMs)
-		this.timers.set(timerKey, timer)
 	}
 
 	cancelBookmarkPath(bookmarkPath: string): void {
-		for (const [key, timer] of this.timers) {
-			if (!isSameOrDescendantBookmarkPath(key, bookmarkPath)) continue
-			this.scheduling.clearTimer(timer)
-			this.timers.delete(key)
-		}
+		this.timers.cancelWhere(key => isSameOrDescendantBookmarkPath(key, bookmarkPath))
 	}
 
 	dispose(): void {
-		for (const timer of this.timers.values()) this.scheduling.clearTimer(timer)
 		this.timers.clear()
 	}
 

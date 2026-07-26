@@ -3,9 +3,10 @@
  * 脚本在临时目录中调用编译后的 `BookmarkRepository`、`BookmarkSet`、`ScriptIdentity` 完成真实操作，检查落盘结果而不是内存假象。
  */
 const assert = require('node:assert/strict')
-const crypto = require('node:crypto')
 const fs = require('node:fs')
 const { installModuleMocks } = require('./test-support/module-mocks')
+const { sourceFingerprint } = require('./test-support/bookmark-fixtures')
+const { createRepositoryVscodeMock } = require('./test-support/repository-vscode-mock')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -18,67 +19,18 @@ const changedScript = path.join(workspaceRoot, 'moved', 'changed-name.ts')
 fs.mkdirSync(path.join(storageRoot, 'scripts'), { recursive: true })
 fs.mkdirSync(workspaceRoot, { recursive: true })
 
-class TreeItem {
-  constructor(label, collapsibleState) {
-    this.label = label
-    this.collapsibleState = collapsibleState
-  }
-}
-class MarkdownString {
-  appendMarkdown() {}
-  appendText() {}
-  appendCodeblock() {}
-}
-
 let workspaceFolders = [{ uri: { scheme: 'file', fsPath: workspaceRoot } }]
-const getWorkspaceFolder = uri => {
-  const folder = workspaceFolders?.[0]
-  if (!folder) return undefined
-  const relative = path.relative(folder.uri.fsPath, path.resolve(uri.fsPath))
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative)) ? folder : undefined
-}
-const vscodeMock = {
-  TreeItem,
-  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
-  ThemeIcon: class {},
-  ThemeColor: class {},
-  MarkdownString,
-  Uri: { file: fsPath => ({ scheme: 'file', fsPath }) },
-  workspace: {
-    get workspaceFolders() { return workspaceFolders },
-    textDocuments: [],
-    getWorkspaceFolder,
-    getConfiguration: section => ({
-      get: key => {
-        if (section === 'codebookmark' && key === 'globalStoragePath') return storageRoot
-        if (section === 'codebookmark' && key === 'autoSpace') return true
-        return undefined
-      },
-    }),
-  },
-  window: {
-    activeTextEditor: undefined,
-    createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
-    showErrorMessage: async () => undefined,
-    showWarningMessage: async (_message, _options, continueLabel) => continueLabel,
-    showInformationMessage: async () => undefined,
-    showQuickPick: async items => items[0],
-  },
-  commands: { executeCommand: async () => undefined },
-}
+const vscodeMock = createRepositoryVscodeMock({
+  storageRoot,
+  workspaceFolders: () => workspaceFolders,
+  showWarningMessage: async (_message, _options, continueLabel) => continueLabel,
+})
 
 installModuleMocks({ vscode: vscodeMock })
 
 const { bookmarkRepository } = require('../out/repository/BookmarkRepository')
 const { BookmarkSet } = require('../out/models/BookmarkSet')
 const { fingerprintSourceFile } = require('../out/util/ScriptIdentity')
-
-function fingerprint(content) {
-  return {
-    sha256: crypto.createHash('sha256').update(content).digest('hex'),
-    size: Buffer.byteLength(content),
-  }
-}
 
 async function main() {
 	const sameSizePath = path.join(sandbox, 'same-size.ts')
@@ -93,7 +45,7 @@ async function main() {
   const scriptId = '10000000-0000-9000-1000-000000000031'
   const configPath = path.join(storageRoot, 'scripts', scriptId + '.json')
   fs.writeFileSync(configPath, JSON.stringify({
-    script: { id: scriptId, path: sourceScript, fingerprint: fingerprint(content), lastSeenAt: Date.now() },
+		script: { id: scriptId, path: sourceScript, fingerprint: sourceFingerprint(content), lastSeenAt: Date.now() },
     bookmarks: [{
       id: 'bookmark', createdAt: Date.now(), label: 'Stable identity',
       path: sourceScript, collapsibleState: 0, pinned: false,
@@ -114,7 +66,7 @@ async function main() {
       id: changedScriptId,
       path: previousChangedPath,
       fingerprint: {
-        ...fingerprint(previousChangedContent),
+		...sourceFingerprint(previousChangedContent),
         device: 'previous-device',
         inode: 'previous-inode',
       },
@@ -140,7 +92,7 @@ async function main() {
 		id: '10000000-0000-9000-1000-000000000033',
 		path: path.join(sandbox, 'missing-identity.ts'),
 		fingerprint: {
-		  ...fingerprint(expectedIdentityContent),
+		  ...sourceFingerprint(expectedIdentityContent),
 		  device: String(misleadingStat.dev),
 		  inode: String(misleadingStat.ino),
 		},

@@ -95,12 +95,26 @@ async function main() {
     mergedFiles: 1,
     conflictFiles: 2,
   }))
+	const exchanges = path.join(storageRoot, 'exchanges')
+	const exchangeId = '30000000-0000-4000-8000-000000000001'
+	const exchangeRevisionId = '40000000-0000-4000-8000-000000000001'
+	fs.mkdirSync(exchanges, { recursive: true })
+	fs.writeFileSync(path.join(exchanges, 'exchange.json'), JSON.stringify({
+		format: 'codebookmark.portable-exchange', schemaVersion: 1,
+		exchangeId, scopeKey: 'workspace:D:\\项目', lastRevisionId: exchangeRevisionId,
+		updatedAt: 1_800_000_002_000,
+		scriptMappings: { [primaryId]: primaryId },
+		bookmarkMappings: { [layoutBookmarkId]: layoutBookmarkId },
+		baseScripts: [{ format: 'codebookmark.portable-script', schemaVersion: 1, scriptId: primaryId, bookmarks: [] }],
+	}))
+	fs.writeFileSync(path.join(exchanges, 'broken.json'), '{broken')
+	fs.copyFileSync(path.join(exchanges, 'exchange.json'), path.join(exchanges, 'exchange.json.transfer-base'))
   const outside = path.join(sandbox, 'outside.json')
   fs.writeFileSync(outside, 'outside')
 
   try {
     const entries = await listBookmarkConfigurationFiles(storageRoot)
-    assert.equal(entries.length, 13)
+    assert.equal(entries.length, 16)
     assert.equal(entries.some(entry => entry.fileName === 'ignored.1.tmp'), false)
 
     const primary = entries.find(entry => entry.fileName === `${primaryId}.json`)
@@ -156,7 +170,7 @@ async function main() {
     const historicalCopies = entries.filter(entry => ['backup', 'conflict', 'superseded'].includes(entry.role))
     assert.equal(currentWorkspaceData.length, 3)
     assert.equal(currentWorkspaceData.every(entry => entry.health === 'valid'), true)
-    assert.equal(historicalCopies.length, 5)
+    assert.equal(historicalCopies.length, 6)
     assert.equal(historicalCopies.every(entry => entry.health === 'snapshot'), true)
 
     const batchRenameDraft = entries.find(entry => entry.kind === 'temporaryArtifact')
@@ -180,6 +194,19 @@ async function main() {
     assert.equal(transfer.transferCopiedFiles, 5)
     assert.equal(transfer.transferMergedFiles, 1)
     assert.equal(transfer.transferConflictFiles, 2)
+
+		const exchange = entries.find(entry => entry.kind === 'portableExchange' && entry.health === 'valid')
+		assert.ok(exchange)
+		assert.equal(exchange.role, 'portableExchange')
+		assert.equal(exchange.exchangeId, exchangeId)
+		assert.equal(exchange.exchangeScope, 'workspace:D:\\项目')
+		assert.equal(exchange.exchangeRevisionId, exchangeRevisionId)
+		assert.equal(exchange.exchangeUpdatedAt, 1_800_000_002_000)
+		assert.equal(exchange.exchangeScriptMappingCount, 1)
+		assert.equal(exchange.exchangeBookmarkMappingCount, 1)
+		assert.equal(exchange.exchangeBaseScriptCount, 1)
+		assert.equal(entries.some(entry => entry.kind === 'portableExchange' && entry.health === 'invalid'), true)
+		assert.equal(entries.some(entry => entry.kind === 'portableExchange' && entry.role === 'backup' && entry.health === 'snapshot'), true)
 
     const staleRequest = { storagePath: primary.storagePath, revision: primary.revision }
     fs.appendFileSync(primary.filePath, '\n')
@@ -210,17 +237,19 @@ async function main() {
       { storagePath: firstOrder.storagePath, revision: firstOrder.revision },
       { storagePath: conflictLayout.storagePath, revision: conflictLayout.revision },
       { storagePath: transfer.storagePath, revision: transfer.revision },
+			{ storagePath: exchange.storagePath, revision: exchange.revision },
       { storagePath: batchRenameDraft.storagePath, revision: batchRenameDraft.revision },
     ], {
       deleteFile: filePath => fs.promises.unlink(filePath),
       deleteEmptyDirectory: directoryPath => fs.promises.rmdir(directoryPath),
     })
-    assert.equal(recordDeleteResult.deletedFiles, 4)
+    assert.equal(recordDeleteResult.deletedFiles, 5)
     assert.deepEqual(recordDeleteResult.bookmarkSummary, { total: 0, levelCounts: [] })
     assert.equal(fs.existsSync(firstOrder.filePath), false)
     assert.equal(fs.existsSync(conflictLayout.filePath), false)
     assert.equal(fs.existsSync(firstScope), true)
     assert.equal(fs.existsSync(transfer.filePath), false)
+		assert.equal(fs.existsSync(exchange.filePath), false)
     assert.equal(fs.existsSync(batchRenameDraft.filePath), false)
     assert.equal(fs.existsSync(workspaceOrders.find(entry => entry !== firstOrder).filePath), true)
 
@@ -250,13 +279,13 @@ async function main() {
     const identities = moreMenu.map(item => item.command ?? item.submenu)
     assert.deepEqual(identities.slice(-5), [
       'codebookmark.bookmark.sort',
-      'codebookmark.exportSubmenu',
+      'codebookmark.exchangeSubmenu',
       'codebookmark.manageBookmarkConfigurations',
       'codebookmark.openHelp',
       'codebookmark.openSettings',
     ])
     const manageItem = moreMenu.find(item => item.command === 'codebookmark.manageBookmarkConfigurations')
-    const exportItem = moreMenu.find(item => item.submenu === 'codebookmark.exportSubmenu')
+    const exportItem = moreMenu.find(item => item.submenu === 'codebookmark.exchangeSubmenu')
     assert.notEqual(manageItem.group.split('@', 1)[0], exportItem.group.split('@', 1)[0])
 
     const commandSource = fs.readFileSync('src/commands/bookmarkCommands.ts', 'utf8')
@@ -294,10 +323,12 @@ async function main() {
     assert.match(managerHtml, />工作区数据</)
     assert.match(managerHtml, /id="filter-option-workspace-data"[^>]*>当前工作区数据</)
     assert.match(managerHtml, /id="filter-option-transfer"[^>]*>存储迁移记录</)
+		assert.match(managerHtml, /id="filter-option-exchange"[^>]*>可迁移配置交换记录</)
     assert.match(managerHtml, /id="filter-option-temporary"[^>]*>临时残留</)
     assert.match(englishManagerHtml, />Workspace Data</)
     assert.match(englishManagerHtml, /id="filter-option-workspace-data"[^>]*>Current Workspace Data</)
     assert.match(englishManagerHtml, /id="filter-option-transfer"[^>]*>Storage Transfer Journals</)
+		assert.match(englishManagerHtml, /id="filter-option-exchange"[^>]*>Portable-Configuration Exchange Records</)
     assert.match(englishManagerHtml, /id="filter-option-temporary"[^>]*>Temporary Files</)
     assert.doesNotMatch(managerHtml, /历史元数据|Historical Metadata/)
     assert.doesNotMatch(englishManagerHtml, /历史元数据|Historical Metadata/)
@@ -368,6 +399,7 @@ async function main() {
     assert.match(panelSource, /valid: localize\("providers\.BookmarkConfigurationManagerWebview\.validRecord"\)/)
     assert.match(panelSource, /if \(filter === 'workspaceData'\) return isCurrentWorkspaceData\(entry\)/)
     assert.match(panelSource, /if \(filter === 'transfer'\) return entry\.kind === 'transferJournal'/)
+		assert.match(panelSource, /if \(filter === 'exchange'\) return entry\.kind === 'portableExchange'/)
     assert.match(panelSource, /filter-option-empty/)
     assert.match(panelSource, /filter-option-temporary/)
     assert.match(panelSource, /state\.entries\.filter\(isCurrentWorkspaceData\)\.length/)

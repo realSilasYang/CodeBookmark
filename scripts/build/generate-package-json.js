@@ -48,7 +48,7 @@ const sourcePackageJson = {
     viewsWelcome: [
       {
         "view": commands.codeBookmarkViewName,
-        "contents": `暂无书签，按下 Ctrl+B 即刻添加！\n\n[导入书签配置文件](command:${commands.bookmarkCommands.importBookmarkConfig.command})\n\n[查看使用说明](command:codebookmark.openHelp)`,
+        "contents": `暂无书签，按下 Ctrl+B 即刻添加！\n\n[导入书签配置文件](command:${commands.bookmarkCommands.importPortablePackage.command})\n\n[查看使用说明](command:codebookmark.openHelp)`,
         "when": `${commands.varBookmarkLoaded} && !${commands.varBookmarkLoadFailed} && ${commands.varAIAnalysisAvailable} && !${commands.varActiveFileHasBookmark}`
       },
       {
@@ -92,8 +92,12 @@ const sourcePackageJson = {
       "commandPalette": commands.command_palette,
       [commands.editSubmenuId]: commands.editSubmenu_items,
       [commands.moreSubmenuId]: commands.moreSubmenu_items,
+      [commands.exchangeSubmenuId]: commands.exchangeSubmenu_items,
       [commands.exportSubmenuId]: commands.exportSubmenu_items,
-      [commands.batchExportSubmenuId]: commands.batchExportSubmenu_items,
+			[commands.exportCurrentScriptSubmenuId]: commands.exportCurrentScriptSubmenu_items,
+			[commands.exportOtherFormatsSubmenuId]: commands.exportOtherFormatsSubmenu_items,
+			[commands.exportCurrentFolderSubmenuId]: commands.exportCurrentFolderSubmenu_items,
+			[commands.exportCurrentFolderOtherFormatsSubmenuId]: commands.exportCurrentFolderOtherFormatsSubmenu_items,
       [commands.aiSubmenuId]: commands.aiSubmenu_items,
       [commands.aiGenerateSubmenuId]: commands.aiGenerateSubmenu_items,
 			[commands.aiGenerateWorkspaceSubmenuId]: commands.aiGenerateWorkspaceSubmenu_items,

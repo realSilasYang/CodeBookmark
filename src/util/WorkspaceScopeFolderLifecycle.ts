@@ -6,6 +6,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { absolutePathKey, normalizedAbsolutePath } from './AbsolutePath'
 import { stableWorkspacePathHash } from './PathHash'
+import { fileSystemErrorCode, isFileNotFoundError } from './FileSystem'
 
 const WORKSPACE_SCOPE_PREFIX = 'workspace:'
 const SCOPE_FOLDER_PATTERN = /^.+_[0-9a-f]{16}$/i
@@ -32,7 +33,7 @@ async function removeEmptyScopeFolder(folder: string, retained: ReadonlySet<stri
 		await fs.promises.rmdir(folder)
 		return true
 	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code
+		const code = fileSystemErrorCode(error)
 		if (code === 'ENOENT' || code === 'ENOTEMPTY' || code === 'EEXIST') return false
 		throw error
 	}
@@ -47,7 +48,7 @@ export async function cleanupEmptyWorkspaceScopeFolders(
 	try {
 		entries = await fs.promises.readdir(scopesFolder, { withFileTypes: true })
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0
+		if (isFileNotFoundError(error)) return 0
 		throw error
 	}
 	const retained = retainedFolderKeys(storageRoot, historyScopes)

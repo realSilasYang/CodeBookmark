@@ -14,7 +14,7 @@ import {
 	type CodeMarkerSyntaxProfile,
 } from '../util/CodeMarkerScanner'
 import { bookmarkPathKey } from '../util/BookmarkPath'
-import { bookmarkOwnerScriptId } from '../models/BookmarkOwnership'
+import { allBookmarks, bookmarkOwnerScriptId } from '../models/BookmarkOwnership'
 
 export interface CodeMarkerSnapshotPort<Uri> {
 	isFileUri(uri: Uri): boolean
@@ -25,7 +25,6 @@ export interface CodeMarkerSnapshotPort<Uri> {
 	profileFor(languageId: string | undefined, filePath: string): CodeMarkerSyntaxProfile | undefined
 	warnFileTruncated(filePath: string, limit: number): void
 	warnFileCapacityLimited(filePath: string): void
-	warnWorkspaceDiscoveryTruncated(scope: string, maxFiles: number): void
 	invalidatePathIndex(): void
 	saveBookmarks(absolutePaths: readonly string[]): void
 	refreshDecorations(): void
@@ -35,7 +34,6 @@ const unchangedResult = (): CodeMarkerSyncResult => ({ changed: false, created: 
 
 export class CodeMarkerSnapshotCoordinator<Uri> {
 	private readonly warnedFiles = new Set<string>()
-	private readonly warnedWorkspaceScopes = new Set<string>()
 
 	constructor(private readonly maxMarkersPerFile = MAX_CODE_MARKERS_PER_FILE) {}
 
@@ -80,21 +78,9 @@ export class CodeMarkerSnapshotCoordinator<Uri> {
 		port.refreshDecorations()
 	}
 
-	fileNodeHasCodeMarkers(fileNode: Bookmark): boolean {
-		const visit = (bookmarks: readonly Bookmark[]): boolean => bookmarks.some(bookmark => (bookmark.isCodeMarker
+	fileNodeHasCodeMarkers(fileNode: Bookmark, root: BookmarkSet): boolean {
+		return allBookmarks(root).some(bookmark => bookmark.isCodeMarker
 			&& bookmarkOwnerScriptId(bookmark) === fileNode.scriptId)
-			|| (bookmark.subs.size > 0 && visit(bookmark.subs.values)))
-		return visit(fileNode.subs.values)
-	}
-
-	warnWorkspaceDiscoveryTruncated(
-		scope: string,
-		maxFiles: number,
-		port: CodeMarkerSnapshotPort<Uri>,
-	): void {
-		if (this.warnedWorkspaceScopes.has(scope)) return
-		this.warnedWorkspaceScopes.add(scope)
-		port.warnWorkspaceDiscoveryTruncated(scope, maxFiles)
 	}
 
 	private warnFileOnce(filePath: string, warn: () => void): void {

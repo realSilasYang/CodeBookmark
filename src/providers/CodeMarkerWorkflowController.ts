@@ -38,9 +38,12 @@ import {
 	type CodeMarkerSyncLifecyclePort,
 } from './CodeMarkerSyncLifecycle'
 import { scanWorkspaceCodeMarkers } from './WorkspaceCodeMarkerScanRunner'
+import { errorMessage } from '../util/ErrorMessage'
+import { textDocumentLines } from '../util/VscodeDocument'
 
-const MAX_BACKGROUND_CODE_MARKER_FILES = 2_000
-const CODE_MARKER_SCAN_CONCURRENCY = 4
+// 当前项目的本地 SSD 基准中，12 路读取比 4 路的中位耗时降低约三分之一，
+// 同时尾延迟比 16 路更稳定；文件读取仍会在每次 await 后归还事件循环。
+const CODE_MARKER_SCAN_CONCURRENCY = 12
 
 interface CodeMarkerWorkflowPort {
 	bookmarks(): BookmarkSet
@@ -55,10 +58,6 @@ interface CodeMarkerWorkflowPort {
 	invalidatePathIndex(): void
 	saveBookmarks(absolutePaths: readonly string[]): void
 	refreshDecorations(): void
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
 }
 
 export class CodeMarkerWorkflowController {
@@ -115,7 +114,7 @@ export class CodeMarkerWorkflowController {
 	}
 
 	fileNodeHasMarkers(fileNode: Bookmark): boolean {
-		return this.snapshots.fileNodeHasCodeMarkers(fileNode)
+		return this.snapshots.fileNodeHasCodeMarkers(fileNode, this.port.bookmarks())
 	}
 
 	synchronizeMarkerSnapshot(uri: vscode.Uri, lines: readonly string[], languageId?: string) {
@@ -138,10 +137,6 @@ export class CodeMarkerWorkflowController {
 		this.lifecycle.dispose()
 	}
 
-	private documentLines(document: vscode.TextDocument): string[] {
-		return Array.from({ length: document.lineCount }, (_, line) => document.lineAt(line).text)
-	}
-
 	private readonly snapshotPortAdapter: CodeMarkerSnapshotPort<vscode.Uri> = {
 		isFileUri: uri => uri.scheme === 'file',
 		isCurrentScope: uri => this.port.isCurrentScope(uri),
@@ -151,7 +146,6 @@ export class CodeMarkerWorkflowController {
 		profileFor: (languageId, filePath) => this.profiles.profileFor(languageId, filePath),
 		warnFileTruncated: (filePath, limit) => logger.showWarningMessage(localize("providers.CodeMarkerWorkflowController.containsMoreThanTodoFixmeBugMarkersOnlyThe", { fileName: path.basename(filePath), limit })),
 		warnFileCapacityLimited: filePath => logger.showWarningMessage(localize("providers.CodeMarkerWorkflowController.manualBookmarksAndAutomaticMarkersInHaveReachedThe", { fileName: path.basename(filePath) })),
-		warnWorkspaceDiscoveryTruncated: (_scope, maxFiles) => logger.showWarningMessage(localize("providers.CodeMarkerWorkflowController.theCurrentWorkspaceContainsMoreThanScriptsTheBackground", { maxFiles })),
 		invalidatePathIndex: () => this.port.invalidatePathIndex(),
 		saveBookmarks: absolutePaths => this.port.saveBookmarks(absolutePaths),
 		refreshDecorations: () => this.port.refreshDecorations(),
@@ -167,15 +161,22 @@ export class CodeMarkerWorkflowController {
 		isFileUri: uri => uri.scheme === 'file',
 		filePath: uri => uri.fsPath,
 		sameFilePath: (left, right) => normalizedAbsolutePath(left) === normalizedAbsolutePath(right),
-		documentLines: document => this.documentLines(document),
+		documentLines: textDocumentLines,
 		documentLanguage: document => document.languageId,
 		profilesInitialized: () => this.profiles.isInitialized,
 		supportsFile: filePath => this.profiles.supportsFile(filePath),
-		statFile: async filePath => {
-			const stat = await fs.promises.stat(filePath)
-			return { isFile: stat.isFile(), size: stat.size }
+		openFile: async filePath => {
+			const handle = await fs.promises.open(filePath, 'r')
+			return {
+				stat: async () => {
+					const stat = await handle.stat()
+					return { isFile: stat.isFile(), size: stat.size }
+				},
+				readBytes: () => handle.readFile(),
+				readChunks: () => handle.createReadStream({ autoClose: false, start: 0 }),
+				close: () => handle.close(),
+			}
 		},
-		readTextFile: filePath => fs.promises.readFile(filePath, 'utf8'),
 	}
 
 	private sourceReaderPort(): CodeMarkerSourceReaderPort<vscode.TextDocument, vscode.Uri> {
@@ -209,7 +210,7 @@ export class CodeMarkerWorkflowController {
 		isFileUri: uri => uri.scheme === 'file',
 		isCurrentScope: uri => this.port.isCurrentScope(uri),
 		documentUri: document => document.uri,
-		documentLines: document => this.documentLines(document),
+		documentLines: textDocumentLines,
 		documentLanguage: document => document.languageId,
 		readSource: uri => this.readFile(uri),
 		synchronizeSnapshot: (uri, lines, languageId) => this.synchronizeSnapshot(uri, lines, languageId),
@@ -271,24 +272,18 @@ export class CodeMarkerWorkflowController {
 	private async scanWorkspace(scope: string, generation: number): Promise<void> {
 		const scopeUri = this.port.currentScopeUri()
 		const workspaceFolder = scopeUri ? vscode.workspace.getWorkspaceFolder(scopeUri) : undefined
-		await scanWorkspaceCodeMarkers(scope, generation, MAX_BACKGROUND_CODE_MARKER_FILES, CODE_MARKER_SCAN_CONCURRENCY, {
+		await scanWorkspaceCodeMarkers(scope, generation, CODE_MARKER_SCAN_CONCURRENCY, {
 			startMeasurement: () => performanceMonitor.start(),
 			canDiscoverFiles: () => typeof vscode.workspace.findFiles === 'function' && typeof vscode.RelativePattern === 'function',
 			workspaceFolder: () => workspaceFolder,
 			discoveryGlobs: () => this.profiles.discoveryGlobs(),
-			findFiles: async (folder, glob, limit) => vscode.workspace.findFiles(
+			findFiles: async (folder, glob) => vscode.workspace.findFiles(
 				new vscode.RelativePattern(folder, glob),
 				SOURCE_SCAN_EXCLUDE_GLOB,
-				limit,
 			),
 			uriKey: uri => normalizedAbsolutePath(uri.fsPath),
 			isCurrent: (candidateScope, candidateGeneration) => candidateGeneration === this.lifecycle.currentWorkspaceScanGeneration
 				&& this.port.currentStorageScope() === candidateScope,
-			warnDiscoveryTruncated: candidateScope => this.snapshots.warnWorkspaceDiscoveryTruncated(
-				candidateScope,
-				MAX_BACKGROUND_CODE_MARKER_FILES,
-				this.snapshotPort(),
-			),
 			existingMarkerCandidates: () => allBookmarks(this.port.bookmarks())
 				.filter(fileNode => fileNode.isFile && this.fileNodeHasMarkers(fileNode))
 				.map(fileNode => ({
@@ -303,10 +298,7 @@ export class CodeMarkerWorkflowController {
 			sourceIsMissing: uri => this.sourceIsMissing(uri),
 			markCompleted: candidateScope => this.lifecycle.markWorkspaceScanCompleted(candidateScope),
 			persistChanges: uris => this.persistChanges(uris.map(uri => uri.fsPath)),
-			measure: (startedAt, files, changedFiles) => performanceMonitor.measure('workspace-code-marker-scan', startedAt, {
-				files,
-				changedFiles,
-			}),
+			measure: (startedAt, metrics) => performanceMonitor.measure('workspace-code-marker-scan', startedAt, { ...metrics }),
 			reportDiscoveryFailure: (glob, error) => logger.error(localize("providers.CodeMarkerWorkflowController.unableToScanLanguageFilePattern", { glob, errorMessage: errorMessage(error) })),
 		})
 	}

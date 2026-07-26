@@ -42,10 +42,9 @@ A release candidate must pass:
 ```bash
 npm ci
 npm run check:release
-npm run package:vsix -- --out codebookmark-3.0.0.vsix
 ```
 
-`package:list` and VSIX packaging use the exact `@vscode/vsce` version pinned in `devDependencies` and `package-lock.json`; release does not download a second tool copy. The package may contain one bundled JavaScript runtime entry point, runtime resources, localization catalogs, all 13 README languages, the Chinese and English changelogs, the main license, and third-party notices/licenses. It must not contain maintenance-only docs, source maps, `src`, scripts, tests, `.git`, `.env`, local paths, or bookmark data. The extension has no runtime dependencies or native modules, so the VSIX is cross-platform and requires no `--target`.
+Local release preparation creates and retains no VSIX. `package:vsix` accepts only an explicit repository-external `--out` path for CI, Release, or a temporary manual check; delete any package created for manual inspection. CI and Release write to runner temporary directories. `package:list` and VSIX packaging use the exact `@vscode/vsce` version pinned in `devDependencies` and `package-lock.json`; release does not download a second tool copy. The package may contain one bundled JavaScript runtime entry point, runtime resources, localization catalogs, all 13 README languages, the Chinese and English changelogs, the main license, and third-party notices/licenses. It must not contain maintenance-only docs, source maps, `src`, scripts, tests, `.git`, `.env`, local paths, or bookmark data. The pure-JavaScript `fflate` dependency is bundled into the runtime entry point, so the VSIX has no external runtime dependency or native module, remains cross-platform, and requires no `--target`.
 
 ## 3. Coordinate Marketplace and GitHub Release
 

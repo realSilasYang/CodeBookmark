@@ -11,19 +11,22 @@ import { decodeWorkspaceOrderPersistence } from '../models/WorkspaceOrder'
 import { decodeWorkspaceLayoutPersistence, workspaceNodeReferenceKey } from '../models/WorkspaceLayout'
 import { decodePersistenceRecord, PersistenceFormats } from '../util/PersistenceSchema'
 import { isScriptId } from '../util/ScriptIdentity'
+import { decodePortableExchangeRecord } from '../portable/PortableExchangeStore'
 import {
 	mergeBookmarkLevelSummaries,
 	summarizeBookmarkLevels,
 	type BookmarkLevelSummary,
 } from '../util/BookmarkStatistics'
+import { sha256Hex } from '../util/Sha256'
+import { fileSystemErrorCode as errorCode } from '../util/FileSystem'
 
 const MAX_PARSED_CONFIGURATION_BYTES = 32 * 1024 * 1024
 const INSPECTION_CONCURRENCY = 12
 const MAX_INSPECTED_BOOKMARK_NODES = 10_000
 const MAX_INSPECTED_BOOKMARK_DEPTH = 64
 
-type BookmarkConfigurationEntryKind = 'script' | 'workspaceOrder' | 'workspaceLayout' | 'transferJournal' | 'temporaryArtifact'
-type BookmarkConfigurationRole = 'primary' | 'backup' | 'conflict' | 'superseded' | 'workspaceOrder' | 'workspaceLayout' | 'transferJournal' | 'batchRenameTemporary' | 'unknown'
+type BookmarkConfigurationEntryKind = 'script' | 'workspaceOrder' | 'workspaceLayout' | 'portableExchange' | 'transferJournal' | 'temporaryArtifact'
+type BookmarkConfigurationRole = 'primary' | 'backup' | 'conflict' | 'superseded' | 'workspaceOrder' | 'workspaceLayout' | 'portableExchange' | 'transferJournal' | 'batchRenameTemporary' | 'unknown'
 type BookmarkConfigurationHealth = 'bound' | 'missing' | 'empty' | 'snapshot' | 'valid' | 'temporary' | 'invalid'
 
 export interface BookmarkConfigurationEntry {
@@ -63,6 +66,13 @@ export interface BookmarkConfigurationEntry {
 	transferCopiedFiles?: number
 	transferMergedFiles?: number
 	transferConflictFiles?: number
+	exchangeId?: string
+	exchangeScope?: string
+	exchangeRevisionId?: string
+	exchangeUpdatedAt?: number
+	exchangeScriptMappingCount?: number
+	exchangeBookmarkMappingCount?: number
+	exchangeBaseScriptCount?: number
 }
 
 export interface BookmarkConfigurationDeleteRequest {
@@ -107,7 +117,7 @@ function storageRelativePath(storageRoot: string, filePath: string): string {
 }
 
 function recordEntryBase(
-	kind: 'workspaceOrder' | 'workspaceLayout' | 'transferJournal' | 'temporaryArtifact',
+	kind: 'workspaceOrder' | 'workspaceLayout' | 'portableExchange' | 'transferJournal' | 'temporaryArtifact',
 	role: BookmarkConfigurationRole,
 	filePath: string,
 	storageRoot: string,
@@ -119,7 +129,7 @@ function recordEntryBase(
 		storagePath: storageRelativePath(storageRoot, filePath),
 		fileName: path.basename(filePath),
 		filePath,
-		revision: crypto.createHash('sha256').update(content).digest('hex'),
+		revision: sha256Hex(content),
 		sizeBytes: stat.size,
 		modifiedAt: stat.mtimeMs,
 		role,
@@ -199,10 +209,6 @@ async function fileRevision(filePath: string): Promise<string> {
 	})
 }
 
-function errorCode(error: unknown): string | undefined {
-	return isJsonRecord(error) && typeof error.code === 'string' ? error.code : undefined
-}
-
 async function inspectBookmarkConfigurationFile(
 	filePath: string,
 	storageRoot: string,
@@ -256,7 +262,7 @@ async function inspectBookmarkConfigurationFile(
 			storagePath: storageRelativePath(storageRoot, filePath),
 			fileName,
 			filePath,
-			revision: crypto.createHash('sha256').update(content).digest('hex'),
+			revision: sha256Hex(content),
 			sizeBytes: stat.size,
 			modifiedAt: stat.mtimeMs,
 			role,
@@ -317,7 +323,7 @@ async function inspectBookmarkConfigurationFile(
 		storagePath: storageRelativePath(storageRoot, filePath),
 		fileName,
 		filePath,
-		revision: crypto.createHash('sha256').update(content).digest('hex'),
+		revision: sha256Hex(content),
 		sizeBytes: stat.size,
 		modifiedAt: stat.mtimeMs,
 		role,
@@ -587,6 +593,74 @@ async function listTransferJournalEntries(storageRoot: string): Promise<Bookmark
 	return entry ? [entry] : []
 }
 
+async function inspectPortableExchangeRecord(
+	filePath: string,
+	storageRoot: string,
+	role: 'portableExchange' | 'backup' | 'conflict' = 'portableExchange',
+): Promise<BookmarkConfigurationEntry | undefined> {
+	let stat: fs.Stats
+	let content: Buffer
+	try {
+		stat = await fs.promises.stat(filePath)
+		if (!stat.isFile()) return undefined
+		content = await fs.promises.readFile(filePath)
+	} catch (error) {
+		if (errorCode(error) === 'ENOENT') return undefined
+		throw error
+	}
+	const base = recordEntryBase('portableExchange', role, filePath, storageRoot, stat, content)
+	if (content.byteLength > MAX_PARSED_CONFIGURATION_BYTES) {
+		return {
+			...base,
+			health: 'invalid',
+			problem: localize('repository.BookmarkConfigurationCatalog.portableExchangeRecordIsInvalid'),
+		}
+	}
+	try {
+		const record = decodePortableExchangeRecord(JSON.parse(content.toString('utf8')))
+		return {
+			...base,
+			health: role === 'portableExchange' ? 'valid' : 'snapshot',
+			exchangeId: record.exchangeId,
+			exchangeScope: record.scopeKey,
+			exchangeRevisionId: record.lastRevisionId,
+			exchangeUpdatedAt: record.updatedAt,
+			exchangeScriptMappingCount: Object.keys(record.scriptMappings).length,
+			exchangeBookmarkMappingCount: Object.keys(record.bookmarkMappings).length,
+			exchangeBaseScriptCount: record.baseScripts.length,
+			labelPreview: [record.exchangeId, record.scopeKey, record.lastRevisionId],
+		}
+	} catch {
+		return {
+			...base,
+			health: 'invalid',
+			problem: localize('repository.BookmarkConfigurationCatalog.portableExchangeRecordIsInvalid'),
+		}
+	}
+}
+
+async function listPortableExchangeEntries(storageRoot: string): Promise<BookmarkConfigurationEntry[]> {
+	const folder = path.join(storageRoot, 'exchanges')
+	let files: fs.Dirent[]
+	try {
+		files = await fs.promises.readdir(folder, { withFileTypes: true })
+	} catch (error) {
+		if (errorCode(error) === 'ENOENT') return []
+		throw error
+	}
+	const entries: BookmarkConfigurationEntry[] = []
+	for (const file of files.filter(item => item.isFile() && !isTemporaryConfiguration(item.name))
+		.sort((left, right) => left.name.localeCompare(right.name))) {
+		const role = /\.transfer-conflict_[0-9a-f]+(?:_\d+)?\.json$/i.test(file.name) ? 'conflict' as const
+			: /\.json\.transfer-(?:base|copy_[0-9a-f]+)$/i.test(file.name) ? 'backup' as const
+				: path.extname(file.name).toLowerCase() === '.json' ? 'portableExchange' as const : undefined
+		if (!role) continue
+		const entry = await inspectPortableExchangeRecord(path.join(folder, file.name), storageRoot, role)
+		if (entry) entries.push(entry)
+	}
+	return entries
+}
+
 export async function listBookmarkConfigurationFiles(
 	storageRoot: string,
 ): Promise<BookmarkConfigurationEntry[]> {
@@ -617,6 +691,7 @@ export async function listBookmarkConfigurationFiles(
 	return [
 		...entries.filter((entry): entry is BookmarkConfigurationEntry => entry !== undefined),
 		...await listWorkspaceRecordEntries(storageRoot),
+		...await listPortableExchangeEntries(storageRoot),
 		...await listTransferJournalEntries(storageRoot),
 	]
 }
@@ -683,7 +758,7 @@ export async function removeBookmarkConfigurationFiles(
 		}
 		try {
 			await port.deleteFile(entry.filePath)
-			if ((entry.kind === 'workspaceOrder' || entry.kind === 'workspaceLayout' || entry.kind === 'temporaryArtifact')
+			if ((entry.kind === 'workspaceOrder' || entry.kind === 'workspaceLayout' || entry.kind === 'portableExchange' || entry.kind === 'temporaryArtifact')
 				&& port.deleteEmptyDirectory) {
 				try {
 					await port.deleteEmptyDirectory(path.dirname(entry.filePath))

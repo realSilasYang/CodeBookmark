@@ -74,12 +74,14 @@ export class BookmarkConfigurationManagementController {
 			const deletedWorkspaceOrders = result.deletedEntries.filter(entry => entry.kind === 'workspaceOrder').length
 			const deletedWorkspaceLayouts = result.deletedEntries.filter(entry => entry.kind === 'workspaceLayout').length
 			const deletedTransferJournals = result.deletedEntries.filter(entry => entry.kind === 'transferJournal').length
+			const deletedPortableExchanges = result.deletedEntries.filter(entry => entry.kind === 'portableExchange').length
 			const deletedTemporaryArtifacts = result.deletedEntries.filter(entry => entry.kind === 'temporaryArtifact').length
 			const deletedKinds = [
 				deletedScripts > 0 ? localize("providers.BookmarkConfigurationManagementController.bookmarkConfigurations", { deletedScripts, formatBookmarkLevelSummary: formatBookmarkLevelSummary(result.bookmarkSummary) }) : '',
 				deletedWorkspaceOrders > 0 ? localize("providers.BookmarkConfigurationManagementController.workspaceOrderRecords", { deletedWorkspaceOrders }) : '',
 				deletedWorkspaceLayouts > 0 ? localize("providers.BookmarkConfigurationManagementController.workspaceLayoutRecords", { deletedWorkspaceLayouts }) : '',
 				deletedTransferJournals > 0 ? localize("providers.BookmarkConfigurationManagementController.storageTransferJournals", { deletedTransferJournals }) : '',
+				deletedPortableExchanges > 0 ? localize('providers.BookmarkConfigurationManagementController.portableExchangeRecords', { deletedPortableExchanges }) : '',
 				deletedTemporaryArtifacts > 0 ? localize("providers.BookmarkConfigurationManagementController.temporaryArtifacts", { deletedTemporaryArtifacts }) : '',
 			].filter(Boolean).join(localize("providers.BookmarkConfigurationManagementController.message")) || localize("providers.BookmarkConfigurationManagementController.none")
 			const message = localize("providers.BookmarkConfigurationManagementController.bookmarkStorageCleanupCompletedRequestedRemovedSkipped", { requestedFiles: result.requestedFiles, deletedFiles: result.deletedFiles, skipped, deletedKinds })

@@ -3,6 +3,7 @@
  * 迁移成功后按数据类型决定是否保留备份；任何失败都不会覆盖仍可恢复的旧数据。
  */
 import * as fs from 'fs'
+import { atomicWriteFile } from './AtomicFile'
 
 interface PersistenceMigrationResult {
 	backupPath: string
@@ -31,4 +32,14 @@ export async function persistLegacyJsonMigration(
 		throw new Error(`Unable to persist migrated configuration: ${filePath}`)
 	}
 	return { backupPath }
+}
+
+export function persistLegacyJsonMigrationAtomically(
+	filePath: string,
+	versionedValue: unknown,
+): Promise<PersistenceMigrationResult> {
+	return persistLegacyJsonMigration(filePath, versionedValue, async (target, migrated) => {
+		await atomicWriteFile(target, JSON.stringify(migrated, null, 2))
+		return true
+	})
 }

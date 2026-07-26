@@ -22,6 +22,7 @@ import { storageRootState } from './StorageRootState'
 import { workspaceScopeFolderPath } from './WorkspaceScopeFolderLifecycle'
 import { canonicalBookmarkPath } from './BookmarkPath'
 import { localize } from '../i18n/Localization'
+import { findOpenFileDocument, textDocumentLines } from './VscodeDocument'
 
 const MAX_BOOKMARK_FILE_BYTES = 32 * 1024 * 1024
 
@@ -53,7 +54,7 @@ class FileUtils {
 		if (cached?.version === doc.version) return cached
 		const snapshot = {
 			version: doc.version,
-			lines: Array.from({ length: doc.lineCount }, (_, line) => doc.lineAt(line).text),
+			lines: textDocumentLines(doc),
 			fullText: doc.getText(),
 			fingerprintCandidates: new Map<string, FingerprintCandidate[]>(),
 		}
@@ -151,12 +152,6 @@ class FileUtils {
 		return bestLine
 	}
 
-	private pathsEqual(first: string, second: string): boolean {
-		const left = path.resolve(first)
-		const right = path.resolve(second)
-		return left === right
-	}
-
 	async readJsonFileAsync(filePath: string): Promise<unknown> {
 		try {
 			const stat = await fs.promises.stat(filePath)
@@ -205,14 +200,7 @@ class FileUtils {
 	}
 
 	async deleteJsonFileAsync(filePath: string): Promise<void> {
-		fileChangeFingerprints.markDeleteIntent(filePath)
-		try {
-			await fs.promises.unlink(filePath)
-			fileChangeFingerprints.markDeleteComplete(filePath)
-		} catch (error) {
-			fileChangeFingerprints.markDeleteFailed(filePath)
-			throw error
-		}
+		await fileChangeFingerprints.trackDeletion(filePath, () => fs.promises.unlink(filePath))
 	}
 
 	updateBookmarkContextAnchors(bookmark: { start: { line: number }, content?: string, contextBefore?: string, contextAfter?: string }, doc: vscode.TextDocument): boolean {
@@ -269,7 +257,7 @@ class FileUtils {
 					doc = state.documents.get(item.path)
 				} else {
 					const absolutePath = this.relativeToAbsolute(item.path, scopeUri);
-					doc = vscode.workspace.textDocuments.find(d => this.pathsEqual(d.uri.fsPath, absolutePath));
+					doc = findOpenFileDocument(absolutePath);
 					if (doc) {
 						state.documents.set(item.path, doc);
 					}

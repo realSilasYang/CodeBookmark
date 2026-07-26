@@ -23,7 +23,7 @@ assert.match(manifest.contributes.viewsWelcome[0].contents, /导入书签配置�
 assert.match(manifest.contributes.viewsWelcome[0].contents, /暂无书签，按下 Ctrl\+B 即刻添加！/)
 assert.doesNotMatch(manifest.contributes.viewsWelcome[0].contents, /将光标插入需要添加书签的位置/)
 assert.match(manifest.contributes.viewsWelcome[0].contents, /导入书签配置文件[\s\S]*查看使用说明/)
-assert.match(manifest.contributes.viewsWelcome[0].contents, /command:codebookmark\.importBookmarkConfig/)
+assert.match(manifest.contributes.viewsWelcome[0].contents, /command:codebookmark\.importPortablePackage/)
 assert.doesNotMatch(manifest.contributes.viewsWelcome[0].contents, /\$\{commands\./)
 assert.equal(manifest.contributes.viewsWelcome[1].when,
   'bookmarks.var.bookmark.loaded && !bookmarks.var.bookmark.loadFailed && !codebookmark.aiAnalysisAvailable')

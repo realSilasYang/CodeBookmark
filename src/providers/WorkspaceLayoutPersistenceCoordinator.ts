@@ -6,8 +6,9 @@ import * as path from 'path'
 import type { Bookmark } from '../models/Bookmark'
 import type { BookmarkSet } from '../models/BookmarkSet'
 import { captureWorkspaceLayout } from '../models/BookmarkOwnership'
-import type { WorkspaceLayout } from '../models/WorkspaceLayout'
+import { workspaceLayoutStructuralIdentity, type WorkspaceLayout } from '../models/WorkspaceLayout'
 import type { PreparedBookmarkView } from './BookmarkViewPreparation'
+import { isFileNotFoundError } from '../util/FileSystem'
 
 interface WorkspaceLayoutPersistenceIO {
 	writeJson(filePath: string, value: unknown): Promise<boolean>
@@ -23,7 +24,7 @@ async function persistPreparedWorkspaceLayout(
 	if (!await io.writeJson(filePath, layout)) return false
 	if (legacyOrderFilePath) {
 		try { await io.deleteFile(legacyOrderFilePath) } catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+			if (!isFileNotFoundError(error)) throw error
 		}
 	}
 	return true
@@ -39,7 +40,7 @@ async function persistCurrentWorkspaceLayout(
 	const layout = captureWorkspaceLayout(bookmarks, currentLayout?.hiddenFiles ?? [], pinnedContainer)
 	if (!await io.writeJson(path.join(storageFolder, '_workspace_layout.json'), layout)) return undefined
 	try { await io.deleteFile(path.join(storageFolder, '_workspace_order.json')) } catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+		if (!isFileNotFoundError(error)) throw error
 	}
 	return layout
 }
@@ -96,22 +97,13 @@ interface WorkspaceExpansionCommitPort {
 	reportWriteFailure(): void
 }
 
-function layoutContent(layout: WorkspaceLayout): string {
-	return JSON.stringify({
-		entries: layout.entries,
-		hiddenFiles: layout.hiddenFiles,
-		pinnedContainer: layout.pinnedContainer,
-		expansionStates: layout.expansionStates,
-	})
-}
-
 export async function commitWorkspaceExpansionState(port: WorkspaceExpansionCommitPort): Promise<void> {
 	if (!port.isWorkspaceScope() || port.writeBlocked()) return
 	const current = port.currentLayout()
 	const folder = port.storageFolder()
 	if (!current || !folder) return
 	const layout = captureWorkspaceLayout(port.bookmarks(), current.hiddenFiles, port.pinnedContainer())
-	if (layoutContent(layout) === layoutContent(current)) return
+	if (workspaceLayoutStructuralIdentity(layout) === workspaceLayoutStructuralIdentity(current)) return
 	if (!await port.writeJson(path.join(folder, '_workspace_layout.json'), layout)) {
 		port.reportWriteFailure()
 		return
