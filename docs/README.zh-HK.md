@@ -22,9 +22,9 @@ CodeBookmark 是用書籤標記及導覽程式碼的 VS Code 擴充功能。黏�
 
 [![CodeBookmark 介面概覽](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# 贊賞
+# 捐贈
 
-如果書籤導覽與 AI 輔助為你節省了時間，歡迎透過下方二維碼請作者飲杯奶茶！
+如果書籤導覽與 AI 輔助為你節省了時間，歡迎透過以下方式扶貧（≥Д≤）
 
 <div align="center">
   <table>

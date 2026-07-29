@@ -6,6 +6,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const vscode = require('vscode')
+const { MENU_COMMAND_SYMBOLS, prefixMenuSymbol } = require('../../../scripts/lib/manifest-menu-symbols')
 
 async function waitFor(assertion, message, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs
@@ -64,7 +65,10 @@ async function run() {
   ), 'utf8'))
   const expectedManifestText = {
     view: manifestCatalog['codebookmark.common.commandCategory'],
-    toggle: manifestCatalog['codebookmark.contributes.commands.codebookmark.toggleBookmark.title'],
+    toggle: prefixMenuSymbol(
+      manifestCatalog['codebookmark.contributes.commands.codebookmark.toggleBookmark.title'],
+      MENU_COMMAND_SYMBOLS['codebookmark.toggleBookmark'],
+    ),
     storage: manifestCatalog['codebookmark.contributes.configuration.main.properties.codebookmark.globalStoragePath.description'],
   }
   assert.equal(localizedValue(extension.packageJSON.contributes.views.codebookmark[0].name), expectedManifestText.view)

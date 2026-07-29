@@ -46,7 +46,7 @@ The Code Bookmarks panel shows the bookmarks attached to each script, their hier
 
 # Donate
 
-If bookmark navigation and AI assistance save you time, you can use either QR code below to buy the author a milk tea!
+If bookmark navigation and AI assistance save you time, feel free to help lift the author out of poverty through one of the options below (≥Д≤).
 
 <div align="center">
   <table>

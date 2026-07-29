@@ -8,9 +8,9 @@
 
 CodeBookmark è un’estensione di VS Code per contrassegnare e navigare il codice. Il motore di ancoraggio collega la configurazione all’identità dello script e ritrova i segnalibri dopo modifiche, rinomine, spostamenti di cartelle o trasferimenti del workspace. I dati restano nella cartella locale scelta dall’utente. L’IA può generare segnalibri dal significato del codice, migliorare le etichette e scegliere un’icona solo quando la corrispondenza è chiara.
 
-# Dona
+# Donazioni
 
-Se la navigazione tra i segnalibri e l’assistenza IA ti fanno risparmiare tempo, puoi offrire un tè al latte all’autore tramite uno dei codici QR qui sotto.
+Se la navigazione tra i segnalibri e l’assistenza IA ti fanno risparmiare tempo, puoi aiutare l’autore a uscire dalla povertà con uno dei metodi seguenti (≥Д≤).
 
 <div align="center">
   <table>

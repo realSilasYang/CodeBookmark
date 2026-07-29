@@ -5,27 +5,29 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { loadLocalizedManifest } = require('./lib/localized-manifest')
+const { prefixMenuSymbol } = require('./lib/manifest-menu-symbols')
 
 const manifest = loadLocalizedManifest('zh-cn')
 const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]))
+const menuTitle = (symbol, value) => prefixMenuSymbol(value, symbol)
 const readable = [
-  ['codebookmark.exportToMarkdown', 'Markdown'],
-  ['codebookmark.exportToHtml', 'HTML'],
-  ['codebookmark.exportToCsv', 'CSV'],
-  ['codebookmark.exportToText', '纯文本'],
+  ['codebookmark.exportToMarkdown', menuTitle('#', 'Markdown')],
+  ['codebookmark.exportToHtml', menuTitle('⟨⟩', 'HTML')],
+  ['codebookmark.exportToCsv', menuTitle('▦', 'CSV')],
+  ['codebookmark.exportToText', menuTitle('≡', '纯文本')],
 ]
 const batchReadable = [
-  ['codebookmark.batchExportToMarkdown', 'Markdown'],
-  ['codebookmark.batchExportToHtml', 'HTML'],
-  ['codebookmark.batchExportToCsv', 'CSV'],
-  ['codebookmark.batchExportToText', '纯文本'],
+  ['codebookmark.batchExportToMarkdown', menuTitle('#', 'Markdown')],
+  ['codebookmark.batchExportToHtml', menuTitle('⟨⟩', 'HTML')],
+  ['codebookmark.batchExportToCsv', menuTitle('▦', 'CSV')],
+  ['codebookmark.batchExportToText', menuTitle('≡', '纯文本')],
 ]
 for (const [commandId, title] of [...readable, ...batchReadable]) {
   assert.equal(commands.get(commandId)?.title, title, `导出命令标题不正确：${commandId}`)
 }
-assert.equal(commands.get('codebookmark.importPortablePackage')?.title, '导入可迁移书签配置')
-assert.equal(commands.get('codebookmark.exportPortablePackage')?.title, '可迁移书签配置')
-assert.equal(commands.get('codebookmark.batchExportPortablePackage')?.title, '可迁移书签配置')
+assert.equal(commands.get('codebookmark.importPortablePackage')?.title, menuTitle('↙', '导入可迁移书签配置'))
+assert.equal(commands.get('codebookmark.exportPortablePackage')?.title, menuTitle('⇄', '可迁移书签配置'))
+assert.equal(commands.get('codebookmark.batchExportPortablePackage')?.title, menuTitle('⇄', '可迁移书签配置'))
 assert.equal([...commands.keys()].some(command => /SourceFiles$/u.test(command)), false)
 
 const menus = manifest.contributes.menus
@@ -94,10 +96,10 @@ assert.deepEqual(
   menus['codebookmark.exportCurrentFolderOtherFormatsSubmenu'].map(item => item.command),
   batchReadable.map(([commandId]) => commandId),
 )
-assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exchangeSubmenu')?.label, '导入/导出书签')
-assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportSubmenu')?.label, '导出')
-assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportCurrentScriptSubmenu')?.label, '导出当前脚本的…')
-assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportCurrentFolderSubmenu')?.label, '导出当前文件夹的…')
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exchangeSubmenu')?.label, menuTitle('⇄', '导入/导出书签'))
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportSubmenu')?.label, menuTitle('↗', '导出'))
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportCurrentScriptSubmenu')?.label, menuTitle('▧', '导出当前脚本的…'))
+assert.equal(manifest.contributes.submenus.find(item => item.id === 'codebookmark.exportCurrentFolderSubmenu')?.label, menuTitle('▣', '导出当前文件夹的…'))
 assert.equal(menus['codebookmark.moreSubmenu'].some(item => item.submenu === 'codebookmark.exchangeSubmenu'), true)
 for (const [commandId] of batchReadable) {
   assert.equal(menus.commandPalette.some(item => item.command === commandId && item.when === 'false'), true)

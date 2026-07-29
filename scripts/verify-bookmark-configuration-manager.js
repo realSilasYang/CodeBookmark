@@ -7,6 +7,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const vm = require('node:vm')
+const { prefixMenuSymbol } = require('./lib/manifest-menu-symbols')
 
 const {
   listBookmarkConfigurationFiles,
@@ -269,24 +270,25 @@ async function main() {
     const englishCommands = new Map(englishManifest.contributes.commands.map(command => [command.command, command]))
     assert.equal(
       commands.get('codebookmark.manageBookmarkConfigurations')?.title,
-      '$(files) 书签配置文件管理',
+      prefixMenuSymbol('书签配置文件管理', '▤'),
     )
     assert.equal(
       englishCommands.get('codebookmark.manageBookmarkConfigurations')?.title,
-      '$(files) Bookmark Configuration Manager',
+      prefixMenuSymbol('Bookmark Configuration Manager', '▤'),
     )
     const moreMenu = manifest.contributes.menus['codebookmark.moreSubmenu']
-    const identities = moreMenu.map(item => item.command ?? item.submenu)
-    assert.deepEqual(identities.slice(-5), [
-      'codebookmark.bookmark.sort',
-      'codebookmark.exchangeSubmenu',
-      'codebookmark.manageBookmarkConfigurations',
-      'codebookmark.openHelp',
-      'codebookmark.openSettings',
+    assert.deepEqual(moreMenu.slice(-5), [
+      { command: 'codebookmark.bookmark.sort', group: '1_primary@1' },
+      { submenu: 'codebookmark.exchangeSubmenu', group: '1_primary@2' },
+      { command: 'codebookmark.manageBookmarkConfigurations', group: '1_primary@3' },
+      { command: 'codebookmark.openSettings', group: '2_secondary@1' },
+      { command: 'codebookmark.openHelp', group: '2_secondary@2' },
     ])
     const manageItem = moreMenu.find(item => item.command === 'codebookmark.manageBookmarkConfigurations')
     const exportItem = moreMenu.find(item => item.submenu === 'codebookmark.exchangeSubmenu')
-    assert.notEqual(manageItem.group.split('@', 1)[0], exportItem.group.split('@', 1)[0])
+    const settingsItem = moreMenu.find(item => item.command === 'codebookmark.openSettings')
+    assert.equal(manageItem.group.split('@', 1)[0], exportItem.group.split('@', 1)[0])
+    assert.notEqual(manageItem.group.split('@', 1)[0], settingsItem.group.split('@', 1)[0])
 
     const commandSource = fs.readFileSync('src/commands/bookmarkCommands.ts', 'utf8')
     const panelSource = fs.readFileSync('src/providers/BookmarkConfigurationManagerWebview.ts', 'utf8')

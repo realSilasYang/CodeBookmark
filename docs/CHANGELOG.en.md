@@ -2,6 +2,20 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.1 - 2026-07-30
+
+### 🚀 Improvements
+
+- **Native menu symbol system:** Dropdown menus that VS Code renders as plain text now receive consistent, semantic Unicode symbols across 41 commands and 11 submenus. Add and remove, sorting, import and export, configuration management, settings, and help use glyphs with closer visual proportions, separated from their labels by a full-width space. Title bars, inline tree actions, and other surfaces that support Codicons continue to use native icons.
+- **Menu organization and localized documentation:** The More menu now lists Sort Mode, Import/Export Bookmarks, and Bookmark Configuration Manager in order, followed after a separator by CodeBookmark Settings and the User Guide. The donation section wording is also aligned across all 13 README languages.
+
+---
+
+### 🐛 Fixed
+
+- **Missing dropdown-menu icons:** Titles rendered through VS Code surfaces that strip icon syntax no longer contain ineffective `$(...)` placeholders. Symbols are applied centrally while building the extension manifest, preventing dropdowns from losing their icons or exposing placeholder text.
+- **Real-host regression timing:** The cross-file bookmark movement test now waits for file-watcher refreshes and persisted workspace layout updates to converge before asserting the final tree, avoiding intermediate-state failures on slower hosts while still checking source-file nodes and bookmark ownership.
+
 ## 🎉 Version 3.2.0 - 2026-07-26
 
 ### ⚠️ Important Notes

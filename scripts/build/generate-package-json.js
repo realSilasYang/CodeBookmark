@@ -14,6 +14,7 @@ const {
   buildManifestLocalizationFiles,
   discoverManifestCatalogs,
 } = require('../lib/manifest-language-catalogs');
+const { menuSymbolForManifestPath, prefixMenuSymbol } = require('../lib/manifest-menu-symbols');
 
 const root = path.resolve(__dirname, '../..');
 const customPackageJsonPath = path.join(root, 'package.json');
@@ -131,7 +132,7 @@ function localizeManifestValue(value, pathSegments = []) {
       if (/[\u3400-\u9fff]/u.test(value)) {
         throw new Error(`Missing manifest catalog entry at ${pathSegments.join('.')}: ${value}`);
       }
-      return value;
+      return prefixMenuSymbol(value, menuSymbolForManifestPath(pathSegments));
     }
     if (chinese !== value) {
       throw new Error(`Stale Chinese manifest catalog entry ${key}: expected ${JSON.stringify(value)}, received ${JSON.stringify(chinese)}`);

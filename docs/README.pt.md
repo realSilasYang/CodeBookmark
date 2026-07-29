@@ -14,7 +14,7 @@ CodeBookmark é uma extensão do VS Code para marcar e navegar pelo código. O m
 
 # Doações
 
-Se a navegação por favoritos e a assistência de IA poupam seu tempo, você pode oferecer um chá com leite ao autor usando um dos códigos QR abaixo.
+Se a navegação por favoritos e a assistência de IA poupam seu tempo, você pode ajudar o autor a sair da pobreza por uma das opções abaixo (≥Д≤).
 
 <div align="center">
   <table>

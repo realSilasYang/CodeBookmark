@@ -10,7 +10,7 @@ CodeBookmark ist eine VS-Code-Erweiterung zum Markieren und Navigieren von Code.
 
 # Spenden
 
-Wenn Lesezeichen-Navigation und KI-Unterstützung Ihnen Zeit sparen, können Sie dem Autor über einen der QR-Codes unten einen Milchtee spendieren.
+Wenn Ihnen die Lesezeichen-Navigation und KI-Unterstützung Zeit sparen, können Sie dem Autor mit einer der folgenden Möglichkeiten aus der Armut helfen (≥Д≤).
 
 <div align="center">
   <table>

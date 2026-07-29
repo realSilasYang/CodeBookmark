@@ -15,9 +15,9 @@ CodeBookmark는 코드에 북마크를 붙이고 빠르게 이동하기 위한 V
 
 [![CodeBookmark 화면](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# 후원
+# 기부
 
-북마크 탐색과 AI 지원으로 시간을 절약했다면, 아래 QR 코드로 개발자에게 밀크티 한 잔을 후원할 수 있습니다!
+북마크 탐색과 AI 지원으로 시간을 절약했다면, 아래 방법으로 개발자의 빈곤 탈출을 도와주세요 (≥Д≤).
 
 <div align="center">
   <table>

@@ -202,7 +202,7 @@ export class Commands {
 		},
 		sort: {
 			'command': Commands.nameExtension + '.bookmark.sort',
-			'title': '$(list-selection) 排序模式',
+			'title': '排序模式',
 			'icon': '$(list-selection)',
 			'when': `${this.viewCodeBookmarkView}`,
 			'enablement': `${this.varHasBookmark}`,
@@ -210,14 +210,14 @@ export class Commands {
 		},
 		openSettings: {
 			'command': Commands.nameExtension + '.openSettings',
-			'title': '$(settings) 代码书签设置',
+			'title': '代码书签设置',
 			'icon': '$(settings)',
 			'when': `${this.viewCodeBookmarkView}`,
 			"category": "代码书签"
 		},
 		openHelp: {
 			'command': Commands.nameExtension + '.openHelp',
-			'title': '$(info) 使用说明',
+			'title': '使用说明',
 			'icon': '$(info)',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			"category": "代码书签"
@@ -230,106 +230,106 @@ export class Commands {
 		},
 		manageBookmarkConfigurations: {
 			'command': Commands.nameExtension + '.manageBookmarkConfigurations',
-			'title': '$(files) 书签配置文件管理',
+			'title': '书签配置文件管理',
 			'icon': '$(files)',
 			'when': `${Commands.viewCodeBookmarkView}`,
 			"category": "代码书签"
 		},
 		aiGenerateAppend: {
 			'command': Commands.nameExtension + '.ai.generateAppend',
-			'title': '$(add) 追加',
+			'title': '追加',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateOverwrite: {
 			'command': Commands.nameExtension + '.ai.generateOverwrite',
-			'title': '$(replace) 重新生成并替换',
+			'title': '重新生成并替换',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateSkip: {
 			'command': Commands.nameExtension + '.ai.generateSkip',
-			'title': '$(diff-added) 生成',
+			'title': '生成',
 			'when': `${Commands.viewCodeBookmarkView} && !${Commands.varActiveFileHasBookmark}`,
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiOptimize: {
 			'command': Commands.nameExtension + '.ai.optimize',
-			'title': '$(hubot) 当前脚本',
+			'title': '当前脚本',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiOptimizeDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeDirect',
-			'title': '$(hubot) 优化当前脚本的书签标签',
+			'title': '优化当前脚本的书签标签',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiOptimizeFolderDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeFolderDirect',
-			'title': '$(hubot) 优化当前文件夹内有书签的脚本中的书签标签',
+			'title': '优化当前文件夹内有书签的脚本中的书签标签',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiOptimizeSelectedDirect: {
 			'command': Commands.nameExtension + '.ai.optimizeSelectedDirect',
-			'title': '$(hubot) 优化选中书签的标签',
+			'title': '优化选中书签的标签',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiOptimizeSelected: {
 			'command': Commands.nameExtension + '.ai.optimizeSelected',
-			'title': '$(hubot) 选中的书签',
+			'title': '选中的书签',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateAppendFolder: {
 			'command': Commands.nameExtension + '.ai.generateAppendFolder',
-			'title': '$(add) 为有书签的脚本追加',
+			'title': '为有书签的脚本追加',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateOverwriteFolder: {
 			'command': Commands.nameExtension + '.ai.generateOverwriteFolder',
-			'title': '$(replace) 为有书签的脚本重新生成并替换',
+			'title': '为有书签的脚本重新生成并替换',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateAppendFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateAppendFolderDirect',
-			'title': '$(add) 为当前文件夹内有书签的脚本追加',
+			'title': '为当前文件夹内有书签的脚本追加',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateOverwriteFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateOverwriteFolderDirect',
-			'title': '$(replace) 为当前文件夹内有书签的脚本重新生成并替换',
+			'title': '为当前文件夹内有书签的脚本重新生成并替换',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateSkipFolder: {
 			'command': Commands.nameExtension + '.ai.generateSkipFolder',
-			'title': '$(diff-added) 为所有无书签脚本生成',
+			'title': '为所有无书签脚本生成',
 			'when': `${Commands.viewCodeBookmarkView} && ${Commands.varCurrentFolderHasUnbookmarkedScript}`,
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiGenerateSkipFolderDirect: {
 			'command': Commands.nameExtension + '.ai.generateSkipFolderDirect',
-			'title': '$(diff-added) 为当前文件夹内无书签脚本生成',
+			'title': '为当前文件夹内无书签脚本生成',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiOptimizeFolder: {
 			'command': Commands.nameExtension + '.ai.optimizeFolder',
-			'title': '$(hubot) 当前文件夹内有书签的脚本',
+			'title': '当前文件夹内有书签的脚本',
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
 		},
 		aiOptimizeContextItem: {
 			'command': Commands.nameExtension + '.ai.optimizeContextItem',
-			'title': '$(hubot) AI 优化书签标签',
+			'title': 'AI 优化书签标签',
 			'when': `${Commands.viewCodeBookmarkView} && ${Commands.editableBookmarkOnTree}`,
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
@@ -342,7 +342,7 @@ export class Commands {
 		},
 		aiOpenSettings: {
 			'command': Commands.nameExtension + '.ai.openSettings',
-			'title': '$(settings) AI 配置',
+			'title': 'AI 配置',
 			'icon': '$(settings)',
 			"category": "代码书签",
 		},
@@ -418,7 +418,7 @@ export class Commands {
 		},
 		clearInvalidBookmarks: {
 			'command': Commands.nameExtension + '.clearInvalidBookmarks',
-			'title': '$(trash) 清除失效书签',
+			'title': '清除失效书签',
 			'when': `bookmarks.var.bookmark.hasInvalid`,
 			'category': '代码书签'
 		}
@@ -522,9 +522,9 @@ export class Commands {
 		{ command: this.bookmarkCommands.clearInvalidBookmarks.command, group: "0_clear@1", when: this.bookmarkCommands.clearInvalidBookmarks.when },
 		{ command: this.bookmarkCommands.sort.command, group: "1_primary@1" },
 		{ submenu: this.exchangeSubmenuId, group: "1_primary@2" },
-		{ command: this.bookmarkCommands.manageBookmarkConfigurations.command, group: "2_secondary@1" },
-		{ command: this.bookmarkCommands.openHelp.command, group: "2_secondary@2" },
-		{ command: this.bookmarkCommands.openSettings.command, group: "2_secondary@3" }
+		{ command: this.bookmarkCommands.manageBookmarkConfigurations.command, group: "1_primary@3" },
+		{ command: this.bookmarkCommands.openSettings.command, group: "2_secondary@1" },
+		{ command: this.bookmarkCommands.openHelp.command, group: "2_secondary@2" }
 	]
 
 	static exchangeSubmenu_items = [

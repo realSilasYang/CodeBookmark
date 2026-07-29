@@ -4,6 +4,7 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
+const { decorateManifestMessages } = require('./manifest-menu-symbols')
 
 const DEFAULT_MANIFEST_LOCALE = 'zh-cn'
 const ENGLISH_MANIFEST_LOCALE = 'en'
@@ -94,11 +95,13 @@ function discoverManifestCatalogs(catalogRoot) {
 }
 
 function buildManifestLocalizationFiles(catalogs) {
-	const chineseMessages = catalogs.get(DEFAULT_MANIFEST_LOCALE)
-	const englishMessages = catalogs.get(ENGLISH_MANIFEST_LOCALE)
+	const decoratedCatalogs = new Map([...catalogs]
+		.map(([locale, messages]) => [locale, decorateManifestMessages(messages)]))
+	const chineseMessages = decoratedCatalogs.get(DEFAULT_MANIFEST_LOCALE)
+	const englishMessages = decoratedCatalogs.get(ENGLISH_MANIFEST_LOCALE)
 	const files = new Map([['package.nls.json', chineseMessages]])
 
-	for (const [locale, messages] of catalogs) {
+	for (const [locale, messages] of decoratedCatalogs) {
 		files.set('package.nls.' + locale + '.json', messages)
 	}
 	for (const locale of SIMPLIFIED_CHINESE_MANIFEST_LOCALES) {
@@ -108,7 +111,7 @@ function buildManifestLocalizationFiles(catalogs) {
 	for (const [alias, sourceLocale] of Object.entries(TRADITIONAL_CHINESE_MANIFEST_ALIASES)) {
 		const fileName = 'package.nls.' + alias + '.json'
 		if (files.has(fileName)) continue
-		const messages = catalogs.get(sourceLocale)
+		const messages = decoratedCatalogs.get(sourceLocale)
 		if (!messages) throw new Error('Missing manifest catalog required by alias ' + alias + ': ' + sourceLocale)
 		files.set(fileName, messages)
 	}
@@ -116,7 +119,7 @@ function buildManifestLocalizationFiles(catalogs) {
 		const fileName = 'package.nls.' + locale + '.json'
 		if (files.has(fileName)) continue
 		const sourceLocale = NON_CHINESE_MANIFEST_ALIASES[locale]
-		const messages = sourceLocale ? catalogs.get(sourceLocale) : englishMessages
+		const messages = sourceLocale ? decoratedCatalogs.get(sourceLocale) : englishMessages
 		if (!messages) throw new Error('Missing manifest catalog required by alias ' + locale + ': ' + sourceLocale)
 		files.set(fileName, messages)
 	}

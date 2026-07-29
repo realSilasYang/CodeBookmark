@@ -14,7 +14,7 @@ CodeBookmark est une extension VS Code destinée au balisage et à la navigation
 
 # Faire un don
 
-Si la navigation par signets et l’assistance IA vous font gagner du temps, vous pouvez offrir un thé au lait à l’auteur grâce à l’un des codes QR ci-dessous.
+Si la navigation par signets et l’assistance IA vous font gagner du temps, vous pouvez aider l’auteur à sortir de la pauvreté par l’un des moyens ci-dessous (≥Д≤).
 
 <div align="center">
   <table>

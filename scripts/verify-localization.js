@@ -260,7 +260,7 @@ for (const locale of [...englishFallbackLocales, 'en-US']) {
 }
 assert.deepEqual(
 	readJson('package.nls.pt-br.json'),
-	sourceManifestCatalogs.get('pt'),
+	expectedLocalizationFiles.get('package.nls.pt-br.json'),
 	'pt-BR manifest localization must use the manually reviewed Portuguese catalog',
 )
 assert.match(

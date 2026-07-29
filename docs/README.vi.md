@@ -15,9 +15,9 @@ CodeBookmark là tiện ích VS Code để đánh dấu và điều hướng mã
 
 [![Giao diện CodeBookmark](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# Ủng hộ
+# Quyên góp
 
-Nếu tính năng điều hướng dấu trang và hỗ trợ AI giúp bạn tiết kiệm thời gian, bạn có thể dùng một trong hai mã QR bên dưới để mời tác giả một ly trà sữa!
+Nếu tính năng điều hướng dấu trang và hỗ trợ AI giúp bạn tiết kiệm thời gian, bạn có thể chọn một trong các cách dưới đây để giúp tác giả thoát nghèo (≥Д≤).
 
 <div align="center">
   <table>

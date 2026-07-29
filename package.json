@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -413,19 +413,19 @@
       },
       {
         "command": "codebookmark.exportToMarkdown",
-        "title": "Markdown",
+        "title": "#　Markdown",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.exportToHtml",
-        "title": "HTML",
+        "title": "⟨⟩　HTML",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.exportToCsv",
-        "title": "CSV",
+        "title": "▦　CSV",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
@@ -449,19 +449,19 @@
       },
       {
         "command": "codebookmark.batchExportToMarkdown",
-        "title": "Markdown",
+        "title": "#　Markdown",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.batchExportToHtml",
-        "title": "HTML",
+        "title": "⟨⟩　HTML",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
       {
         "command": "codebookmark.batchExportToCsv",
-        "title": "CSV",
+        "title": "▦　CSV",
         "enablement": "bookmarks.var.bookmark.hasBookmark",
         "category": "%codebookmark.common.commandCategory%"
       },
@@ -1251,15 +1251,15 @@
         },
         {
           "command": "codebookmark.manageBookmarkConfigurations",
+          "group": "1_primary@3"
+        },
+        {
+          "command": "codebookmark.openSettings",
           "group": "2_secondary@1"
         },
         {
           "command": "codebookmark.openHelp",
           "group": "2_secondary@2"
-        },
-        {
-          "command": "codebookmark.openSettings",
-          "group": "2_secondary@3"
         }
       ],
       "codebookmark.exchangeSubmenu": [
