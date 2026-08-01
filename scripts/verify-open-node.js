@@ -1,6 +1,6 @@
 /**
- * 验证书签跳转会复用已经打开的目标标签，并把尚未打开的跨文件目标创建为固定新标签。
- * 测试通过命令注册入口执行真实跳转策略，同时核对可见编辑器优先于后台标签组。
+ * 验证书签跳转使用扩展自己的 showTextDocument 打开流程。
+ * 普通未打开目标始终打开为固定标签；已打开的目标文件继续复用原编辑器列。
  */
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -9,6 +9,7 @@ const { installModuleMocks } = require('./test-support/module-mocks')
 
 const commands = new Map()
 const shown = []
+const eventOrder = []
 const documents = new Map()
 const uri = fsPath => ({
   scheme: 'file',
@@ -41,12 +42,14 @@ class Selection extends Range {}
 const sourceUri = uri('src/source.ts')
 const targetUri = uri('src/target.ts')
 const activeEditor = { document: documentFor(sourceUri), viewColumn: 1 }
+const welcomeTab = { input: undefined }
 const tabGroups = { all: [] }
 const window = {
   activeTextEditor: activeEditor,
   visibleTextEditors: [activeEditor],
   tabGroups,
   showTextDocument: async (document, options) => {
+    eventOrder.push('show')
     const editor = { document, viewColumn: options.viewColumn, revealRange() {} }
     shown.push({ document, options, editor })
     return editor
@@ -61,7 +64,10 @@ const { vscode } = createVscodeFake({
   ViewColumn: { Active: -1 },
   window,
   workspace: { openTextDocument: async fileUri => documentFor(fileUri) },
-  commands: { registerCommand: (command, handler) => { commands.set(command, handler); return { dispose() {} } } },
+  commands: {
+    registerCommand: (command, handler) => { commands.set(command, handler); return { dispose() {} } },
+    executeCommand: async command => { throw new Error(`Unexpected command execution: ${command}`) },
+  },
 })
 const restoreModules = installModuleMocks({
   vscode,
@@ -81,7 +87,25 @@ async function main() {
       end: { line: 1, column: 7 },
     }
 
+    vscode.window.activeTextEditor = undefined
+    vscode.window.visibleTextEditors = []
+    tabGroups.all = [{ viewColumn: 1, tabs: [welcomeTab] }]
     await open(bookmark)
+    assert.deepEqual(eventOrder, ['show'])
+    assert.deepEqual(shown.at(-1).options, { viewColumn: -1, preserveFocus: false, preview: false })
+
+    vscode.window.activeTextEditor = activeEditor
+    vscode.window.visibleTextEditors = [activeEditor]
+    tabGroups.all = [{
+      viewColumn: 9,
+      tabs: [
+        { input: undefined },
+        { input: {} },
+        { input: { uri: sourceUri } },
+      ],
+    }]
+    await open(bookmark)
+    assert.deepEqual(eventOrder, ['show', 'show'])
     assert.deepEqual(shown.at(-1).options, { viewColumn: 1, preserveFocus: false, preview: false })
 
     tabGroups.all = [{

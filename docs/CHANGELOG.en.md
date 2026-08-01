@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.2 - 2026-08-01
+
+### 🚀 Improvements
+
+- **Interface overview screenshot:** The README overview image now uses the latest dark-theme screenshot as the single interface preview, showing the bookmark tree, hover actions, and script positioning in one place.
+- **Dropdown symbol polish:** Native dropdown menu symbols continue to be refined, with adjusted glyphs for bookmark toggling, add, and delete actions so menu entries stay visually balanced.
+
+---
+
+### 🐛 Fixed
+
+- **Welcome page and non-text tab navigation:** Bookmark navigation is back on the extension's original showTextDocument opening flow and no longer tries to close or replace the VS Code Welcome page. Background tab inputs are now read defensively so Welcome, Settings, and other non-text tabs do not trigger uri access errors.
+
 ## 🎉 Version 3.2.1 - 2026-07-30
 
 ### 🚀 Improvements

@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 版本 3.2.2 - 2026-08-01
+
+### 🚀 优化
+
+- **界面概览截图**：README 的界面概览统一替换为最新深色主题截图，只保留一个展示实际书签树、悬浮操作按钮和脚本定位效果的入口图。
+- **下拉菜单符号细节**：继续收敛原生下拉菜单的 Unicode 符号，调整书签切换、追加和删除入口的字形，使不同菜单项的视觉尺寸更一致。
+
+---
+
+### 🐛 修复
+
+- **欢迎页与非文本标签跳转**：书签跳转恢复为扩展原有的 showTextDocument 打开流程，不再尝试关闭或替代 VS Code 欢迎页；同时安全读取后台标签输入，避免欢迎页、设置页等非文本标签触发 uri 读取异常。
+
 ## 🎉 版本 3.2.1 - 2026-07-30
 
 ### 🚀 优化

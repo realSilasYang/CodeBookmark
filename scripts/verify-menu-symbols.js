@@ -17,8 +17,17 @@ const sourceCatalogs = discoverManifestCatalogs(path.join(__dirname, 'i18n', 'ca
 const chineseManifest = loadLocalizedManifest('zh-cn')
 
 assert.equal(MENU_SYMBOL_SEPARATOR, '\u3000', '菜单符号与文案之间必须使用一个全角空格')
-assert.equal(prefixMenuSymbol('菜单', '◆'), '◆\u3000菜单', '菜单符号前缀格式必须保持稳定')
+assert.equal(prefixMenuSymbol('菜单', '＊'), '＊\u3000菜单', '菜单符号前缀格式必须保持稳定')
 assert.equal(prefixMenuSymbol('菜单'), '菜单', '没有符号时不得改变菜单文案')
+assert.deepEqual(
+	[
+		MENU_COMMAND_SYMBOLS['codebookmark.toggleBookmark'],
+		MENU_COMMAND_SYMBOLS['codebookmark.forceAddBookmark'],
+		MENU_COMMAND_SYMBOLS['codebookmark.forceDeleteBookmark'],
+	],
+	['＊', '＋', '－'],
+	'切换、添加、删除必须使用同一全角符号字族，保持菜单字宽与视觉中心一致',
+)
 
 function dropdownReferences(manifest) {
 	const commandIds = new Set()

@@ -37,13 +37,13 @@ const MENU_COMMAND_SYMBOLS = Object.freeze({
 	'codebookmark.exportToHtml': '⟨⟩',
 	'codebookmark.exportToMarkdown': '#',
 	'codebookmark.exportToText': '≡',
-	'codebookmark.forceAddBookmark': '⊕',
-	'codebookmark.forceDeleteBookmark': '⊖',
+	'codebookmark.forceAddBookmark': '＋',
+	'codebookmark.forceDeleteBookmark': '－',
 	'codebookmark.importPortablePackage': '↙',
 	'codebookmark.manageBookmarkConfigurations': '▤',
 	'codebookmark.openHelp': 'ⓘ',
 	'codebookmark.openSettings': '⚙',
-	'codebookmark.toggleBookmark': '◆',
+	'codebookmark.toggleBookmark': '＊',
 })
 
 const MENU_SUBMENU_SYMBOLS = Object.freeze({
@@ -90,6 +90,8 @@ function menuSymbolForManifestPath(pathSegments) {
 }
 
 // 原生菜单无法单独调整符号字号；固定使用一个全角空格稳定分隔符号与文案。
+// 同组操作优先选用同一全角符号字族，例如切换、添加、删除分别使用 ＊、＋、－。
+// VS Code 原生菜单无法给符号列单独设宽，使用等宽全角符号能稳定对齐文案起点。
 const MENU_SYMBOL_SEPARATOR = '\u3000'
 
 function prefixMenuSymbol(value, symbol) {

@@ -22,11 +22,24 @@ function openedViewColumn(fileUri: vscode.Uri): vscode.ViewColumn | undefined {
 	if (visibleEditor?.viewColumn) return visibleEditor.viewColumn
 	for (const group of vscode.window.tabGroups?.all ?? []) {
 		for (const tab of group.tabs) {
-			const input = tab.input as { uri?: vscode.Uri }
-			if (sameDocumentUri(input.uri, fileUri)) return group.viewColumn
+			if (tabInputUris(tab.input).some(uri => sameDocumentUri(uri, fileUri))) return group.viewColumn
 		}
 	}
 	return undefined
+}
+
+function isComparableUri(value: unknown): value is vscode.Uri {
+	if (!value || typeof value !== 'object') return false
+	const candidate = value as { scheme?: unknown, fsPath?: unknown, toString?: unknown }
+	return typeof candidate.scheme === 'string'
+		&& typeof candidate.toString === 'function'
+		&& (candidate.scheme !== 'file' || typeof candidate.fsPath === 'string')
+}
+
+function tabInputUris(input: unknown): vscode.Uri[] {
+	if (!input || typeof input !== 'object') return []
+	const candidate = input as { uri?: unknown, original?: unknown, modified?: unknown }
+	return [candidate.uri, candidate.original, candidate.modified].filter(isComparableUri)
 }
 
 export function openNodeCommand(context: vscode.ExtensionContext) {
@@ -41,15 +54,8 @@ export function openNodeCommand(context: vscode.ExtensionContext) {
 					? bookmark.resourceUri
 					: fileUtils.relativeToUri(bookmark.path)
 				const existingColumn = openedViewColumn(fileUri)
-				const fallbackColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active
 				const document = await vscode.workspace.openTextDocument(fileUri)
-				const editor = await vscode.window.showTextDocument(document, existingColumn
-					? { viewColumn: existingColumn, preserveFocus: false }
-					: { viewColumn: fallbackColumn, preserveFocus: false, preview: false })
-				if (bookmark.isFile) {
-					editor.selection = new vscode.Selection(0, 0, 0, 0)
-					return
-				}
+				const fallbackColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active
 
 				const clampPosition = (lineValue: unknown, columnValue: unknown): vscode.Position => {
 					const rawLine = typeof lineValue === 'number' && Number.isFinite(lineValue) ? Math.floor(lineValue) : 0
@@ -59,17 +65,24 @@ export function openNodeCommand(context: vscode.ExtensionContext) {
 					return new vscode.Position(line, column)
 				}
 
-				const start = clampPosition(bookmark.start?.line, bookmark.start?.column)
-				const end = clampPosition(bookmark.end?.line, bookmark.end?.column)
+				const start = bookmark.isFile ? new vscode.Position(0, 0) : clampPosition(bookmark.start?.line, bookmark.start?.column)
+				const end = bookmark.isFile ? new vscode.Position(0, 0) : clampPosition(bookmark.end?.line, bookmark.end?.column)
 				let range = new vscode.Range(start, end)
-				if (start.isEqual(end)) {
+				if (!bookmark.isFile && start.isEqual(end)) {
 					const line = document.lineAt(start.line)
 					const indentation = line.text.length - line.text.trimStart().length
 					range = new vscode.Range(new vscode.Position(line.lineNumber, indentation), line.range.end)
 				}
 
+				const editor = await vscode.window.showTextDocument(document, existingColumn
+					? { viewColumn: existingColumn, preserveFocus: false }
+					: {
+						viewColumn: fallbackColumn,
+						preserveFocus: false,
+						preview: false,
+					})
 				editor.selection = new vscode.Selection(range.start, range.end)
-				editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport)
+				if (!bookmark.isFile) editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport)
 			} catch (error) {
 				logger.error(localize("commands.openNodeCommand.failedToOpenBookmark", { path: bookmark.path, error }))
 				void vscode.window.showErrorMessage(localize("commands.openNodeCommand.unableToOpenTheFileForThisBookmark", { path: bookmark.path }))
