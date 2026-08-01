@@ -146,7 +146,7 @@ CodeBookmark は、コードをブックマークで整理し、すばやく移�
 
 Node.js 24 を使用します。`npm run verify` はコンパイル、ESLint、単体・契約テストと開発中に成立するすべての専門検証を実行し、`npm run verify:release` は確定済みのバージョン資料を検証します。`npm run test:integration` はローカル VS Code を再利用して 13 言語と英語フォールバックを確認し、`npm run check:release` はこれらに依存監査と VSIX 内容確認を加えて一括実行します。
 
-リリースは `main` 履歴上の注釈付きタグだけを受け付けます。GitHub Actions は OIDC の短期資格情報で Marketplace へ公開し、オンライン VSIX のハッシュを照合してから VSIX、CycloneDX SBOM、`SHA256SUMS` を含む GitHub Release を作成します。詳細は[リリースガイド](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md)を参照してください。
+リリースは `main` 履歴上の注釈付きタグだけを受け付けます。GitHub Actions は OIDC の短期資格情報で Marketplace へ公開し、オンライン VSIX のハッシュを照合してから VSIX のみを含む GitHub Release を作成し、SBOM や `SHA256SUMS` は提供しません。詳細は[リリースガイド](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md)を参照してください。
 
 # Star の推移
 

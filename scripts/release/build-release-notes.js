@@ -49,8 +49,6 @@ const artifactNotes = [
   '## 📦 发布文件说明',
   '',
   `- \`codebookmark-${version}.vsix\`：VS Code 扩展离线安装包。`,
-  `- \`codebookmark-${version}.sbom.cdx.json\`：软件物料清单（SBOM），用于核查发布包中的组件与依赖。`,
-  '- `SHA256SUMS`：发布文件的 SHA-256 校验值，用于验证下载内容是否完整且未经更改。',
 ].join('\n')
 const releaseNotes = `# 🎉 CodeBookmark v${version} 更新日志\n\n${releaseSections}\n\n${artifactNotes}\n`
 fs.mkdirSync(path.dirname(path.resolve(outputFile)), { recursive: true })

@@ -87,7 +87,7 @@ CodeBookmark — расширение VS Code для разметки кода �
 
 Проект использует Node.js 24. `npm run verify` запускает компиляцию, ESLint, модульные и контрактные тесты и все проверки, применимые во время разработки; `npm run verify:release` проверяет окончательные материалы версии. `npm run test:integration` повторно использует установленный VS Code в изоляции для 13 языков и английского варианта по умолчанию; `npm run check:release` объединяет все эти проверки с аудитом и просмотром состава VSIX.
 
-Публикуются только аннотированные теги из истории `main`. GitHub Actions использует краткоживущие OIDC-данные, публикует Marketplace, сравнивает хеш удалённого VSIX и создаёт Release с VSIX, CycloneDX SBOM и `SHA256SUMS`. См. [руководство по выпуску](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
+Публикуются только аннотированные теги из истории `main`. GitHub Actions использует краткоживущие OIDC-данные, публикует Marketplace, сравнивает хеш удалённого VSIX и создаёт Release только с VSIX, без SBOM и `SHA256SUMS`. См. [руководство по выпуску](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 
 # История звёзд
 

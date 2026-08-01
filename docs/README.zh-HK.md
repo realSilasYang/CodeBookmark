@@ -165,7 +165,7 @@ AI 可為目前程式檔或工作區內無書籤的程式檔產生書籤，也�
 
 使用 Node.js 24。`npm run verify` 執行編譯、ESLint、單元測試、契約測試及全部適用於開發階段的專項驗證；`npm run verify:release` 核對已完成的正式版本資料。`npm run test:integration` 重用本機 VS Code，在隔離使用者目錄測試 13 種語言及英語回退；`npm run check:release` 將以上檢查連同依賴審計和 VSIX 清單檢查一併執行。
 
-發佈只接受屬於 `main` 歷史的註解標籤。GitHub Actions 以 OIDC 短期憑證發佈 Marketplace，核對線上 VSIX 哈希，再建立包含 VSIX、CycloneDX SBOM 和 `SHA256SUMS` 的 GitHub Release。詳細流程見[發佈指南](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.md)。
+發佈只接受屬於 `main` 歷史的註解標籤。GitHub Actions 以 OIDC 短期憑證發佈 Marketplace，核對線上 VSIX 哈希，再建立只包含 VSIX 的 GitHub Release，不再提供 SBOM 或 `SHA256SUMS`。詳細流程見[發佈指南](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.md)。
 
 # Star 歷史趨勢
 

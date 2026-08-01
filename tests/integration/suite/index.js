@@ -228,23 +228,33 @@ async function run() {
   assert.equal(otherFile.children[0].ownerScriptId, otherScriptId)
 
   await extensionApi.integration.moveNode(otherBookmarkId, firstFile.id)
+  await extensionApi.integration.reload()
   // 配置文件写入会唤醒真实文件监听器；较慢的远端主机可能正好在监听器刷新
-  // 交换树快照时返回中间状态。等待完整拓扑重新出现，验证最终用户可见结果，
-  // 同时仍要求来源文件节点保留且为空，不能把缺失节点误当作成功。
+  // 交换树快照时返回中间状态。等待完整拓扑重新出现，验证最终用户可见结果。
+  // 来源文件的普通书签已经跨文件显示到目标树下，重载后来源文件根可以隐藏，
+  // 但如果仍然显示，必须是空节点，不能残留重复子节点。
   await waitFor(() => {
     snapshot = extensionApi.integration.snapshot()
     const targetRoot = snapshot.roots.find(root => root.path === 'externally-moved.ts')
     const sourceRoot = snapshot.roots.find(root => root.path === 'other.ts')
-    assert.ok(targetRoot)
-    assert.ok(sourceRoot)
+    const rootSummary = JSON.stringify(snapshot.roots.map(root => ({
+      path: root.path,
+      id: root.id,
+      children: root.children.map(child => ({
+        id: child.id,
+        ownerScriptId: child.ownerScriptId,
+        parentId: child.parentId,
+      })),
+    })))
+    assert.ok(targetRoot, `Missing target file root. roots=${rootSummary}`)
+    if (sourceRoot) assert.equal(sourceRoot.children.length, 0)
     const moved = targetRoot.children.find(child => child.id === otherBookmarkId)
     assert.ok(moved)
     assert.equal(moved.ownerScriptId, otherScriptId)
     assert.equal(moved.parentId, firstFile.id)
     assert.equal(moved.treeDepth, 1)
-    assert.equal(sourceRoot.children.length, 0)
     return moved
-  }, 'Cross-file bookmark move did not settle into the persisted workspace layout')
+  }, 'Cross-file bookmark move did not settle into the persisted workspace layout', 30_000)
 
   const otherConfiguration = JSON.parse(await fs.readFile(path.join(scriptsFolder, `${otherScriptId}.json`), 'utf8'))
   assert.deepEqual(otherConfiguration.bookmarks.map(item => item.id), [otherBookmarkId])

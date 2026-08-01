@@ -1,6 +1,6 @@
 /**
- * 检查发布工具版本、GitHub Actions 固定 SHA、标签来源和证明步骤。
- * 测试直接读取工作流与锁文件，确保正式发布不能绕过 main 历史或引入漂移依赖。
+ * 检查发布工具版本、GitHub Actions 固定 SHA、标签来源和单 VSIX 附件边界。
+ * 测试直接读取工作流、锁文件和打包脚本，确保正式发布不能绕过 main 历史或在本地留下产物。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -34,16 +34,21 @@ describe('release supply chain', () => {
     }
   })
 
-  it('requires main-history provenance and publishes verifiable artifacts', () => {
+  it('requires main-history provenance and publishes only the runner-temp VSIX', () => {
     const workflow = read('.github/workflows/release.yml')
     const ci = read('.github/workflows/ci.yml')
+    const packageVsixScript = read('scripts/release/package-vsix.js')
     assert.match(ci, /runner\.temp.*codebookmark-ci\.vsix/)
     assert.match(workflow, /git merge-base --is-ancestor \$tagCommit origin\/main/)
-    assert.match(workflow, /actions\/attest-build-provenance@[0-9a-f]{40}/)
-    assert.match(workflow, /actions\/attest-sbom@[0-9a-f]{40}/)
-    assert.match(workflow, /write-sha256sums\.js \$sums \$vsix \$sbom/)
-    assert.match(workflow, /\$vsix \$sbom \$sums/)
     assert.match(workflow, /Join-Path \$env:RUNNER_TEMP "codebookmark-release"/)
+    assert.match(workflow, /npm run package:vsix -- --out \$vsix/)
+    assert.match(workflow, /gh release upload \$env:GITHUB_REF_NAME \$vsix --clobber/)
+    assert.match(workflow, /gh release create \$env:GITHUB_REF_NAME \$vsix `/)
+    assert.doesNotMatch(workflow, /CycloneDX|SHA256SUMS|SBOM|attest-build-provenance|attest-sbom/)
+    assert.doesNotMatch(workflow, /\$sbom|\$sums|write-sha256sums/)
     assert.doesNotMatch(workflow, /\$vsix = "codebookmark-\$version\.vsix"/)
+    assert.match(packageVsixScript, /GITHUB_ACTIONS/)
+    assert.match(packageVsixScript, /RUNNER_TEMP/)
+    assert.doesNotMatch(packageVsixScript, /process\.env\.CI/)
   })
 })

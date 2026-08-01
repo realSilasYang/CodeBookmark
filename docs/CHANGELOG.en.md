@@ -8,12 +8,13 @@
 
 - **Interface overview screenshot:** The README overview image now uses the latest dark-theme screenshot as the single interface preview, showing the bookmark tree, hover actions, and script positioning in one place.
 - **Dropdown symbol polish:** Native dropdown menu symbols continue to be refined, with adjusted glyphs for bookmark toggling, add, and delete actions so menu entries stay visually balanced.
+- **Remote-only release path:** VSIX packaging, Marketplace publication, and GitHub Release creation now run only in GitHub Actions runner temp. Local release preparation verifies and cleans generated files, while the Release carries a single VSIX.
 
 ---
 
 ### 🐛 Fixed
 
-- **Welcome page and non-text tab navigation:** Bookmark navigation is back on the extension's original showTextDocument opening flow and no longer tries to close or replace the VS Code Welcome page. Background tab inputs are now read defensively so Welcome, Settings, and other non-text tabs do not trigger uri access errors.
+- **Welcome page and non-text tab navigation:** In a folder window where the only open editor is the VS Code Welcome page, bookmark navigation replaces it with the target script. Background tab inputs are now read defensively so Welcome, Settings, and other non-text tabs do not trigger uri access errors.
 
 ## 🎉 Version 3.2.1 - 2026-07-30
 

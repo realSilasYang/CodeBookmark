@@ -42,7 +42,7 @@ npm ci
 npm run check:release
 ```
 
-本地发布准备不生成或保留 VSIX。`package:vsix` 只接受显式的仓库外 `--out` 路径，供 CI、Release 或临时人工检查使用；临时检查完成后应删除产物。CI 与 Release 均写入 runner 临时目录。`package:list` 和 VSIX 打包使用 `devDependencies` 与 `package-lock.json` 中精确固定的 `@vscode/vsce`，发布工作流不临时下载另一份工具。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、13 语 README、中英文 CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。纯 JavaScript 依赖 `fflate` 会被内联到运行时入口，VSIX 不携带外部运行时依赖或原生模块，因此仍是跨平台通用包，不需要 `--target`。
+本地发布准备不生成、推送或保留 VSIX，也不在仓库内外保留任何发布中间物。`package:vsix` 只允许在 GitHub Actions 中执行，必须显式写入 runner 临时目录；本地只运行验证与包内容列表检查。`package:list` 和 VSIX 打包使用 `devDependencies` 与 `package-lock.json` 中精确固定的 `@vscode/vsce`，发布工作流不临时下载另一份工具。包内只应出现单一打包后的 JavaScript 运行时入口、运行时资源、本地化清单、13 语 README、中英文 CHANGELOG、主许可证和第三方许可文件，不应出现仓库维护文档、source map、`src`、`scripts`、测试、`.git`、`.env`、本机路径或书签数据。纯 JavaScript 依赖 `fflate` 会被内联到运行时入口，VSIX 不携带外部运行时依赖或原生模块，因此仍是跨平台通用包，不需要 `--target`。
 
 ## 3. 联动发布 Marketplace 与 GitHub Release
 
@@ -55,7 +55,7 @@ git tag -a v3.0.0 -m "CodeBookmark 3.0.0"
 git push origin v3.0.0
 ```
 
-`.github/workflows/release.yml` 会串行执行全量验证、真实扩展宿主测试、标签身份与 `main` 历史核对、中文 Release 正文生成和 VSIX 打包。它还会生成 CycloneDX SBOM 与 `SHA256SUMS`，通过固定提交 SHA 的 GitHub 官方 Action 为 VSIX 写入构建来源和 SBOM 证明。随后工作流通过 GitHub OIDC 登录 Microsoft Entra ID，使用本地锁定的 `vsce publish --azure-credential --skip-duplicate` 发布 Marketplace，并下载线上包做逐字节 SHA-256 比对；全部通过后，GitHub Release 同时附带 VSIX、SBOM 和校验和。Release 正文来自 `CHANGELOG.md` 的对应版本块。已存在的 Release 会更新正文并覆盖同名附件，失败后可安全重跑；全局 `release` 并发组阻止多个版本同时发布。不要手工补发未经验证的包。
+`.github/workflows/release.yml` 会串行执行全量验证、真实扩展宿主测试、标签身份与 `main` 历史核对、中文 Release 正文生成和 runner 临时目录内的 VSIX 打包。随后工作流通过 GitHub OIDC 登录 Microsoft Entra ID，使用本地锁定的 `vsce publish --azure-credential --skip-duplicate` 发布 Marketplace，并下载线上包做逐字节 SHA-256 比对；全部通过后，GitHub Release 只附带 VSIX，不再提供 SBOM 或 `SHA256SUMS`。Release 正文来自 `CHANGELOG.md` 的对应版本块。已存在的 Release 会更新正文并覆盖同名 VSIX，失败后可安全重跑；全局 `release` 并发组阻止多个版本同时发布。不要手工补发未经验证的包。
 
 ## 4. 配置 VS Code Marketplace 自动发布
 

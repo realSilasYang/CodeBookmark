@@ -44,7 +44,7 @@ npm ci
 npm run check:release
 ```
 
-Local release preparation creates and retains no VSIX. `package:vsix` accepts only an explicit repository-external `--out` path for CI, Release, or a temporary manual check; delete any package created for manual inspection. CI and Release write to runner temporary directories. `package:list` and VSIX packaging use the exact `@vscode/vsce` version pinned in `devDependencies` and `package-lock.json`; release does not download a second tool copy. The package may contain one bundled JavaScript runtime entry point, runtime resources, localization catalogs, all 13 README languages, the Chinese and English changelogs, the main license, and third-party notices/licenses. It must not contain maintenance-only docs, source maps, `src`, scripts, tests, `.git`, `.env`, local paths, or bookmark data. The pure-JavaScript `fflate` dependency is bundled into the runtime entry point, so the VSIX has no external runtime dependency or native module, remains cross-platform, and requires no `--target`.
+Local release preparation creates, pushes, and retains no VSIX or release intermediates. `package:vsix` may run only on GitHub Actions and must write to the runner temporary directory; local preparation runs verification and package listing only. `package:list` and VSIX packaging use the exact `@vscode/vsce` version pinned in `devDependencies` and `package-lock.json`; release does not download a second tool copy. The package may contain one bundled JavaScript runtime entry point, runtime resources, localization catalogs, all 13 README languages, the Chinese and English changelogs, the main license, and third-party notices/licenses. It must not contain maintenance-only docs, source maps, `src`, scripts, tests, `.git`, `.env`, local paths, or bookmark data. The pure-JavaScript `fflate` dependency is bundled into the runtime entry point, so the VSIX has no external runtime dependency or native module, remains cross-platform, and requires no `--target`.
 
 ## 3. Coordinate Marketplace and GitHub Release
 
@@ -57,9 +57,9 @@ git tag -a v3.0.0 -m "CodeBookmark 3.0.0"
 git push origin v3.0.0
 ```
 
-`.github/workflows/release.yml` runs verification, real Extension Host integration in Chinese and English, tag identity and `main`-history checks, release-note generation, and VSIX packaging. It also produces a CycloneDX SBOM and `SHA256SUMS`, then uses official GitHub Actions pinned to full commit SHAs to record build-provenance and SBOM attestations for the VSIX. It signs in to Microsoft Entra ID through GitHub OIDC, publishes with the locally locked `vsce publish --azure-credential --skip-duplicate`, and downloads the Marketplace package for a byte-for-byte SHA-256 comparison.
+`.github/workflows/release.yml` runs verification, real Extension Host integration in Chinese and English, tag identity and `main`-history checks, release-note generation, and VSIX packaging inside the runner temporary directory. It signs in to Microsoft Entra ID through GitHub OIDC, publishes with the locally locked `vsce publish --azure-credential --skip-duplicate`, and downloads the Marketplace package for a byte-for-byte SHA-256 comparison.
 
-Release notes come from the matching `CHANGELOG.md` block. Only after Marketplace verification does the workflow create or update a GitHub Release carrying the VSIX, SBOM, and checksum file. Existing assets are replaced safely on rerun, and a global `release` concurrency group blocks overlapping versions. Never manually publish an unverified package to compensate for a failed workflow.
+Release notes come from the matching `CHANGELOG.md` block. Only after Marketplace verification does the workflow create or update a GitHub Release carrying the VSIX only, with no SBOM or `SHA256SUMS`. Existing VSIX assets are replaced safely on rerun, and a global `release` concurrency group blocks overlapping versions. Never manually publish an unverified package to compensate for a failed workflow.
 
 ## 4. Configure Automatic Marketplace Publication
 

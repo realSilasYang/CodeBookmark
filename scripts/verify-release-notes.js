@@ -1,5 +1,5 @@
 /**
- * 从每个更新日志版本生成 Release 正文，检查标题层级、重要说明顺序和附件说明。
+ * 从每个更新日志版本生成 Release 正文，检查标题层级、重要说明顺序和唯一 VSIX 附件说明。
  * 脚本读取仓库真实文件，围绕“从每个更新日志版本生成 Release 正文”核对结构和调用顺序，不复制一份实现来验证自己。
  */
 const assert = require('node:assert/strict')
@@ -43,8 +43,9 @@ try {
     assert.match(releaseNotes, /^## (?:⚠️ 重要说明|✨ 新增|🚀 优化|🐛 修复)$/m)
     assert.match(releaseNotes, /^## 📦 发布文件说明$/m)
     assert.ok(releaseNotes.includes(`\`codebookmark-${version}.vsix\``))
-    assert.ok(releaseNotes.includes(`\`codebookmark-${version}.sbom.cdx.json\``))
-    assert.ok(releaseNotes.includes('`SHA256SUMS`'))
+    if (version === manifest.version) {
+      assert.doesNotMatch(releaseNotes, /SBOM|SHA256SUMS|\.sbom\.cdx\.json/u)
+    }
     assert.ok(
       releaseNotes.indexOf('## 📦 发布文件说明') > releaseNotes.search(/^## (?:⚠️ 重要说明|✨ 新增|🚀 优化|🐛 修复)$/m),
       `版本 ${version} 的发布文件说明必须放在更新分类之后`,

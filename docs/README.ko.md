@@ -120,7 +120,7 @@ Undo 단위는 완전한 도메인 스냅샷입니다. 파일 간 작업은 영�
 
 Node.js 24를 사용합니다. `npm run verify`는 컴파일, ESLint, 단위·계약 테스트와 개발 단계에서 유효한 모든 전문 검증을 실행하고, `npm run verify:release`는 확정된 버전 자료를 검사합니다. `npm run test:integration`은 설치된 VS Code를 격리 환경에서 재사용해 13개 언어와 영어 폴백을 검사합니다. `npm run check:release`는 이 모든 검증에 의존성 감사와 VSIX 목록 확인을 더해 실행합니다.
 
-`main` 기록에 속한 주석 태그만 배포할 수 있습니다. GitHub Actions는 OIDC 단기 자격 증명으로 Marketplace에 게시하고 온라인 VSIX 해시를 확인한 뒤 VSIX, CycloneDX SBOM, `SHA256SUMS`가 포함된 GitHub Release를 만듭니다. 자세한 내용은 [배포 안내서](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md)를 참조하십시오.
+`main` 기록에 속한 주석 태그만 배포할 수 있습니다. GitHub Actions는 OIDC 단기 자격 증명으로 Marketplace에 게시하고 온라인 VSIX 해시를 확인한 뒤 VSIX만 포함하는 GitHub Release를 만들며, SBOM이나 `SHA256SUMS`는 더 이상 제공하지 않습니다. 자세한 내용은 [배포 안내서](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md)를 참조하십시오.
 
 # Star 기록
 

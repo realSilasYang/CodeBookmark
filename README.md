@@ -336,7 +336,7 @@ CodeBookmark/
 │  ├─ i18n/catalogs/                扩展清单的稳定键语言目录
 │  ├─ integration/                  Extension Host 集成测试启动器
 │  ├─ lib/                          清单稳定键与本地化读取工具
-│  ├─ release/                      Release 正文、SBOM 与校验和生成
+│  ├─ release/                      VSIX 打包与 Release 正文生成
 │  ├─ fixtures/                     专项验证共享的固定输入
 │  ├─ test-support/                 Node 验证使用的模块替身与 VS Code 假实现
 │  ├─ verify-*.js                   模块级回归与架构约束
@@ -524,6 +524,7 @@ npm run package:list
 ```
 
 - `npm run compile`：清理 `out/`、严格编译 TypeScript、将扩展运行时代码打包为单一入口，并生成 `package.json` 与本地化清单。
+- `npm run clean:generated`：移除 `out/`、`.vscode-test/`、`coverage/`、根目录 `package.nls*.json`、临时 VSIX、日志与调试文件，让根目录回到源码视图；不会删除 `node_modules/`。
 - `npm run lint`：以零警告标准检查 `src/**/*.ts`、`scripts/**/*.js` 和 `tests/**/*.js`。
 - `npm run test:unit` / `npm run test:contract`：使用 Node 标准 `node:test` 运行单元测试和外部行为契约，不依赖第三方测试运行器。
 - `npm run test:coverage`：用 Node 原生覆盖率运行上述标准测试并执行最低覆盖率门槛。
@@ -533,7 +534,7 @@ npm run package:list
 - 如需指定其他 VS Code，可运行 `node scripts/integration/run-integration-tests.js "--vscode-executable=<Code.exe 路径>"`，或设置 `CODEBOOKMARK_VSCODE_EXECUTABLE_PATH`；显式路径优先于自动发现。
 - `npm run verify:icons`：单独核对 SVG 文件名、安全内容和字典一一对应。
 - `npm run package:list`：使用固定版本的 VS Code 官方打包工具预览 VSIX 文件清单。
-- `npm run package:vsix -- --out <仓库外临时路径>`：仅在确需手动检查安装包时生成 VSIX；输出路径必须显式指定且位于仓库外，使用后应删除。普通本地开发与验证不会创建或保留交付产物。
+- `npm run package:vsix`：仅供 GitHub Actions 使用，输出必须写入 runner 临时目录；本地发布准备不生成或保留 VSIX。
 - `npm run check:release`：依次执行开发验证、发布专用守卫、扩展宿主集成测试、依赖审计和打包清单检查。
 
 当前标准测试与专项验证覆盖激活时序、工作区能力、持久化版本、AI 地址归一化、五类 AI 协议、同源路由回退、密钥、大小与取消，以及自动标记、导入导出、命令清单、存储根转移、移动重连、外部配置、保存队列、作用域、撤销、视图切换、图标资源和发布供应链。模块图守卫当前验证 163 个生产 TypeScript 模块均可从声明入口到达，且运行时循环依赖为 0。纯逻辑优先加入 `tests/unit`，公开清单或跨模块约束加入 `tests/contracts`，复杂历史回归保留在对应 `verify-*.js`，涉及 VS Code API 生命周期的行为必须补真实 Extension Host 测试。
@@ -549,7 +550,7 @@ node scripts/icons/generate-icon-dictionary.js
 npm run verify:icons
 ```
 
-发布前应通过 `npm run check:release`。扩展包只包含 `out`、`resources`、`package.nls*.json`、13 种语言的 `README`、中英文 `CHANGELOG`、`LICENSE` 和 `docs/legal` 下的第三方声明与许可证。扩展内“查看使用说明”会按照当前 VS Code 语言打开对应 README，未知的非中文语言回退英文。发布工具 `@vscode/vsce` 固定在开发依赖和 lockfile 中，全部 GitHub Actions 固定到完整提交 SHA。Release 只接受属于 `main` 历史的注解标签；工作流生成 VSIX、CycloneDX SBOM 和 `SHA256SUMS`，写入 GitHub 构建来源与 SBOM 证明，再通过 OIDC 短期令牌发布 Marketplace、核对线上包哈希并创建 GitHub Release。仓库不保存长期发布凭据；完整流程见[发布指南](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.md)。Marketplace Publisher ID 固定为 `realSilasYang`。项目源码使用 MIT 许可证，第三方图标与 Fuse.js 遵循各自许可证。
+发布前应通过 `npm run check:release`。扩展包只包含 `out`、`resources`、`package.nls*.json`、13 种语言的 `README`、中英文 `CHANGELOG`、`LICENSE` 和 `docs/legal` 下的第三方声明与许可证。扩展内“查看使用说明”会按照当前 VS Code 语言打开对应 README，未知的非中文语言回退英文。发布工具 `@vscode/vsce` 固定在开发依赖和 lockfile 中，全部 GitHub Actions 固定到完整提交 SHA。Release 只接受属于 `main` 历史的注解标签；工作流在远端 runner 临时目录生成 VSIX，通过 OIDC 短期令牌发布 Marketplace、核对线上包哈希，并创建仅附带 VSIX 的 GitHub Release，不再提供 SBOM 或 `SHA256SUMS`。仓库不保存长期发布凭据，本地发布准备不保留中间物或产物；完整流程见[发布指南](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.md)。Marketplace Publisher ID 固定为 `realSilasYang`。项目源码使用 MIT 许可证，第三方图标与 Fuse.js 遵循各自许可证。
 
 # Star 历史趋势
 

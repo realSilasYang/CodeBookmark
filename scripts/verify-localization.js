@@ -747,7 +747,7 @@ for (const [locale, documentPath] of Object.entries(README_DOCUMENT_BY_LANGUAGE)
   assert.match(content, /CodeBookmark/u, `${documentPath} must identify the product`)
   for (const requiredTopic of [
     'globalStoragePath', 'Ctrl+B', '_workspace_layout.json', 'TODO', 'FIXME', 'BUG',
-    'APIKey', '.codebookmark', 'test:integration', 'CycloneDX', 'SHA256SUMS',
+    'APIKey', '.codebookmark', 'test:integration',
   ]) {
     assert.ok(content.includes(requiredTopic), `${documentPath} must document ${requiredTopic}`)
   }

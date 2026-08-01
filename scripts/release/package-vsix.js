@@ -1,10 +1,11 @@
 /**
- * 统一验证显式 VSIX 输出位置并调用仓库锁定版本的 vsce，不在开发机上创建默认产物目录。
- * CI 与正式发布传入临时路径；所有输出都经过词法路径与真实目录双重边界检查，仓库内部路径会在打包前被拒绝。
+ * 验证远端专用的 VSIX 打包入口，并调用仓库锁定版本的 vsce。
+ * 打包只能在 GitHub Actions 中写入 runner 临时目录，结束后会清理本地化清单和编译输出。
  */
 const fs = require('node:fs')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
+const { GENERATED_NLS_PATTERN } = require('../lib/manifest-language-catalogs')
 
 function isSameOrDescendant(parent, candidate) {
   const relative = path.relative(parent, candidate)
@@ -31,28 +32,43 @@ function parseOutputArgument(args) {
   return matches[0]
 }
 
-function resolveVsixInvocation(repoRoot, args) {
+function cleanTransientBuildOutputs(repoRoot) {
+  fs.rmSync(path.join(repoRoot, 'out'), { recursive: true, force: true })
+  for (const entry of fs.readdirSync(repoRoot, { withFileTypes: true })) {
+    if (entry.isFile() && GENERATED_NLS_PATTERN.test(entry.name)) {
+      fs.rmSync(path.join(repoRoot, entry.name), { force: true })
+    }
+  }
+}
+
+function resolveVsixInvocation(repoRoot, args, options = {}) {
   const outputArgument = parseOutputArgument(args)
   if (!outputArgument) {
-    throw new Error('VSIX output path must be explicit; pass --out with a path outside the repository')
+    throw new Error('Remote VSIX packaging requires an explicit --out path inside the GitHub Actions runner temp directory')
   }
   const outputPath = path.resolve(repoRoot, outputArgument.value)
   if (path.extname(outputPath).toLowerCase() !== '.vsix') {
     throw new Error(`VSIX output must use the .vsix extension: ${outputPath}`)
   }
 
-  // 词法边界必须与调用方传入的仓库根目录比较。Windows 的临时目录可能经
-  // realpath 变成大小写或短名称不同的等价路径；若提前混用真实路径，仓库内
-  // 输出仍会被后续真实目录检查拦住，但错误分类会随机器变化。
   const lexicalRepoRoot = path.resolve(repoRoot)
   if (isSameOrDescendant(lexicalRepoRoot, outputPath)) {
     throw new Error(`VSIX output must stay outside the repository: ${outputPath}`)
   }
+  const runnerTemp = options.runnerTemp ? path.resolve(options.runnerTemp) : undefined
+  if (runnerTemp && !isSameOrDescendant(runnerTemp, outputPath)) {
+    throw new Error(`VSIX output must stay inside the GitHub Actions runner temp directory: ${outputPath}`)
+  }
+  if (runnerTemp) fs.mkdirSync(runnerTemp, { recursive: true })
   const realRepoRoot = fs.realpathSync.native(lexicalRepoRoot)
+  const realRunnerTemp = runnerTemp ? fs.realpathSync.native(runnerTemp) : undefined
   fs.mkdirSync(path.dirname(outputPath), { recursive: true })
   const realOutputDirectory = fs.realpathSync.native(path.dirname(outputPath))
   if (isSameOrDescendant(realRepoRoot, realOutputDirectory)) {
     throw new Error(`VSIX output directory resolves inside the repository: ${realOutputDirectory}`)
+  }
+  if (realRunnerTemp && !isSameOrDescendant(realRunnerTemp, realOutputDirectory)) {
+    throw new Error(`VSIX output directory must resolve inside the GitHub Actions runner temp directory: ${realOutputDirectory}`)
   }
 
   const forwarded = [...args]
@@ -64,19 +80,38 @@ function resolveVsixInvocation(repoRoot, args) {
   return { outputPath, args: forwarded }
 }
 
+function requireGitHubActionsRunner() {
+  if (process.env.GITHUB_ACTIONS !== 'true') {
+    throw new Error('VSIX packaging is remote-only. Let GitHub Actions build the package from a release tag.')
+  }
+  if (!process.env.RUNNER_TEMP) {
+    throw new Error('GitHub Actions RUNNER_TEMP is required for VSIX packaging.')
+  }
+  fs.mkdirSync(process.env.RUNNER_TEMP, { recursive: true })
+  return process.env.RUNNER_TEMP
+}
+
 function main() {
+  const runnerTemp = requireGitHubActionsRunner()
   const repoRoot = path.resolve(__dirname, '..', '..')
-  const invocation = resolveVsixInvocation(repoRoot, process.argv.slice(2))
+  const invocation = resolveVsixInvocation(repoRoot, process.argv.slice(2), { runnerTemp })
   const vsceCli = require.resolve('@vscode/vsce/vsce')
-  const result = spawnSync(process.execPath, [
-    vsceCli,
-    'package',
-    '--no-dependencies',
-    ...invocation.args,
-  ], { cwd: repoRoot, stdio: 'inherit' })
-  if (result.error) throw result.error
-  if (result.status !== 0) process.exit(result.status ?? 1)
-  console.log(`VSIX output: ${invocation.outputPath}`)
+  try {
+    const result = spawnSync(process.execPath, [
+      vsceCli,
+      'package',
+      '--no-dependencies',
+      ...invocation.args,
+    ], { cwd: repoRoot, stdio: 'inherit' })
+    if (result.error) throw result.error
+    if (result.status !== 0) {
+      process.exitCode = result.status ?? 1
+      return
+    }
+    console.log(`VSIX output: ${invocation.outputPath}`)
+  } finally {
+    cleanTransientBuildOutputs(repoRoot)
+  }
 }
 
 if (require.main === module) {
@@ -88,4 +123,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { isSameOrDescendant, parseOutputArgument, resolveVsixInvocation }
+module.exports = { isSameOrDescendant, parseOutputArgument, requireGitHubActionsRunner, resolveVsixInvocation }

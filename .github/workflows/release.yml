@@ -1,5 +1,5 @@
 # 收到 v* 注解标签后，从该标签重新验证、打包并联动发布 Marketplace 与 GitHub Release。
-# 只有标签属于 main 历史、线上 VSIX 与本次构建完全一致时，才会创建公开 Release 和证明文件。
+# 只有标签属于 main 历史、线上 VSIX 与本次构建完全一致时，才会创建仅附带 VSIX 的公开 Release。
 name: Release Extension
 
 on:
@@ -8,7 +8,6 @@ on:
       - v*
 
 permissions:
-  attestations: write
   contents: write
   id-token: write
 
@@ -63,7 +62,7 @@ jobs:
               throw "$variableName must be a valid GUID."
             }
           }
-      - name: Validate tag provenance and build release artifacts
+      - name: Validate tag provenance and build VSIX
         id: artifacts
         shell: pwsh
         run: |
@@ -83,31 +82,13 @@ jobs:
           $artifactDirectory = Join-Path $env:RUNNER_TEMP "codebookmark-release"
           New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
           $vsix = Join-Path $artifactDirectory "codebookmark-$version.vsix"
-          $sbom = Join-Path $artifactDirectory "codebookmark-$version.sbom.cdx.json"
-          $sums = Join-Path $artifactDirectory "SHA256SUMS"
           npm run package:vsix -- --out $vsix
-          npm run sbom -- $sbom
-          node scripts/release/write-sha256sums.js $sums $vsix $sbom
           "vsix=$vsix" | Add-Content -Path $env:GITHUB_OUTPUT
-          "sbom=$sbom" | Add-Content -Path $env:GITHUB_OUTPUT
-          "sums=$sums" | Add-Content -Path $env:GITHUB_OUTPUT
       - name: Build Chinese release notes
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
           node scripts/release/build-release-notes.js $version "$env:RUNNER_TEMP/release-notes.md"
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
-        with:
-          subject-path: |
-            ${{ steps.artifacts.outputs.vsix }}
-            ${{ steps.artifacts.outputs.sbom }}
-            ${{ steps.artifacts.outputs.sums }}
-      - name: Attest software bill of materials
-        uses: actions/attest-sbom@51e74621a501c89df81fc1391c5a8f4cfc9fab2f # v3
-        with:
-          subject-path: ${{ steps.artifacts.outputs.vsix }}
-          sbom-path: ${{ steps.artifacts.outputs.sbom }}
       - name: Authenticate to Microsoft Entra ID
         uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
         with:
@@ -153,21 +134,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VSIX_PATH: ${{ steps.artifacts.outputs.vsix }}
-          SBOM_PATH: ${{ steps.artifacts.outputs.sbom }}
-          SUMS_PATH: ${{ steps.artifacts.outputs.sums }}
         run: |
           $version = node -p "require('./package.json').version"
           $vsix = $env:VSIX_PATH
-          $sbom = $env:SBOM_PATH
-          $sums = $env:SUMS_PATH
           $releaseNotes = "$env:RUNNER_TEMP/release-notes.md"
           if (gh release view $env:GITHUB_REF_NAME --json tagName 2>$null) {
             gh release edit $env:GITHUB_REF_NAME `
               --title "CodeBookmark v$version" `
               --notes-file $releaseNotes
-            gh release upload $env:GITHUB_REF_NAME $vsix $sbom $sums --clobber
+            gh release upload $env:GITHUB_REF_NAME $vsix --clobber
           } else {
-            gh release create $env:GITHUB_REF_NAME $vsix $sbom $sums `
+            gh release create $env:GITHUB_REF_NAME $vsix `
               --verify-tag `
               --title "CodeBookmark v$version" `
               --notes-file $releaseNotes

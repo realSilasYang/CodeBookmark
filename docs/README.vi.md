@@ -120,7 +120,7 @@ Undo dùng snapshot miền hoàn chỉnh. Một thao tác liên tệp phải đ�
 
 Dùng Node.js 24. `npm run verify` chạy biên dịch, ESLint, unit test, contract test và mọi kiểm tra chuyên biệt có hiệu lực trong giai đoạn phát triển; `npm run verify:release` kiểm tra các tài liệu phiên bản đã hoàn tất. `npm run test:integration` tái sử dụng VS Code đã cài, cách ly dữ liệu người dùng và kiểm tra 13 ngôn ngữ cùng cơ chế dự phòng tiếng Anh. `npm run check:release` kết hợp toàn bộ các bước này với audit phụ thuộc và kiểm tra nội dung VSIX.
 
-Chỉ tag có chú thích thuộc lịch sử `main` mới được phát hành. GitHub Actions dùng thông tin xác thực OIDC ngắn hạn để đăng Marketplace, so khớp hash của VSIX trực tuyến, rồi tạo GitHub Release có VSIX, CycloneDX SBOM và `SHA256SUMS`. Xem [hướng dẫn phát hành](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
+Chỉ tag có chú thích thuộc lịch sử `main` mới được phát hành. GitHub Actions dùng thông tin xác thực OIDC ngắn hạn để đăng Marketplace, so khớp hash của VSIX trực tuyến, rồi tạo GitHub Release chỉ có VSIX, không còn SBOM hoặc `SHA256SUMS`. Xem [hướng dẫn phát hành](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 
 # Lịch sử Star
 

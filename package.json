@@ -112,6 +112,7 @@
     "vscode:prepublish": "npm run compile",
     "bundle": "node scripts/build/bundle-extension.js",
     "compile": "node scripts/build/clean-output.js && tsc -p config/tsconfig.json && npm run bundle && npm run generate-package-json",
+    "clean:generated": "node scripts/build/clean-generated.js",
     "watch": "tsc --watch -p config/tsconfig.json",
     "lint": "eslint --config config/eslint.config.mjs --max-warnings=0 \"src/**/*.ts\" \"scripts/**/*.js\" \"tests/**/*.js\"",
     "test:unit": "npm run compile && npm run test:unit:compiled",
@@ -126,7 +127,6 @@
     "verify:icons": "node scripts/verify-icon-assets.js",
     "package:list": "vsce ls --no-dependencies",
     "package:vsix": "node scripts/release/package-vsix.js",
-    "sbom": "node scripts/release/write-sbom.js",
     "check:release": "npm run verify && npm run verify:release && npm run test:integration && npm audit --audit-level=low && npm run package:list"
   },
   "dependencies": {

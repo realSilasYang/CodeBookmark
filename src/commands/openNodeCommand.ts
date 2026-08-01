@@ -42,6 +42,36 @@ function tabInputUris(input: unknown): vscode.Uri[] {
 	return [candidate.uri, candidate.original, candidate.modified].filter(isComparableUri)
 }
 
+function tabViewType(input: unknown): string | undefined {
+	if (!input || typeof input !== 'object') return undefined
+	const candidate = input as { viewType?: unknown }
+	return typeof candidate.viewType === 'string' ? candidate.viewType : undefined
+}
+
+function isWelcomeTab(tab: vscode.Tab): boolean {
+	if (tabInputUris(tab.input).length > 0) return false
+	if (!tab.input) return true
+	const viewType = tabViewType(tab.input)
+	if (viewType && /welcome|walkthrough|gettingstarted/iu.test(viewType.replace(/\s+/gu, ''))) return true
+	const label = typeof tab.label === 'string' ? tab.label.trim().toLowerCase() : ''
+	return label === 'welcome' || label === 'get started' || label === 'getting started'
+}
+
+function onlyWelcomeTabsInFolderWindow(): vscode.Tab[] {
+	if ((vscode.workspace.workspaceFolders?.length ?? 0) === 0 || vscode.workspace.workspaceFile) return []
+	const groups = vscode.window.tabGroups?.all ?? []
+	const tabs = groups.flatMap(group => group.tabs)
+	return tabs.length > 0 && tabs.every(isWelcomeTab) ? tabs : []
+}
+
+async function closeOnlyWelcomeTabsInFolderWindow(): Promise<void> {
+	const tabs = onlyWelcomeTabsInFolderWindow()
+	if (tabs.length === 0) return
+	try {
+		await vscode.window.tabGroups?.close(tabs, true)
+	} catch {}
+}
+
 export function openNodeCommand(context: vscode.ExtensionContext) {
 	const openBookmark = vscode.commands.registerCommand(Commands.openBookmark,
 		async (bookmark: Bookmark) => {
@@ -56,6 +86,7 @@ export function openNodeCommand(context: vscode.ExtensionContext) {
 				const existingColumn = openedViewColumn(fileUri)
 				const document = await vscode.workspace.openTextDocument(fileUri)
 				const fallbackColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active
+				if (!existingColumn) await closeOnlyWelcomeTabsInFolderWindow()
 
 				const clampPosition = (lineValue: unknown, columnValue: unknown): vscode.Position => {
 					const rawLine = typeof lineValue === 'number' && Number.isFinite(lineValue) ? Math.floor(lineValue) : 0

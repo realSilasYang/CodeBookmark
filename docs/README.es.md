@@ -87,7 +87,7 @@ El motor acepta únicamente un candidato de posición único y suficientemente s
 
 El proyecto usa Node.js 24. `npm run verify` ejecuta compilación, ESLint, pruebas unitarias y contractuales y todos los verificadores válidos durante el desarrollo; `npm run verify:release` comprueba los materiales definitivos de la versión. `npm run test:integration` reutiliza el VS Code instalado en entornos aislados para 13 idiomas y el fallback inglés; `npm run check:release` reúne todas estas comprobaciones, la auditoría y el listado del VSIX.
 
-Solo se publican etiquetas anotadas pertenecientes a `main`. GitHub Actions usa credenciales OIDC efímeras, publica Marketplace, compara el hash del VSIX remoto y crea un GitHub Release con VSIX, CycloneDX SBOM y `SHA256SUMS`. Consulta la [guía de publicación](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
+Solo se publican etiquetas anotadas pertenecientes a `main`. GitHub Actions usa credenciales OIDC efímeras, publica Marketplace, compara el hash del VSIX remoto y crea un GitHub Release solo con el VSIX, sin SBOM ni `SHA256SUMS`. Consulta la [guía de publicación](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md).
 
 # Historial de estrellas
 

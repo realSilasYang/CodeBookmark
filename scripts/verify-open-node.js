@@ -41,9 +41,17 @@ class Selection extends Range {}
 
 const sourceUri = uri('src/source.ts')
 const targetUri = uri('src/target.ts')
+const workspaceFolderUri = uri(process.cwd())
 const activeEditor = { document: documentFor(sourceUri), viewColumn: 1 }
-const welcomeTab = { input: undefined }
-const tabGroups = { all: [] }
+const welcomeTab = { label: 'Welcome', input: undefined }
+const closedTabs = []
+const tabGroups = {
+  all: [],
+  close: async tabs => {
+    closedTabs.push(...(Array.isArray(tabs) ? tabs : [tabs]))
+    return true
+  },
+}
 const window = {
   activeTextEditor: activeEditor,
   visibleTextEditors: [activeEditor],
@@ -63,7 +71,11 @@ const { vscode } = createVscodeFake({
   TextEditorRevealType: { InCenterIfOutsideViewport: 1 },
   ViewColumn: { Active: -1 },
   window,
-  workspace: { openTextDocument: async fileUri => documentFor(fileUri) },
+  workspace: {
+    workspaceFolders: [{ uri: workspaceFolderUri }],
+    workspaceFile: undefined,
+    openTextDocument: async fileUri => documentFor(fileUri),
+  },
   commands: {
     registerCommand: (command, handler) => { commands.set(command, handler); return { dispose() {} } },
     executeCommand: async command => { throw new Error(`Unexpected command execution: ${command}`) },
@@ -92,6 +104,7 @@ async function main() {
     tabGroups.all = [{ viewColumn: 1, tabs: [welcomeTab] }]
     await open(bookmark)
     assert.deepEqual(eventOrder, ['show'])
+    assert.deepEqual(closedTabs, [welcomeTab])
     assert.deepEqual(shown.at(-1).options, { viewColumn: -1, preserveFocus: false, preview: false })
 
     vscode.window.activeTextEditor = activeEditor
@@ -106,6 +119,7 @@ async function main() {
     }]
     await open(bookmark)
     assert.deepEqual(eventOrder, ['show', 'show'])
+    assert.equal(closedTabs.length, 1)
     assert.deepEqual(shown.at(-1).options, { viewColumn: 1, preserveFocus: false, preview: false })
 
     tabGroups.all = [{

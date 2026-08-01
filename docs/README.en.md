@@ -328,7 +328,7 @@ CodeBookmark/
 │  ├─ i18n/catalogs/                Stable-key language catalogs for the extension manifest
 │  ├─ integration/                  Extension Host integration-test launcher
 │  ├─ lib/                          Stable manifest keys and localization readers
-│  ├─ release/                      Release body, SBOM, and checksum generation
+│  ├─ release/                      VSIX packaging and release-note generation
 │  ├─ fixtures/                     Shared fixed inputs for focused verification
 │  ├─ test-support/                 Module stubs and fake VS Code APIs for Node checks
 │  ├─ verify-*.js                   Module regressions and architecture constraints
@@ -516,6 +516,7 @@ npm run package:list
 ```
 
 - `npm run compile` cleans `out/`, compiles TypeScript in strict mode, bundles extension runtime code into one entry, and generates `package.json` plus localization catalogs.
+- `npm run clean:generated` removes `out/`, `.vscode-test/`, `coverage/`, root `package.nls*.json`, temporary VSIX packages, logs, and debug files so the root returns to a source-focused view; it does not delete `node_modules/`.
 - `npm run lint` checks `src/**/*.ts`, `scripts/**/*.js`, and `tests/**/*.js` with a zero-warning policy.
 - `npm run test:unit` and `npm run test:contract` use the standard Node `node:test` runner for unit and external behavior contracts, with no third-party test runner.
 - `npm run test:coverage` runs both standard suites with native Node coverage and enforces minimum thresholds.
@@ -525,7 +526,7 @@ npm run package:list
 - To choose another VS Code installation, run `node scripts/integration/run-integration-tests.js "--vscode-executable=<path-to-Code.exe>"` or set `CODEBOOKMARK_VSCODE_EXECUTABLE_PATH`; an explicit path takes precedence over automatic discovery.
 - `npm run verify:icons` independently checks SVG names, safe content, and one-to-one dictionary coverage.
 - `npm run package:list` previews the VSIX file list with the pinned official VS Code packaging tool.
-- `npm run package:vsix -- --out <temporary-path-outside-the-repository>` creates a VSIX only when a manual installation check is necessary. The output path is mandatory and must stay outside the repository; delete the package after use. Normal local development and verification retain no deliverable artifacts.
+- `npm run package:vsix` is for GitHub Actions only and must write to runner temp. Local release preparation creates and retains no VSIX.
 - `npm run check:release` runs development verification, release-only guards, Extension Host integration tests, dependency audit, and package-list inspection in sequence.
 
 Current standard tests and focused checks cover activation order, workspace capabilities, persistence versions, AI address normalization, five AI protocol families, same-origin route fallback, credentials, byte limits, cancellation, automatic markers, imports and exports, manifest commands, storage-root transfer, relocation recovery, external configuration edits, save queues, scope handling, undo, view transitions, icon assets, and release supply chain. The module-graph guard currently proves that all 163 production TypeScript modules are reachable from declared entries and that the runtime graph has zero dependency cycles. Put pure logic in `tests/unit`, public manifest or cross-module constraints in `tests/contracts`, complex historical regressions in the corresponding `verify-*.js`, and VS Code API lifecycle behavior in a real Extension Host test.
@@ -541,7 +542,7 @@ node scripts/icons/generate-icon-dictionary.js
 npm run verify:icons
 ```
 
-Run `npm run check:release` before publishing. The extension package contains only `out`, `resources`, `package.nls*.json`, all 13 localized README documents, the Chinese and English changelogs, `LICENSE`, and third-party notices and licenses under `docs/legal`. The in-extension help command opens the README matching the current VS Code language, while an unsupported non-Chinese locale falls back to English. The official VS Code packaging tool, `@vscode/vsce`, is pinned in both development dependencies and the lockfile; every GitHub Action is pinned to a full commit SHA. Release accepts only annotated tags that belong to `main` history. The workflow creates a VSIX, CycloneDX SBOM, and `SHA256SUMS`, records GitHub build-provenance and SBOM attestations, publishes to Marketplace with a short-lived OIDC token, verifies the online package hash, and then creates the GitHub Release. No long-lived publishing credential is stored in the repository. See the [release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md) for the complete process. The Marketplace Publisher ID is fixed as `realSilasYang`. Project source is under the MIT License; third-party icons and Fuse.js retain their respective licenses.
+Run `npm run check:release` before publishing. The extension package contains only `out`, `resources`, `package.nls*.json`, all 13 localized README documents, the Chinese and English changelogs, `LICENSE`, and third-party notices and licenses under `docs/legal`. The in-extension help command opens the README matching the current VS Code language, while an unsupported non-Chinese locale falls back to English. The official VS Code packaging tool, `@vscode/vsce`, is pinned in both development dependencies and the lockfile; every GitHub Action is pinned to a full commit SHA. Release accepts only annotated tags that belong to `main` history. The workflow builds the VSIX in remote runner temp, publishes to Marketplace with a short-lived OIDC token, verifies the online package hash, and then creates a GitHub Release carrying only the VSIX, with no SBOM or `SHA256SUMS`. No long-lived publishing credential is stored in the repository, and local release preparation retains no intermediates or deliverables. See the [release guide](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/release/RELEASING.en.md) for the complete process. The Marketplace Publisher ID is fixed as `realSilasYang`. Project source is under the MIT License; third-party icons and Fuse.js retain their respective licenses.
 
 # Star History
 
