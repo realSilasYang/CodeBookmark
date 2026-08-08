@@ -146,11 +146,13 @@ async function run() {
   assert.equal(snapshot.roots[0].children[0].id, bookmarkId)
 
   await extensionApi.integration.toggleBookmark(0, 'Toggle command bookmark')
-  snapshot = extensionApi.integration.snapshot()
-  assert.deepEqual(snapshot.roots[0].children.map(child => child.label).sort(), [
-    'Integration return value',
-    'Toggle command bookmark',
-  ].sort())
+  await waitFor(() => {
+    snapshot = extensionApi.integration.snapshot()
+    assert.deepEqual(snapshot.roots[0].children.map(child => child.label).sort(), [
+      'Integration return value',
+      'Toggle command bookmark',
+    ].sort())
+  }, 'Bookmark toggle did not settle after Extension Host file events')
   await extensionApi.integration.toggleBookmark(0, 'This label must not be requested while deleting')
   assert.deepEqual(
     extensionApi.integration.snapshot().roots[0].children.map(child => child.id),

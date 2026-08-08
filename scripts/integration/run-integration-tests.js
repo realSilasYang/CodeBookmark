@@ -74,7 +74,9 @@ function isKnownExternalProjectLogDiagnostic(entry, normalizedRoot) {
     && normalizedEntry.includes('/resources/app/out/vs/workbench/api/node/extensionhostprocess.js')
   const builtInJsonNavigatorMigration = /\[error\]\s+pendingmigrationerror: navigator is now a global in nodejs\b/iu.test(entry)
     && normalizedEntry.includes('/resources/app/extensions/json-language-features/')
-  return canceledProxyResolution || builtInJsonNavigatorMigration
+  const existingMainProcessMutex = /\[error\]\s+error: error mutex already exists\b/iu.test(entry)
+    && normalizedEntry.includes('/resources/app/out/main.js')
+  return canceledProxyResolution || builtInJsonNavigatorMigration || existingMainProcessMutex
 }
 
 function findProjectDiagnosticsInLog(logContent, root, logFile = '<log>') {
