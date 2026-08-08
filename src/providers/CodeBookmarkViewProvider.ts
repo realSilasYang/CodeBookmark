@@ -759,6 +759,15 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		return this.viewLoads.begin()
 	}
 
+	private cancelPendingViewLoadForMutation(): void {
+		const port = this.bookmarkViewRefreshPort()
+		const generation = this.viewRefreshCoordinator.cancelPendingLoad(port)
+		if (generation === undefined) return
+		void port.queueBookmarkPresenceContexts()
+		port.restoreConfigWatcher(generation)
+		port.restoreBackgroundEnhancements(generation)
+	}
+
 	private viewLoadSignal(generation: number): AbortSignal | undefined {
 		return this.viewLoads.signalFor(generation)
 	}
@@ -950,6 +959,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	private saveUndoState(action: UndoAction): void {
+		this.cancelPendingViewLoadForMutation()
 		undoManager.saveState(
 			this.codeBookmarks,
 			action,
@@ -960,6 +970,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	private captureUndoState(workspaceOrder = this.undoWorkspaceOrder()): CapturedUndoState {
+		this.cancelPendingViewLoadForMutation()
 		return undoManager.captureState(this.codeBookmarks, this.currentStorageScope, workspaceOrder, this.workspaceLayoutCache)
 	}
 
@@ -1331,10 +1342,12 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	saveBookmarksToFile(paths: readonly string[]): void {
 		if (paths.length === 0) return
+		this.cancelPendingViewLoadForMutation()
 		this.saveCoordinator.queuePaths(paths)
 	}
 
 	private saveAllBookmarksToFile(): void {
+		this.cancelPendingViewLoadForMutation()
 		this.saveCoordinator.queueAll()
 	}
 
@@ -1723,9 +1736,12 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 
 	private bookmarkHistoryWorkflowPort(): BookmarkHistoryWorkflowPort {
 		return {
-			applyHistory: operation => operation === 'undo'
-				? undoManager.undo(this.codeBookmarks, this.currentStorageScope, this.undoWorkspaceOrder(), this.workspaceLayoutCache)
-				: undoManager.redo(this.codeBookmarks, this.currentStorageScope, this.undoWorkspaceOrder(), this.workspaceLayoutCache),
+			applyHistory: operation => {
+				this.cancelPendingViewLoadForMutation()
+				return operation === 'undo'
+					? undoManager.undo(this.codeBookmarks, this.currentStorageScope, this.undoWorkspaceOrder(), this.workspaceLayoutCache)
+					: undoManager.redo(this.codeBookmarks, this.currentStorageScope, this.undoWorkspaceOrder(), this.workspaceLayoutCache)
+			},
 			currentStorageScope: () => this.currentStorageScope,
 			setWorkspaceOrder: order => { this.workspaceOrderCache = order },
 			setWorkspaceLayout: layout => { this.workspaceLayoutCache = layout },

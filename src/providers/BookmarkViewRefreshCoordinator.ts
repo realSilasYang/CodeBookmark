@@ -52,6 +52,14 @@ export class BookmarkViewRefreshCoordinator {
 		this.resolveScheduledRefresh = undefined
 	}
 
+	cancelPendingLoad(port: BookmarkViewRefreshPort): number | undefined {
+		if (!this.refreshTimer && port.loadingViewGeneration() === undefined) return undefined
+		port.beginViewLoad()
+		port.clearLoading()
+		this.cancelScheduledRefresh()
+		return port.currentViewLoadGeneration()
+	}
+
 	async refresh(
 		editor: vscode.TextEditor | undefined,
 		storageScope: string,
@@ -65,19 +73,12 @@ export class BookmarkViewRefreshCoordinator {
 			?? (storageScope.startsWith('workspace:') ? port.workspaceRoot() : undefined)
 
 		if (!forceReloadDisk && port.currentStorageScope() === storageScope && port.viewLoaded()) {
-			let cancelledLoad = false
-			if (this.refreshTimer || port.loadingViewGeneration() !== undefined) {
-				port.beginViewLoad()
-				port.clearLoading()
-				cancelledLoad = true
-			}
-			this.cancelScheduledRefresh()
+			const cancelledGeneration = this.cancelPendingLoad(port)
 			if (editorPath) port.setCurrentScopeFilePath(editorPath)
 			await port.queueBookmarkPresenceContexts()
-			if (cancelledLoad) {
-				const generation = port.currentViewLoadGeneration()
-				port.restoreConfigWatcher(generation)
-				port.restoreBackgroundEnhancements(generation)
+			if (cancelledGeneration !== undefined) {
+				port.restoreConfigWatcher(cancelledGeneration)
+				port.restoreBackgroundEnhancements(cancelledGeneration)
 			}
 			if (editor) {
 				const generation = port.currentViewLoadGeneration()

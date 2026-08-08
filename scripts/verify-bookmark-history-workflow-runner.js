@@ -81,12 +81,12 @@ async function main() {
   assert.deepEqual(workspaceUndo.events, [
     'paths:C:\\workspace\\old.ts,C:\\workspace\\shared.ts',
     'apply:undo',
+    'paths:C:\\workspace\\new.ts,C:\\workspace\\shared.ts',
+    'save:C:\\workspace\\old.ts,C:\\workspace\\shared.ts,C:\\workspace\\new.ts',
     'order:set:src/new.ts,src/shared.ts',
     'order:path',
     'order:write:C:\\bookmarks\\_workspace_order.json:src/new.ts,src/shared.ts',
     'layout:set:1',
-    'paths:C:\\workspace\\new.ts,C:\\workspace\\shared.ts',
-    'save:C:\\workspace\\old.ts,C:\\workspace\\shared.ts,C:\\workspace\\new.ts',
     'commit',
     'refresh',
     'applied:已撤销：删除书签。当前结果：共 2 个书签：一级 1 个、二级 1 个。',
@@ -103,12 +103,12 @@ async function main() {
   await runBookmarkHistoryOperation('redo', failedOrderWrite.port)
   assert.deepEqual(failedOrderWrite.workspaceOrder(), [])
   assert.deepEqual(failedOrderWrite.events.slice(2, 8), [
+    'paths:C:\\workspace\\after.ts',
+    'save:C:\\workspace\\before.ts,C:\\workspace\\after.ts',
     'order:set:',
     'order:path',
     'order:write:C:\\bookmarks\\_workspace_order.json:',
     'order:warning',
-    'layout:set:null',
-    'paths:C:\\workspace\\after.ts',
   ])
   assert.equal(failedOrderWrite.events.at(-1), 'applied:已重做：调整文件顺序。当前结果：共 0 个书签。')
 

@@ -59,11 +59,11 @@ export async function runBookmarkHistoryOperation(
 		return
 	}
 
-	await persistRestoredWorkspaceOrder(result.workspaceOrder, port)
-	port.setWorkspaceLayout(result.workspaceLayout)
 	const affectedPaths = new Set([...previousPaths, ...port.bookmarkSourcePaths()])
 	if (affectedPaths.size > 0) port.saveBookmarks([...affectedPaths])
 	else port.saveAllBookmarks()
+	await persistRestoredWorkspaceOrder(result.workspaceOrder, port)
+	port.setWorkspaceLayout(result.workspaceLayout)
 	await port.commitTopology()
 	port.refreshDecoration()
 	const prefix = operation === 'undo'

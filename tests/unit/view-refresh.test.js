@@ -61,4 +61,49 @@ describe('bookmark view refresh', () => {
       candidateScope: storageScope,
     })
   })
+
+  it('cancels a scheduled disk load before an in-memory bookmark mutation', async () => {
+    let timer
+    let generation = 4
+    let loadingGeneration
+    let initialized = false
+    const coordinator = new BookmarkViewRefreshCoordinator({
+      setTimer: callback => {
+        timer = { callback, cleared: false }
+        return timer
+      },
+      clearTimer: candidate => { candidate.cleared = true },
+    })
+    const port = {
+      currentStorageScope: () => 'workspace:c:/workspace',
+      viewLoaded: () => true,
+      currentScopeFilePath: () => 'C:\\workspace\\sample.ts',
+      setCurrentScopeFilePath: () => {},
+      workspaceRoot: () => 'C:\\workspace',
+      nextRevealGeneration: () => 1,
+      beginViewLoad: () => ++generation,
+      currentViewLoadGeneration: () => generation,
+      loadingViewGeneration: () => loadingGeneration,
+      clearLoading: () => { loadingGeneration = undefined },
+      markLoading: candidateGeneration => { loadingGeneration = candidateGeneration },
+      resetCodeMarkerScan: () => {},
+      queueBookmarkPresenceContexts: async () => {},
+      restoreConfigWatcher: () => {},
+      restoreBackgroundEnhancements: () => {},
+      scheduleActiveFileReveal: () => {},
+      initView: async () => { initialized = true },
+      isCurrent: candidateGeneration => candidateGeneration === generation,
+      treeVisible: () => false,
+      reportRefreshFailure: error => { throw error },
+    }
+
+    const refresh = coordinator.refresh(undefined, 'workspace:c:/workspace', true, port)
+    assert.equal(loadingGeneration, 5)
+    assert.equal(coordinator.cancelPendingLoad(port), 6)
+    await refresh
+
+    assert.equal(timer.cleared, true)
+    assert.equal(loadingGeneration, undefined)
+    assert.equal(initialized, false)
+  })
 })
