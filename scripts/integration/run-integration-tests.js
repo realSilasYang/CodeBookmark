@@ -26,6 +26,7 @@ const knownExternalDiagnosticPatterns = [
   /^(?:\[main [^\]]+\] \[AgentHost:stderr\] )?\(node:\d+\) \[DEP0169\] DeprecationWarning: `url\.parse\(\)`[^\r\n]*(?:\r?\n\(Use `Code --trace-deprecation \.\.\.` to show where the warning was created\))?\r?\n?/gmu,
   /^Unknown channel: agentHostClientProxy\r?\n?/gmu,
   /^\[\d+:\d+\/\d+\.\d+:ERROR:gpu[\\/]ipc[\\/]client[\\/]command_buffer_proxy_impl\.cc:\d+\] GPU state invalid after WaitForGetOffsetInRange\.\r?\n?/gmu,
+  /^Failed to create default profile extensions manifest in extensions installation folder\. file:\/\/\/[^\r\n]+\/extensions [^\r\n]*extensions\.json[^\r\n]*(?:already exists|已存在)\r?\n?/gmu,
 ]
 
 function outputSink(chunks) {

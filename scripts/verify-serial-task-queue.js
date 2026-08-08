@@ -31,6 +31,21 @@ async function main() {
   const afterFailure = queue.run(async () => 'after-failure')
   await assert.rejects(rejected, error => error === failure)
   assert.equal(await afterFailure, 'after-failure')
+
+  let releaseIdleTask
+  const idleQueue = new SerialTaskQueue()
+  const idleEvents = []
+  void idleQueue.run(async () => {
+    idleEvents.push('idle:first:start')
+    await new Promise(resolve => { releaseIdleTask = resolve })
+    idleEvents.push('idle:first:end')
+  })
+  await Promise.resolve()
+  const idle = idleQueue.waitForIdle()
+  void idleQueue.run(async () => { idleEvents.push('idle:second') })
+  releaseIdleTask()
+  await idle
+  assert.deepEqual(idleEvents, ['idle:first:start', 'idle:first:end', 'idle:second'])
 }
 
 main().then(() => console.log('SerialTaskQueue contract verified.'))

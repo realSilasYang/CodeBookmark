@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict')
 const { describe, it } = require('node:test')
 
+const { BookmarkViewMutationBarrier } = require('../../out/providers/BookmarkViewMutationBarrier')
 const { BookmarkViewRefreshCoordinator } = require('../../out/providers/BookmarkViewRefreshCoordinator')
 
 describe('bookmark view refresh', () => {
@@ -105,5 +106,37 @@ describe('bookmark view refresh', () => {
     assert.equal(timer.cleared, true)
     assert.equal(loadingGeneration, undefined)
     assert.equal(initialized, false)
+  })
+
+  it('restarts disk-reload settling when a bookmark mutates while persistence is draining', async () => {
+    const barrier = new BookmarkViewMutationBarrier()
+    const events = []
+    let metadataPass = 0
+    let releaseFirstMetadata
+    const firstMetadata = new Promise(resolve => { releaseFirstMetadata = resolve })
+
+    const reload = barrier.runAfterSettled({
+      waitForMetadataWrites: async () => {
+        events.push(`metadata:${++metadataPass}`)
+        if (metadataPass === 1) await firstMetadata
+      },
+      flushPendingBookmarks: async () => { events.push(`bookmarks:${metadataPass}`) },
+    }, async () => {
+      events.push('reload')
+      return 'reloaded'
+    })
+
+    await Promise.resolve()
+    barrier.markMutation()
+    releaseFirstMetadata()
+
+    assert.equal(await reload, 'reloaded')
+    assert.deepEqual(events, [
+      'metadata:1',
+      'bookmarks:1',
+      'metadata:2',
+      'bookmarks:2',
+      'reload',
+    ])
   })
 })

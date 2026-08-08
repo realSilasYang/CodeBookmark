@@ -14,6 +14,7 @@
 ### 🐛 Fixed
 
 - **Automatic startup activation:** The extension now activates after VS Code finishes starting instead of waiting for the bookmark view or a command to be opened first, ensuring bookmark state and background capabilities initialize at startup.
+- **Startup state consistency:** When startup loading, configuration-file watchers, and undo or redo overlap, disk reloads now wait for bookmark and workspace metadata persistence to settle and cancel stale loads, preventing newly added or restored bookmarks from being replaced by an older empty snapshot.
 
 ## 🎉 Version 3.2.2 - 2026-08-01
 

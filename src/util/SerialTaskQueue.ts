@@ -10,4 +10,12 @@ export class SerialTaskQueue {
 		this.tail = result.then(() => undefined, () => undefined)
 		return result
 	}
+
+	async waitForIdle(): Promise<void> {
+		while (true) {
+			const observedTail = this.tail
+			await observedTail
+			if (observedTail === this.tail) return
+		}
+	}
 }

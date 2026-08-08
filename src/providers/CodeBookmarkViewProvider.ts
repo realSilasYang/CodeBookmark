@@ -102,6 +102,7 @@ import { BookmarkSaveCoordinator, type BookmarkSaveCoordinatorPort } from './Boo
 import { importPortablePackageFromUri, runPortablePackageImport, type PortableImportWorkflowPort } from './PortableImportWorkflowRunner'
 import { importPortableWorkspaceLayout } from '../repository/WorkspaceLayoutRepository'
 import type { PortableExportSnapshot } from '../portable/PortableExport'
+import { BookmarkViewMutationBarrier } from './BookmarkViewMutationBarrier'
 import { BookmarkViewRefreshCoordinator, type BookmarkViewRefreshPort } from './BookmarkViewRefreshCoordinator'
 import { BookmarkStoragePathWorkflowRunner, type BookmarkStoragePathWorkflowPort } from './BookmarkStoragePathWorkflowRunner'
 import {
@@ -182,7 +183,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			const folder = fileUtils.getGlobalBookmarkFolder(true, this.currentScopeUri())
 			if (!folder) return
 			const orderFile = path.join(folder, '_workspace_order.json')
-			void this.writeWorkspaceMetadata(orderFile, workspaceOrderPersistence(order)).then(success => {
+			void this.workspaceMetadataWriteQueue.run(() => this.writeWorkspaceMetadata(orderFile, workspaceOrderPersistence(order))).then(success => {
 				if (!success) logger.showWarningMessage(localize("providers.CodeBookmarkViewProvider.unableToSaveTheWorkspaceFileOrderCheckBookmark"))
 			})
 		},
@@ -404,6 +405,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		new BookmarkDocumentChangeCoordinator<vscode.TextDocument, vscode.Uri, BookmarkSet>()
 	private readonly viewLoads = new ViewLoadSession()
 	private readonly viewRefreshCoordinator = new BookmarkViewRefreshCoordinator()
+	private readonly viewMutationBarrier = new BookmarkViewMutationBarrier()
 	private readonly viewPreparationQueue = new SerialTaskQueue()
 	private readonly workspaceMetadataWriteQueue = new SerialTaskQueue()
 	private get viewLoadGeneration(): number {
@@ -760,6 +762,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	private cancelPendingViewLoadForMutation(): void {
+		this.viewMutationBarrier.markMutation()
 		const port = this.bookmarkViewRefreshPort()
 		const generation = this.viewRefreshCoordinator.cancelPendingLoad(port)
 		if (generation === undefined) return
@@ -1440,14 +1443,14 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	private persistPreparedWorkspaceMetadata(prepared: PreparedBookmarkView, generation: number): Promise<void> {
-		return persistPreparedWorkspaceMetadata(prepared, generation, {
+		return this.workspaceMetadataWriteQueue.run(() => persistPreparedWorkspaceMetadata(prepared, generation, {
 			isCurrent: (scope, candidateGeneration) => !this.disposed && scope === this.currentStorageScope && candidateGeneration === this.viewLoadGeneration,
 			writeJson: (filePath, value) => this.writeWorkspaceMetadata(filePath, value),
 			deleteFile: filePath => fileUtils.deleteJsonFileAsync(filePath),
 			reportOrderWriteFailure: () => logger.showWarningMessage(localize("providers.CodeBookmarkViewProvider.unableToSaveTheWorkspaceFileOrderCheckBookmark")),
 			reportLayoutWriteFailure: () => logger.showWarningMessage(localize("providers.CodeBookmarkViewProvider.unableToSaveTheWorkspaceBookmarkLayoutCheckBookmark")),
 			reportFailure: error => logger.error(localize("providers.CodeBookmarkViewProvider.failedToSaveWorkspaceBookmarkMetadata", { errorMessage: errorMessage(error) })),
-		})
+		}))
 	}
 
 	private async prepareBookmarkView(
@@ -1666,12 +1669,20 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	public async refresh(editor?: vscode.TextEditor, storageScope = this.storageScope(editor), forceReloadDisk: boolean = false) {
-		return this.viewRefreshCoordinator.refresh(
+		const refreshPort = this.bookmarkViewRefreshPort()
+		const refresh = () => this.viewRefreshCoordinator.refresh(
 			editor,
 			storageScope,
 			forceReloadDisk,
-			this.bookmarkViewRefreshPort(),
+			refreshPort,
 		)
+		const reloadsDisk = forceReloadDisk || refreshPort.currentStorageScope() !== storageScope
+			|| !refreshPort.viewLoaded()
+		if (!reloadsDisk) return refresh()
+		return this.viewMutationBarrier.runAfterSettled({
+			waitForMetadataWrites: () => this.workspaceMetadataWriteQueue.waitForIdle(),
+			flushPendingBookmarks: () => this.flushPendingSaves(true),
+		}, refresh)
 	}
 
 	// 行内铅笔按钮传入的是 TreeItem；先还原领域节点，再复用与命令面板相同的重命名流程。
@@ -1749,7 +1760,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				const folder = fileUtils.getGlobalBookmarkFolder(true, this.currentScopeUri())
 				return folder ? path.join(folder, '_workspace_order.json') : undefined
 			},
-			writeWorkspaceOrder: (filePath, order) => fileUtils.writeJsonFileAsync(filePath, workspaceOrderPersistence(order)),
+			writeWorkspaceOrder: (filePath, order) => this.workspaceMetadataWriteQueue.run(() => fileUtils.writeJsonFileAsync(filePath, workspaceOrderPersistence(order))),
 			reportWorkspaceOrderSaveFailure: () =>
 				logger.showWarningMessage(localize("providers.CodeBookmarkViewProvider.unableToSaveTheRestoredWorkspaceFileOrderCheck")),
 			bookmarkSourcePaths: () => allBookmarks(this.codeBookmarks)
