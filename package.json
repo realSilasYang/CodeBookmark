@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -82,6 +82,9 @@
   },
   "categories": [
     "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "files": [

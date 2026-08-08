@@ -83,7 +83,11 @@ async function run() {
   const storageRoot = process.env.CODEBOOKMARK_TEST_STORAGE_ROOT
   assert.ok(storageRoot, 'Integration-test storage root must be explicit')
   const configurationBeforeActivation = vscode.workspace.getConfiguration('codebookmark')
-  await configurationBeforeActivation.update('globalStoragePath', storageRoot, vscode.ConfigurationTarget.Global)
+  assert.equal(
+    path.resolve(configurationBeforeActivation.get('globalStoragePath')),
+    path.resolve(storageRoot),
+    'Integration-test storage root must be configured before extension activation',
+  )
   const extensionApi = await extension.activate()
   assert.equal(extension.isActive, true)
   assert.equal(extensionApi.language, expectedRuntimeLanguage)

@@ -186,7 +186,7 @@ assert.deepEqual(Object.keys(settings), [
 assert.deepEqual(Object.values(settings).map(setting => setting.order), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
 const commandsById = new Map(manifest.contributes.commands.map(command => [command.command, command]))
-assert.equal(commandsById.get('codebookmark.ai.generateSkip').title, menuTitle('✦', '生成'))
+assert.equal(commandsById.get('codebookmark.ai.generateSkip').title, menuTitle('✦', '生成书签'))
 assert.equal(commandsById.get('codebookmark.ai.generateAppend').title, menuTitle('⊕', '追加'))
 assert.equal(commandsById.get('codebookmark.ai.generateOverwrite').title, menuTitle('↻', '重新生成并替换'))
 assert.equal(commandsById.get('codebookmark.ai.generateAppendFolder').title, menuTitle('⊕', '为有书签的脚本追加'))
@@ -201,7 +201,7 @@ assert.equal(commandsById.get('codebookmark.ai.optimizeFolderDirect').title, men
 assert.equal(commandsById.get('codebookmark.ai.optimizeSelectedDirect').title, menuTitle('✎', '优化选中书签的标签'))
 assert.equal(commandsById.get('codebookmark.ai.optimizeFolder').title, menuTitle('✎', '当前文件夹内有书签的脚本'))
 assert.equal(commandsById.get('codebookmark.openSettings').title, menuTitle('⚙', '代码书签设置'))
-assert.equal(commandsById.get('codebookmark.ai.openSettings').title, menuTitle('⚙', 'AI 配置'))
+assert.equal(commandsById.get('codebookmark.ai.openSettings').title, menuTitle('⚙', '代码书签 AI 参数'))
 assert.equal(commandsById.has('codebookmark.ai.unavailable'), false)
 assert.equal(commandsById.has('codebookmark.ai.setApiKey'), false)
 assert.equal(commandsById.has('codebookmark.ai.clearApiKey'), false)

@@ -1565,6 +1565,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	private bookmarkViewRefreshPort(): BookmarkViewRefreshPort {
 		return {
 			currentStorageScope: () => this.currentStorageScope,
+			viewLoaded: () => this.bookmarkContextCoordinator.contextValue(Commands.varBookmarkLoaded) === true,
 			currentScopeFilePath: () => this.currentScopeFilePath,
 			setCurrentScopeFilePath: filePath => { this.currentScopeFilePath = filePath },
 			workspaceRoot: () => fileUtils.workspaceRoot() || undefined,

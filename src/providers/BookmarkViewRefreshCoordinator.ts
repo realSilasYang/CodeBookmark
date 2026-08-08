@@ -13,6 +13,7 @@ interface BookmarkViewRefreshScheduling {
 
 export interface BookmarkViewRefreshPort {
 	currentStorageScope(): string | undefined
+	viewLoaded(): boolean
 	currentScopeFilePath(): string | undefined
 	setCurrentScopeFilePath(filePath: string): void
 	workspaceRoot(): string | undefined
@@ -63,7 +64,7 @@ export class BookmarkViewRefreshCoordinator {
 			?? (storageScope === port.currentStorageScope() ? port.currentScopeFilePath() : undefined)
 			?? (storageScope.startsWith('workspace:') ? port.workspaceRoot() : undefined)
 
-		if (!forceReloadDisk && port.currentStorageScope() === storageScope) {
+		if (!forceReloadDisk && port.currentStorageScope() === storageScope && port.viewLoaded()) {
 			let cancelledLoad = false
 			if (this.refreshTimer || port.loadingViewGeneration() !== undefined) {
 				port.beginViewLoad()

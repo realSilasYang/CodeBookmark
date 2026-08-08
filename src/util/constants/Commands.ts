@@ -102,7 +102,7 @@ export class Commands {
 		// 由树节点行内图标触发、会携带当前 TreeItem 的命令。
 		deleteBookmark: {
 			'command': Commands.nameExtension + '.deleteBookmark',
-			'title': '删除',
+			'title': '删除书签',
 			'icon': '$(trash)',
 			'when': `${this.viewCodeBookmarkView} && ${this.deletableTreeNode}`,
 			'group': 'inline@4'
@@ -249,7 +249,7 @@ export class Commands {
 		},
 		aiGenerateSkip: {
 			'command': Commands.nameExtension + '.ai.generateSkip',
-			'title': '生成',
+			'title': '生成书签',
 			'when': `${Commands.viewCodeBookmarkView} && !${Commands.varActiveFileHasBookmark}`,
 			'enablement': Commands.whenAIAnalysisAvailable,
 			"category": "代码书签"
@@ -342,7 +342,7 @@ export class Commands {
 		},
 		aiOpenSettings: {
 			'command': Commands.nameExtension + '.ai.openSettings',
-			'title': 'AI 配置',
+			'title': '代码书签 AI 参数',
 			'icon': '$(settings)',
 			"category": "代码书签",
 		},

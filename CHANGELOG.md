@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 版本 3.2.3 - 2026-08-08
+
+### 🚀 优化
+
+- **菜单作用对象与多语言一致性**：在缺少“书签”父级语境的入口中，将“生成”“删除”等补全为“生成书签”“删除书签”，并把“AI 配置”统一命名为“代码书签 AI 参数”；13 种清单语言同步表达相同作用对象，减少孤立菜单项的歧义。
+- **开发依赖安全**：将构建与发布链路中的 `brace-expansion`、`fast-uri`、`js-yaml` 和 `undici` 间接依赖更新到安全修复版本，当前依赖审计无已知漏洞。
+
+---
+
+### 🐛 修复
+
+- **启动自动激活**：扩展现在会在 VS Code 启动完成后自动激活，不再依赖用户先打开书签视图或执行命令，确保启动后即可初始化书签状态与后台能力。
+
 ## 🎉 版本 3.2.2 - 2026-08-01
 
 ### 🚀 优化

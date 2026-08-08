@@ -19,6 +19,7 @@ function createHarness(options = {}) {
   let revealGeneration = 0
   let loadingGeneration = options.loadingGeneration
   let currentStorageScope = options.currentStorageScope
+  const viewLoaded = options.viewLoaded ?? true
   let currentScopeFilePath = options.currentScopeFilePath
   let workspaceRoot = options.workspaceRoot
   let treeVisible = options.treeVisible ?? true
@@ -30,6 +31,7 @@ function createHarness(options = {}) {
 
   const port = {
     currentStorageScope: () => currentStorageScope,
+    viewLoaded: () => viewLoaded,
     currentScopeFilePath: () => currentScopeFilePath,
     setCurrentScopeFilePath: filePath => {
       currentScopeFilePath = filePath
@@ -127,6 +129,23 @@ async function main() {
   ])
   assert.equal(fast.generation(), 4)
   assert.equal(fast.currentScopeFilePath(), 'C:\\workspace\\src\\active.ts')
+
+  const unfinished = createHarness({
+    generation: 4,
+    loadingGeneration: 4,
+    currentStorageScope: 'workspace:current',
+    viewLoaded: false,
+  })
+  await runScheduledRefresh(unfinished, activeEditor, 'workspace:current', false)
+  assert.deepEqual(unfinished.events, [
+    'revealGeneration:1',
+    'begin:5',
+    'loading:5',
+    'scan:reset',
+    'timer:100',
+    'init:C:\\workspace\\src\\active.ts:5:workspace:current',
+    'reveal:5:1',
+  ])
 
   const cancelled = createHarness({ currentStorageScope: 'workspace:current' })
   const delayedRefresh = cancelled.coordinator.refresh(activeEditor, 'workspace:current', true, cancelled.port)

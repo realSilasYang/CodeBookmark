@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.3 - 2026-08-08
+
+### 🚀 Improvements
+
+- **Explicit menu targets across languages:** Entries without a parent that already names bookmarks now use explicit labels such as “Generate Bookmarks” and “Delete Bookmark”. “AI Settings” is now “CodeBookmark AI Parameters”, with the same target-aware wording across all 13 manifest languages so standalone menu items remain unambiguous.
+- **Development dependency security:** Transitive `brace-expansion`, `fast-uri`, `js-yaml`, and `undici` dependencies in the build and release toolchain have been updated to patched versions; the current dependency audit reports no known vulnerabilities.
+
+---
+
+### 🐛 Fixed
+
+- **Automatic startup activation:** The extension now activates after VS Code finishes starting instead of waiting for the bookmark view or a command to be opened first, ensuring bookmark state and background capabilities initialize at startup.
+
 ## 🎉 Version 3.2.2 - 2026-08-01
 
 ### 🚀 Improvements

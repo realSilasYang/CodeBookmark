@@ -12,7 +12,7 @@ const manifest = loadLocalizedManifest('zh-cn')
 const { Commands } = require(path.join(root, 'out', 'util', 'constants', 'Commands'))
 const { README_DOCUMENTS } = require(path.join(root, 'out', 'i18n', 'ReadmeDocuments'))
 
-assert.equal('activationEvents' in manifest, false)
+assert.deepEqual(manifest.activationEvents, ['onStartupFinished'])
 assert.equal(fs.existsSync(path.join(root, '.vscodeignore')), false, 'manifest.files is the only package filter')
 assert.deepEqual(manifest.files, [
   'out/extension.js',

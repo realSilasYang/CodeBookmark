@@ -9,7 +9,7 @@ export const basePackage = {
 	"name": "codebookmark",
 	"displayName": "代码书签 - CodeBookmark",
 	"description": "为代码智能导航而生，符合你的直觉。自研粘性引擎，让书签准确跟随代码并持续绑定脚本。采用本地保存方案，拥有强大的 AI 辅助功能，支持丰富的图标和自定义选项。",
-	"version": "3.2.2",
+	"version": "3.2.3",
 	"publisher": "realSilasYang",
 	"author": "阳熙来",
 	"private": true,
@@ -80,6 +80,9 @@ export const basePackage = {
 	},
 	"categories": [
 		"Other"
+	],
+	"activationEvents": [
+		"onStartupFinished"
 	],
 	"main": "./out/extension.js",
 	"files": [

@@ -23,7 +23,8 @@ const knownExternalDiagnosticPatterns = [
   /^\[main [^\]]+\] Error: Error mutex already exists(?:\r?\n\s+at [^\r\n]*)*(?:\r?\n\))?\r?\n?/gmu,
   /^\[vscode\.mermaid-markdown-features\]: Extension 'vscode\.mermaid-markdown-features' CANNOT use 'legacyToolReferenceFullNames' without the 'chatParticipantPrivate' API proposal enabled\r?\n?/gmu,
   /^SettingsEditor2: Settings not included in settingsLayout\.ts:.*\r?\n?/gmu,
-  /^\(node:\d+\) \[DEP0169\] DeprecationWarning: `url\.parse\(\)`[^\r\n]*(?:\r?\n\(Use `Code --trace-deprecation \.\.\.` to show where the warning was created\))?\r?\n?/gmu,
+  /^(?:\[main [^\]]+\] \[AgentHost:stderr\] )?\(node:\d+\) \[DEP0169\] DeprecationWarning: `url\.parse\(\)`[^\r\n]*(?:\r?\n\(Use `Code --trace-deprecation \.\.\.` to show where the warning was created\))?\r?\n?/gmu,
+  /^Unknown channel: agentHostClientProxy\r?\n?/gmu,
   /^\[\d+:\d+\/\d+\.\d+:ERROR:gpu[\\/]ipc[\\/]client[\\/]command_buffer_proxy_impl\.cc:\d+\] GPU state invalid after WaitForGetOffsetInRange\.\r?\n?/gmu,
 ]
 
@@ -342,6 +343,7 @@ async function runLocale(
   // 无权删除整个隔离用户目录。测试不依赖 Git，预先关闭它可保持清理权限完整。
   await fs.writeFile(path.join(userDataPath, 'User', 'settings.json'), JSON.stringify({
     'git.enabled': false,
+    'codebookmark.globalStoragePath': bookmarkStoragePath,
   }, null, 2), 'utf8')
   const languagePacksFile = findInstalledLanguagePacksFile()
   if (downloadedVSCodeVersion && locale !== 'en') {
