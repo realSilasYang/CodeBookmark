@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.4 - 2026-09-06
+
+### 🚀 Improvements
+
+- **Dependency security updates:** Updated indirect dependencies in the build and release toolchain to remove low-severity audit findings and keep installation and publishing workflows secure.
+- **Synchronized multilingual documentation:** Simplified the main README title and aligned the donation copy and image layout across all 13 language versions for a more consistent public presentation.
+
+---
+
+### 🐛 Fixed
+
+- **Stable external configuration reloads:** Fixed Windows atomic file replacement windows that could briefly produce an empty configuration index and overwrite existing bookmarks; external edits now reliably settle on the latest bookmark state.
+
 ## 🎉 Version 3.2.3 - 2026-08-08
 
 ### 🚀 Improvements

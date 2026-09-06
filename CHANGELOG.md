@@ -2,6 +2,19 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 版本 3.2.4 - 2026-09-06
+
+### 🚀 优化
+
+- **依赖安全更新**：升级构建与发布链路中的间接依赖，消除低等级安全审计告警，保持安装与发布流程安全。
+- **多语言文档同步**：精简主 README 标题并统一 13 种语言的赞赏区域文案与图片布局，公开文档展示更加一致。
+
+---
+
+### 🐛 修复
+
+- **外部配置重载稳定性**：修复 Windows 文件原子替换期间配置索引短暂为空时覆盖现有书签的问题，外部修改现在会可靠恢复到最新书签状态。
+
 ## 🎉 版本 3.2.3 - 2026-08-08
 
 ### 🚀 优化
