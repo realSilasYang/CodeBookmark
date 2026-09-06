@@ -15,16 +15,15 @@ CodeBookmark는 코드에 북마크를 붙이고 빠르게 이동하기 위한 V
 
 [![CodeBookmark 화면](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# 기부
+# 프로젝트 후원
 
-북마크 탐색과 AI 지원으로 시간을 절약했다면, 아래 방법으로 개발자의 빈곤 탈출을 도와주세요 (≥Д≤).
+CodeBookmark로 코드 북마크와 AI 지원을 활용해 시간을 절약했다면 아래 QR 코드로 개발자를 후원해 주세요. 후원 방법을 선택해 주세요:
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="WeChat Pay 후원 QR 코드"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="Alipay 후원 QR 코드"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="WeChat Pay 후원 QR 코드">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="Alipay 후원 QR 코드">
+</p>
 
 # 사용자 안내서
 

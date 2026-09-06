@@ -15,16 +15,15 @@ CodeBookmark là tiện ích VS Code để đánh dấu và điều hướng mã
 
 [![Giao diện CodeBookmark](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# Quyên góp
+# Ủng hộ dự án
 
-Nếu tính năng điều hướng dấu trang và hỗ trợ AI giúp bạn tiết kiệm thời gian, bạn có thể chọn một trong các cách dưới đây để giúp tác giả thoát nghèo (≥Д≤).
+Nếu CodeBookmark giúp bạn tiết kiệm thời gian đánh dấu và điều hướng mã nguồn với hỗ trợ AI, hãy ủng hộ tác giả qua một trong hai mã QR dưới đây. Vui lòng chọn cách ủng hộ:
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="Mã QR ủng hộ qua WeChat Pay"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="Mã QR ủng hộ qua Alipay"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="Mã QR ủng hộ qua WeChat Pay">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="Mã QR ủng hộ qua Alipay">
+</p>
 
 # Hướng dẫn sử dụng
 

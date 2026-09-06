@@ -12,16 +12,15 @@ CodeBookmark — расширение VS Code для разметки кода �
 
 [![Интерфейс CodeBookmark](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# Пожертвование
+# Поддержать проект
 
-Если навигация по закладкам и функции ИИ экономят ваше время, помогите автору выбраться из бедности одним из способов ниже (≥Д≤).
+Если CodeBookmark помогает сэкономить время на навигации и разметке кода с помощью ИИ, поддержите автора с помощью одного из QR-кодов ниже. Выберите способ поддержки:
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="QR-код для поддержки через WeChat Pay"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="QR-код для поддержки через Alipay"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="QR-код для пожертвования через WeChat Pay">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="QR-код для пожертвования через Alipay">
+</p>
 
 # Руководство пользователя
 

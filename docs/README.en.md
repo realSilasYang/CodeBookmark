@@ -44,16 +44,15 @@ The Code Bookmarks panel shows the bookmarks attached to each script, their hier
 
 <br>
 
-# Donate
+# Support the project
 
-If bookmark navigation and AI assistance save you time, feel free to help lift the author out of poverty through one of the options below (≥Д≤).
+If CodeBookmark has saved you time marking and navigating code with AI assistance, you can support the author using either QR code below. Choose how you'd like to help:
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="WeChat Pay donation QR code"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="Alipay donation QR code"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="WeChat Pay donation QR code">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="Alipay donation QR code">
+</p>
 
 # User Guide
 

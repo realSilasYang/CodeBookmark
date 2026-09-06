@@ -8,16 +8,15 @@
 
 CodeBookmark è un’estensione di VS Code per contrassegnare e navigare il codice. Il motore di ancoraggio collega la configurazione all’identità dello script e ritrova i segnalibri dopo modifiche, rinomine, spostamenti di cartelle o trasferimenti del workspace. I dati restano nella cartella locale scelta dall’utente. L’IA può generare segnalibri dal significato del codice, migliorare le etichette e scegliere un’icona solo quando la corrispondenza è chiara.
 
-# Donazioni
+# Sostieni il progetto
 
-Se la navigazione tra i segnalibri e l’assistenza IA ti fanno risparmiare tempo, puoi aiutare l’autore a uscire dalla povertà con uno dei metodi seguenti (≥Д≤).
+Se CodeBookmark ti ha fatto risparmiare tempo nel contrassegnare e navigare il codice con l’assistenza IA, puoi sostenere l’autore con uno dei codici QR seguenti. Scegli come vuoi contribuire:
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="Codice QR per sostenere il progetto con WeChat Pay"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="Codice QR per sostenere il progetto con Alipay"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="Codice QR per donazione WeChat Pay">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="Codice QR per donazione Alipay">
+</p>
 
 # Guida utente
 

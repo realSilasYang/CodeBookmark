@@ -8,16 +8,15 @@
 
 CodeBookmark ist eine VS-Code-Erweiterung zum Markieren und Navigieren von Code. Die Anker-Engine verbindet die Konfiguration mit der Identität eines Skripts und findet Lesezeichen nach Bearbeitungen, Umbenennungen, Ordner- oder Workspace-Verschiebungen wieder. Daten bleiben im gewählten lokalen Ordner. Die KI erzeugt semantische Lesezeichen, verbessert Beschriftungen und wählt nur bei eindeutiger Bedeutung ein spezielles Symbol.
 
-# Spenden
+# Projekt unterstützen
 
-Wenn Ihnen die Lesezeichen-Navigation und KI-Unterstützung Zeit sparen, können Sie dem Autor mit einer der folgenden Möglichkeiten aus der Armut helfen (≥Д≤).
+Wenn CodeBookmark Ihnen beim Markieren und Navigieren von Code mit KI-Unterstützung Zeit erspart, können Sie den Autor über einen der folgenden QR-Codes unterstützen. Wählen Sie aus, wie Sie helfen möchten:
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="QR-Code für eine Unterstützung über WeChat Pay"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="QR-Code für eine Unterstützung über Alipay"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="QR-Code für eine Spende über WeChat Pay">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="QR-Code für eine Spende über Alipay">
+</p>
 
 # Benutzerhandbuch
 

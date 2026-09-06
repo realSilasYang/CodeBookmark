@@ -22,16 +22,15 @@ CodeBookmark 是用書籤標記及導覽程式碼的 VS Code 擴充功能。黏�
 
 [![CodeBookmark 介面概覽](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# 捐贈
+# 支援專案
 
-如果書籤導覽與 AI 輔助為你節省了時間，歡迎透過以下方式扶貧（≥Д≤）
+如果 CodeBookmark 的程式碼書籤與 AI 輔助為你節省了標記及導覽程式碼的時間，歡迎透過下方二維碼打賞作者。請選擇支援方式：
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>微信</strong></td><td align="center"><strong>支付寶</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="微信個人收款碼"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="支付寶個人收款碼"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="微信支付打賞二維碼">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="支付寶打賞二維碼">
+</p>
 
 # 使用指南
 

@@ -21,16 +21,15 @@ CodeBookmark は、コードをブックマークで整理し、すばやく移�
 
 [![CodeBookmark の画面](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# 寄付
+# プロジェクトを支援する
 
-ブックマークのナビゲーションと AI 支援で時間を節約できたら、以下の方法で作者の貧困脱出を支援していただけるとうれしいです（≥Д≤）。
+CodeBookmark のブックマークと AI 支援でコードのマーキングやナビゲーションにかかる時間を節約できたなら、下の QR コードから作者をご支援ください。支援方法をお選びください：
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="WeChat Pay 支援用 QR コード"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="Alipay 支援用 QR コード"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="WeChat Pay 寄付用 QR コード">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="Alipay 寄付用 QR コード">
+</p>
 
 # ユーザーガイド
 

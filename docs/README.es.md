@@ -12,16 +12,15 @@ CodeBookmark es una extensión de VS Code para marcar y recorrer código. Su mot
 
 [![Interfaz de CodeBookmark](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)](https://raw.githubusercontent.com/realSilasYang/CodeBookmark/main/docs/images/codebookmark-overview.png)
 
-# Donaciones
+# Apoya el proyecto
 
-Si la navegación por marcadores y la asistencia de IA te ahorran tiempo, puedes ayudar al autor a salir de la pobreza mediante una de las opciones siguientes (≥Д≤).
+Si CodeBookmark te ha ahorrado tiempo al marcar y navegar por código con ayuda de IA, puedes apoyar al autor con uno de los códigos QR siguientes. Elige cómo deseas colaborar:
 
-<div align="center">
-  <table>
-    <tr><td align="center"><strong>WeChat Pay</strong></td><td align="center"><strong>Alipay</strong></td></tr>
-    <tr><td align="center"><img src="../resources/donate/wechat-pay.png" width="240" alt="Código QR para donar con WeChat Pay"></td><td align="center"><img src="../resources/donate/alipay.png" width="240" alt="Código QR para donar con Alipay"></td></tr>
-  </table>
-</div>
+<p align="center">
+  <img src="../resources/donate/wechat-pay.png" width="220" alt="Código QR de donación por WeChat Pay">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../resources/donate/alipay.png" width="220" alt="Código QR de donación por Alipay">
+</p>
 
 # Guía de uso
 

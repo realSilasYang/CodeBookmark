@@ -42,22 +42,15 @@
 [AI 协议与安全边界](#9-ai-协议与安全边界) · [自动标记与语言配置](#10-自动标记与语言配置) · [图标系统与 Webview](#11-图标系统与-webview) · [构建、测试与发布](#12-构建测试与发布)
 
 
-# 捐赠
+# 打赏
 
-如果书签导航与 AI 辅助为你节省了时间，欢迎通过以下方式扶贫（≥Д≤）
+如果代码书签与 AI 辅助为您节省了标记和导航代码的时间，欢迎通过下方二维码打赏作者。请选择支持方式：
 
-<div align="center">
-  <table>
-    <tr>
-      <td align="center"><strong>微信</strong></td>
-      <td align="center"><strong>支付宝</strong></td>
-    </tr>
-    <tr>
-      <td align="center"><img src="./resources/donate/wechat-pay.png" width="240" alt="微信个人收款码"></td>
-      <td align="center"><img src="./resources/donate/alipay.png" width="240" alt="支付宝个人收款码"></td>
-    </tr>
-  </table>
-</div>
+<p align="center">
+  <img src="./resources/donate/wechat-pay.png" width="220" alt="微信支付打赏二维码">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./resources/donate/alipay.png" width="220" alt="支付宝打赏二维码">
+</p>
 
 <br>
 
