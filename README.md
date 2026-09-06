@@ -52,8 +52,6 @@
   <img src="./resources/donate/alipay.png" width="220" alt="支付宝打赏二维码">
 </p>
 
-<br>
-
 # 用户使用指南
 
 ## 1. 初次使用
