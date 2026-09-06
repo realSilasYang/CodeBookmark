@@ -122,6 +122,24 @@ assert.deepEqual(findProjectDiagnosticsInLog(
   root,
   'exthost.log',
 ), [])
+const downloadedMergeConflictExtensionStack = path.join(
+  root,
+  '.vscode-test',
+  'vscode-win32-x64-archive-1.130.0',
+  '1b6a188127',
+  'resources',
+  'app',
+  'extensions',
+  'merge-conflict',
+  'dist',
+  'mergeConflictMain.js',
+)
+assert.deepEqual(findProjectDiagnosticsInLog(
+  '2026-07-23 13:00:00.000 [error] PendingMigrationError: navigator is now a global in nodejs\n'
+    + `  at initialize (${downloadedMergeConflictExtensionStack}:37:13533)`,
+  root,
+  'exthost.log',
+), [])
 const downloadedMainStack = path.join(
   root,
   '.vscode-test',
