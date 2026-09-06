@@ -207,7 +207,7 @@ const readme = read('README.md')
 const englishReadme = read(path.join('docs', 'README.en.md'))
 const notices = read(path.join('docs', 'legal', 'THIRD_PARTY_NOTICES.md'))
 const icon = fs.readFileSync(path.join(root, manifest.icon))
-assert.match(readme, /<h1>代码书签 - CodeBookmark<\/h1>/)
+assert.match(readme, /<h1>代码书签<\/h1>/)
 assert.match(englishReadme, /<h1>CodeBookmark<\/h1>/)
 const githubDocumentUrl = 'https://github.com/realSilasYang/CodeBookmark/blob/main/'
 assert.ok(readme.includes(`<a href="${githubDocumentUrl}docs/README.en.md">English</a>`))

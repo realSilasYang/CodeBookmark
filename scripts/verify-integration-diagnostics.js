@@ -19,14 +19,15 @@ const knownDiagnostics = [
   '(node:123) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized\n(Use `Code --trace-deprecation ...` to show where the warning was created)',
   '[main 2026-08-08T00:00:00.000Z] [AgentHost:stderr] (node:456) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized\n(Use `Code --trace-deprecation ...` to show where the warning was created)',
   'Unknown channel: agentHostClientProxy',
+  'Unknown channel: agentHostClientByokLm',
   '[34240:0723/134735.530:ERROR:gpu\\ipc\\client\\command_buffer_proxy_impl.cc:488] GPU state invalid after WaitForGetOffsetInRange.',
   'Failed to create default profile extensions manifest in extensions installation folder. file:///c%3A/Temp/codebookmark/extensions 如果未设置覆盖标记，则无法创建文件“vscode-userdata:/c:/Temp/codebookmark/extensions/extensions.json”，因为它已存在',
 ].join('\n')
 
 const stripped = stripKnownExternalDiagnostics(knownDiagnostics)
-assert.equal(stripped.count, 9)
+assert.equal(stripped.count, 10)
 assert.equal(stripped.remaining.trim(), '')
-assert.equal(assertNoUnexpectedExtensionHostDiagnostics(knownDiagnostics, ''), 9)
+assert.equal(assertNoUnexpectedExtensionHostDiagnostics(knownDiagnostics, ''), 10)
 assert.throws(
   () => assertNoUnexpectedExtensionHostDiagnostics('Error: CodeBookmark activation failed', ''),
   /Unexpected Extension Host diagnostics/,

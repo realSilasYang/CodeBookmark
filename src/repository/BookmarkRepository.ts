@@ -133,6 +133,14 @@ class CodeBookmarksRepository {
 		this.scriptIndex.remove(id)
 	}
 
+	/**
+	 * 使下一次读取重新枚举脚本配置目录。文件监听可能在 Windows 原子替换的短暂窗口内到达，
+	 * 不能让那一刻得到的空索引继续被后续重载复用。
+	 */
+	invalidateIndex(): void {
+		this.scriptIndex.invalidate()
+	}
+
 	private indexEntry(entry: ScriptIndexEntry): void {
 		this.scriptIndex.set(entry)
 	}

@@ -130,6 +130,7 @@ import {
 	type BookmarkConfigWatcherFailureKind,
 	type BookmarkConfigWatcherPort,
 } from './BookmarkConfigWatcherCoordinator'
+import { reloadExternalBookmarks } from './ExternalBookmarkReloadRunner'
 import {
 	BookmarkDocumentChangeCoordinator,
 	type BookmarkDocumentChangePort,
@@ -580,8 +581,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		})
 		this.context.subscriptions.push(selectionListener, cursorListener, editorListener, tabListener)
 
-		// TreeDataProvider 此时已经能立即回答 VS Code。真正的磁盘加载随后启动，
-		// 网络存储再慢也只表现为加载状态，不会卡住 activate 或悬住 getChildren()。
 		this.bookmarkTreeViewLifecycle.startInitialLoad(treeView, this.bookmarkTreeViewLifecyclePort())
 
 		void this.initViewEditor()
@@ -623,8 +622,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		return this.bookmarkTreeDataProjection.treeItem(element, this.bookmarkTreeDataProjectionPort())
 	}
 
-	// 这一层只解包 VS Code 的拖放数据；能否移动、落到哪一层以及如何记录撤销，
-	// 统一交给 BookmarkTreeInteractionRunner，避免键盘和鼠标入口各有一套规则。
 	handleDrag(source: Bookmark[], treeDataTransfer: vscode.DataTransfer): void {
 		runBookmarkTreeDrag(source, treeDataTransfer)
 	}
@@ -654,7 +651,9 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	private async reloadExternalBookmarkFiles(fileNames: readonly string[]): Promise<void> {
 		if (fileNames.length === 0 || !this.currentStorageScope) return
 		await this.flushPendingSaves(true)
-		await this.refresh(undefined, this.currentStorageScope, true)
+		await reloadExternalBookmarks(fileNames, { currentStorageScope: () => this.currentStorageScope,
+			currentBookmarkCount: () => this.codeBookmarks.size, invalidateRepositoryIndex: () => bookmarkRepository.invalidateIndex(),
+			refresh: storageScope => this.refresh(undefined, storageScope, true) })
 	}
 
 	private rebasePendingSavesToCurrentTree(): void {
