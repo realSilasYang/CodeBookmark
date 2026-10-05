@@ -91,6 +91,7 @@ const expectedCatalog = [
   ['azure', 'brand_microsoft_azure_logo.svg', '连接 Microsoft Azure'],
   ['gcp', 'brand_google_cloud_logo.svg', '连接 Google Cloud'],
   ['github', 'brand_github.svg', '触发 GitHub Actions'],
+  ['greasyfork', 'brand_greasyfork.svg', 'Greasy Fork 平台'],
   ['gitlab', 'brand_gitlab_logo.svg', '创建 GitLab Merge Request'],
   ['terraform', 'brand_terraform_icon_logo.svg', '应用 Terraform 配置'],
   ['typescript', 'brand_typescript.svg', '解析 TypeScript 类型'],
@@ -120,10 +121,10 @@ const dictionary = JSON.parse(fs.readFileSync(path.join('resources', 'icon_dicti
 const dictionaryIds = dictionary.map(icon => icon.id).sort()
 const dictionaryNames = [...new Set(dictionary.map(icon => icon.name))].sort()
 const hashLines = lines => crypto.createHash('sha256').update(lines.join('\n')).digest('hex')
-assert.equal(dictionaryIds.length, 1499, 'The icon library changed and must be reviewed for AI selection')
-assert.equal(dictionaryNames.length, 681, 'The icon concept set changed and must be reviewed for AI selection')
-assert.equal(hashLines(dictionaryIds), '06cc8b8777655c554494d9de44b97f38d03ef321d7d5807982ffcc45ba1f8288')
-assert.equal(hashLines(dictionaryNames), 'd09b4dce81061c899d9aa0f2ebe9dbcd65fe1053a370443f8b3425465d6640f3')
+assert.equal(dictionaryIds.length, 1500, 'The icon library changed and must be reviewed for AI selection')
+assert.equal(dictionaryNames.length, 682, 'The icon concept set changed and must be reviewed for AI selection')
+assert.equal(hashLines(dictionaryIds), 'e07f86e32d4e1ed7fa4a05d7e94afd025f093f0eab72d062d4cf5871cf664c25')
+assert.equal(hashLines(dictionaryNames), '29a2b80da22df12af0b33d173dfb33265feeb01aa0c3b0e0cd853de2ae071306')
 
 const expectedByKey = new Map(expectedCatalog.map(([key, iconName, example]) => [key, { iconName, example }]))
 assert.equal(expectedByKey.size, expectedCatalog.length, 'Duplicate expected AI semantic key')
@@ -169,6 +170,9 @@ assert.ok(Math.max(...colorVariantCounts.values()) <= 5, 'A single base color va
 const resolve = (key, ...labels) => resolveAIIconNameForSemantic(key, { labels })
 assert.equal(resolve('../outside.svg', '验证 API Key'), undefined)
 assert.equal(resolve('not-an-icon', '验证 API Key'), undefined)
+assert.equal(resolve('greasyfork', '油叉脚本平台'), expectedByKey.get('greasyfork').iconName)
+assert.equal(resolve('greasyfork', 'GreasyFork'), expectedByKey.get('greasyfork').iconName)
+assert.equal(resolve('greasyfork', '普通用户脚本'), undefined)
 assert.equal(resolve('authentication', '可读性提升与 URL 还原'), undefined)
 assert.equal(resolve('authentication', '验证 API Key'), expectedByKey.get('authentication').iconName)
 assert.equal(resolve('configuration', '处理普通函数参数'), undefined)

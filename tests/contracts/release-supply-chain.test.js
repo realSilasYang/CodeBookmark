@@ -19,8 +19,8 @@ const workflowPaths = [
 
 describe('release supply chain', () => {
   it('uses the exact locally installed VSIX publisher', () => {
-    assert.equal(manifest.devDependencies['@vscode/vsce'], '3.9.2')
-    assert.equal(lockfile.packages['node_modules/@vscode/vsce'].version, '3.9.2')
+    assert.equal(manifest.devDependencies['@vscode/vsce'], '4.0.0')
+    assert.equal(lockfile.packages['node_modules/@vscode/vsce'].version, '4.0.0')
     assert.equal(manifest.scripts['package:list'], 'vsce ls --no-dependencies')
     assert.equal(manifest.scripts['package:vsix'], 'node scripts/release/package-vsix.js')
   })

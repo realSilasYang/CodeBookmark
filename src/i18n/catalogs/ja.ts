@@ -141,13 +141,14 @@ export const messages = {
 	'undoAction.setBookmarkContainer': 'ブックマークコンテナーに設定',
 	'undoAction.unsetBookmarkContainer': 'ブックマークコンテナーとしての使用を解除',
 	'ai.prompt.generation': `あなたは、コードナビゲーション用ブックマークの設計者です。まずファイル全体の役割を把握し、繰り返し参照する価値のあるモジュールのエントリーポイント、クラス／インターフェイス、関数／メソッド、ライフサイクルの段階、状態遷移、重要な分岐、エラー処理、外部 I/O、パフォーマンス上の要点、有用なコメントを見つけてください。import、定型コード、単純な代入、重複したラッパー、ささいな文は対象外です。
+コメントに明確なモジュール見出し、セクション分け、責務の説明、処理段階などの構造的な内容がある場合は、それらを優先してブックマークにしてください。意味のある見出しや説明を含むコメント行を位置として選び、その内容をそのまま、または簡潔に要約してラベルに使い、モジュール名、セクション名、構造上の意味を保ってください。装飾的な区切り線、一般的なコメント、行ごとの説明だけを理由にブックマークを作らないでください。コメントに構造情報がない場合やコードと矛盾する場合は、コードのロジックから導いてください。構造的なコメントが同じロジックを十分に要約している場合は、近くに同じ意味のブックマークを重複して作らないでください。
 ブックマークには、ユーザーが実際に読み返す価値のあるソース行を指定してください。label にはコードを言い換えるだけでなく、その場所が重要な理由を表します。拡張機能は、手動で追加したブックマークと同じ方法で ID、パス、作成日時、選択範囲、コンテキストの特徴、展開状態を生成します。
 
 Markdown を使わず、厳密な JSON だけを返してください。ルートオブジェクトは次の形式にします:
 {"bookmarks":[{"label":"起動処理を開始","lineNumber":12,"anchor":"元のソース行全体","icon":"entry","children":[]},{"label":"結果を処理","lineNumber":24,"anchor":"別の元のソース行","children":[]}]}
 
 フィールドの要件:
-- label: 正確で一覧しやすい短いラベル。「動作 + 対象」または「段階 + 目的」を優先し、ひと目で読める長さにまとめる。
+- label: 正確で一覧しやすい短いラベル。「動作 + 対象」または「段階 + 目的」を優先し、ひと目で読める長さにまとめる。 構造的なコメントの明確な見出しは、これらの表現形式より優先する。
 - lineNumber: 入力ソースの左側に表示された、1 から始まる行番号。
 - anchor: 「行番号 | 」という接頭辞を除いた、その行の元のテキスト全体。一字一句そのままコピーし、書き換えず、空行は選ばない。
 - icon: 省略可能。ブックマークの意味がアイコンキーと明確に一致する場合にだけ含める。確信がなければ省略し、拡張機能の既定アイコンを使わせる。
@@ -165,6 +166,7 @@ anchor は JSON 文字列のエスケープ規則に従う必要があります�
 icon は省略可能です。ブックマークの label が次のいずれかの分野を直接表す場合にだけ、対応する icon を含めてください。ソースの anchor は意味を明確にしたり競合を除外したりするためにだけ使え、それ単独でアイコンを選ぶ根拠にはなりません。一般的な関数、モジュール、引数処理、データ変換、説明用コードでは icon を省きます。明確な分野より具体的な製品や技術を、一般的な動作より明確な分野を優先してください。たとえば PostgreSQL には data ではなく postgresql、API Key には validation ではなく authentication を使います。同じ優先度の候補が複数ある場合は icon を省きます。async/await があるだけでは async を選べません。URL、URI、ドメイン名、クエリパラメーターには authentication ではなく link を使います。確信が持てない場合、意味が曖昧な場合、確実に該当するキーがない場合は icon を省き、拡張機能の既定アイコンを使わせてください。利用可能な意味キー:
 ${iconSemanticCatalog}`,
 	'ai.prompt.optimization': `あなたは、コードナビゲーション用ブックマークの編集者です。行番号付きのソースと、既存ブックマークごとの label、行番号、原文どおりの anchor を基に、そのブックマークが実際に示すモジュール、クラス、関数、段階、分岐、障害処理を判断し、不正確、曖昧、または長すぎる label を改善してください。
+対象のコード領域に、実際のロジックと一致する明確なモジュール見出し、セクションの説明、処理段階のコメントがある場合は、その名称と意味を優先して保つか、簡潔に要約してください。明確な構造見出しを一般的な動詞ラベルに置き換えないでください。この規則はラベルの表現だけに適用し、ブックマークを追加したり移動したりしません。
 ツリー内で隣り合うロジックを見分けやすい label にします。分野固有の用語と重要な動作を残し、ひと目で読める長さにまとめてください。ブックマークの位置、階層、ID、anchor は変更しません。すでに明確な label のブックマークは省きます。
 
 Markdown を使わず、厳密な JSON 配列だけを返してください。各項目には入力に存在する id と、更新が必要な new_label または icon を含めます:
@@ -636,9 +638,7 @@ ${iconSemanticCatalog}`,
 	'util.AIHttpTransport.failedToReceiveTheAiResponse': 'AI の応答を受信できませんでした: {message}',
 	'util.AIHttpTransport.networkRequestFailed': 'ネットワークリクエストに失敗しました: {message}',
 	'util.AIHttpTransport.receivedTheFirstResponseByteContinuingToReceiveData': '応答の最初のバイトを受信しました。引き続きデータを受信しています…',
-	'util.AIHttpTransport.theAiRequestExceededSecondsInTotal': 'AI リクエストの合計時間が {timeoutS} 秒を超えました',
 	'util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit': 'AI リクエストは {formatByteSize} あり、送信上限 {formatByteSize2} を超えています。',
-	'util.AIHttpTransport.theAiRequestTimedOutAfterSeconds': 'AI リクエストが {timeoutS} 秒でタイムアウトしました',
 	'util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe': 'AI の応答には {formatByteSize} のサイズが宣言されており、受信上限 {formatByteSize2} を超えています。',
 	'util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit': 'AI の応答が受信上限 {formatByteSize} を超えています。',
 	'util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold': 'AI の応答が {formatByteSize} に達し、警告値 {formatByteSize2} を超えました。今後も増える可能性があります。受信を続けるとメモリ使用量が増え、不正な応答は解析できない場合があります。',

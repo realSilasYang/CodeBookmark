@@ -12,6 +12,7 @@ const informationMessages = []
 const warningMessages = []
 const registeredCommands = new Map()
 const values = new Map()
+const configurationReads = new Set()
 const inspections = new Map()
 const configurationUpdates = []
 const workingAddress = 'http://127.0.0.1:1234/v1/chat/completions'
@@ -19,7 +20,11 @@ const { vscode } = createVscodeFake({
 	ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   workspace: {
     getConfiguration: section => ({
-      get: key => values.get(`${section}.${key}`),
+      get: key => {
+        const fullKey = `${section}.${key}`
+        configurationReads.add(fullKey)
+        return values.get(fullKey)
+      },
 	  inspect: key => inspections.get(`${section}.${key}`),
 	  update: async (key, value, target) => {
 		const fullKey = `${section}.${key}`
@@ -61,11 +66,13 @@ values.set('codebookmark.AI.address', '')
 values.set('codebookmark.AI.APIKey', '')
 values.set('codebookmark.AI.model', '')
 values.set('codebookmark.AI.assignIcons', false)
+values.set('codebookmark.AI.timeoutS', 60)
 ExtensionConfig.invalidate()
 assert.equal(ExtensionConfig.ensureAIConfigured(), false)
 assert.deepEqual(openedSettings, ['codebookmark.AI'])
 assert.match(errorMessages.at(-1), /接口地址、模型名称/)
 assert.equal(ExtensionConfig.aiAssignIcons, false)
+assert.equal(configurationReads.has('codebookmark.AI.timeoutS'), false, 'the former timeout setting must be ignored')
 
 values.set('codebookmark.AI.address', 'http://127.0.0.1:1234/v1/chat/completions')
 values.set('codebookmark.AI.APIKey', '')

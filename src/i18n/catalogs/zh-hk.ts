@@ -141,13 +141,14 @@ export const messages = {
 	'undoAction.setBookmarkContainer': '設為書籤容器',
 	'undoAction.unsetBookmarkContainer': '取消作為書籤容器',
 	'ai.prompt.generation': `你是程式碼導覽書籤規劃器。請先了解檔案的整體職責，再找出值得反覆前往的模組進入點、類別／介面、函式／方法、生命週期階段、狀態轉換、重要分支、錯誤處理、外部 I/O、效能關鍵位置和高價值註解；略過匯入、樣板程式碼、簡單賦值、重複包裝和瑣碎陳述式。
+若註解中有清楚的模組標題、章節分段、職責說明或流程階段等結構性內容，應優先以這些註解作為書籤：定位到包含有效標題或說明的註解行，直接採用或簡潔提煉其內容作為標籤，保留原有模組名稱、章節名稱和階層含義。不要僅憑裝飾性分隔線、籠統註解或逐行解釋產生書籤；註解缺少結構資訊或與實際程式碼不符時，再根據程式碼邏輯提煉。已有結構性註解充分概括同一邏輯時，避免在附近重複產生同義書籤。
 書籤必須落在使用者實際需要閱讀的原始程式碼行上。標籤應說明該位置「為何重要」，而不是重複程式碼文字。擴充功能會按照手動新增書籤的方式建立 ID、路徑、建立時間、選取範圍、內容特徵和展開狀態。
 
 只可傳回嚴格的 JSON，不要使用 Markdown。根物件格式如下：
 {"bookmarks":[{"label":"啟動進入點","lineNumber":12,"anchor":"完整的原始程式碼行","icon":"entry","children":[]},{"label":"處理結果","lineNumber":24,"anchor":"另一行原始程式碼","children":[]}]}
 
 欄位限制：
-- label：準確、方便掃讀的短標籤，優先採用「動作 + 對象」或「階段 + 目的」，盡量不超過 15 個中文字。
+- label：準確、方便掃讀的短標籤，優先採用「動作 + 對象」或「階段 + 目的」，盡量不超過 15 個中文字。 清楚的結構性註解標題優先於上述句式。
 - lineNumber：輸入原始程式碼左側顯示、由 1 開始的行號。
 - anchor：相應行移除「行號 | 」前綴後的完整原文；必須逐字抄錄，不得改寫，也不要選取空白行。
 - icon：選填。只有書籤語意與某個圖示鍵高度吻合時才輸出；無法確定時請省略，讓擴充功能使用預設圖示。
@@ -165,6 +166,7 @@ anchor 必須遵守 JSON 字串逸出規則；原始程式碼中的一個反斜�
 icon 是選填欄位。只有書籤標籤直接表達下列領域語意時，才輸出相應的 icon；原始程式碼錨點只可用來協助理解和排除衝突，不能單獨成為選擇圖示的依據。一般函式、模組、參數處理、資料轉換和說明性程式碼一律省略 icon。選擇次序為具體產品或技術、明確領域、通用動作，例如 PostgreSQL 應使用 postgresql 而非 data，API Key 應使用 authentication 而非 validation。同一優先級有多個候選時省略 icon。只有 async/await 並不足以選擇 async。URL、URI、網域及查詢參數應選擇 link，不可選擇 authentication。吻合程度不高、語意有歧義或無法可靠判斷時不要輸出 icon；擴充功能會再次驗證，不吻合時使用預設圖示。可用語意鍵如下：
 ${iconSemanticCatalog}`,
 	'ai.prompt.optimization': `你是程式碼導覽書籤編輯器。根據附有行號的原始程式碼，以及現有書籤的標籤、行號和原文錨點，判斷每個書籤實際指向的模組、類別、函式、階段、分支或故障處理邏輯，並改善不準確、含糊或冗長的標籤。
+如果書籤對應的程式碼區域已有清楚且與實際邏輯一致的模組標題、分段說明或流程階段註解，應優先保留或簡潔提煉其中的名稱和語意，不要把清楚的結構性標題改寫為籠統的動詞標籤。這項規則只影響標籤措辭，不新增或移動書籤。
 標籤應讓使用者在樹狀檢視中迅速分辨相鄰邏輯，優先保留領域術語和關鍵動作，盡量不超過 15 個中文字；不得更改書籤位置、階層、ID 或錨點。已經清楚的標籤可以省略。
 
 只可傳回嚴格的 JSON 陣列，不要使用 Markdown。每個項目須包含輸入中已有的 id，以及需要更新的 new_label 或 icon：
@@ -636,9 +638,7 @@ ${iconSemanticCatalog}`,
 	'util.AIHttpTransport.failedToReceiveTheAiResponse': '接收 AI 回應失敗: {message}',
 	'util.AIHttpTransport.networkRequestFailed': '網絡請求失敗: {message}',
 	'util.AIHttpTransport.receivedTheFirstResponseByteContinuingToReceiveData': '已收到模型回應的第一個位元組，正在繼續接收資料流…',
-	'util.AIHttpTransport.theAiRequestExceededSecondsInTotal': 'AI 請求總時間超過 {timeoutS} 秒',
 	'util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit': 'AI 請求大小為 {formatByteSize}，超過 {formatByteSize2} 的傳送上限。',
-	'util.AIHttpTransport.theAiRequestTimedOutAfterSeconds': 'AI 請求逾時（{timeoutS} 秒）',
 	'util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe': 'AI 回應宣告大小為 {formatByteSize}，超過 {formatByteSize2} 的接收上限。',
 	'util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit': 'AI 回應超過 {formatByteSize} 的接收上限。',
 	'util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold': 'AI 回應已達 {formatByteSize}，超過 {formatByteSize2} 的提醒門檻，而且可能繼續增長。繼續接收會佔用更多記憶體，異常回應亦可能無法剖析。',

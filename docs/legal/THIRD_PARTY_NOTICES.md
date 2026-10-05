@@ -1,10 +1,15 @@
 # Third-Party Notices
 
-The custom bookmark icons are downloaded through the Iconify API from the
+Most custom bookmark icons are downloaded through the Iconify API from the
 collections below. The source repository keeps the exact download URLs in
 `scripts/icons/curated_icons.json`. Packaged copies are renamed and
 sanitized to reject scripts, event handlers, and external references; no
 intentional graphical changes are made.
+
+`brand_github.svg` was replaced and `brand_greasyfork.svg` was added using
+the SVG files supplied by the project maintainer from their local browser
+customization resources. These files retain the supplied artwork and colors
+and are not entries in the Iconify download manifest.
 
 | Iconify prefix | Collection | Author | License | Source |
 | --- | --- | --- | --- | --- |

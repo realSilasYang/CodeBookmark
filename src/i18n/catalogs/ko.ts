@@ -141,13 +141,14 @@ export const messages = {
 	'undoAction.setBookmarkContainer': '북마크 컨테이너로 설정',
 	'undoAction.unsetBookmarkContainer': '북마크 컨테이너 해제',
 	'ai.prompt.generation': `당신은 코드 탐색용 북마크 설계자입니다. 먼저 파일 전체의 역할을 이해한 뒤, 반복해서 이동할 가치가 있는 모듈 진입점, 클래스/인터페이스, 함수/메서드, 수명 주기 단계, 상태 전환, 중요한 분기, 오류 처리, 외부 I/O, 성능 핵심 지점, 가치 있는 주석을 찾으세요. import, 상용구 코드, 단순 대입, 중복 래퍼, 사소한 문장은 무시하세요.
+주석에 모듈 제목, 구역 구분, 책임 설명, 처리 단계 같은 구조적 내용이 명확히 있으면 해당 주석을 북마크로 우선 사용하세요. 의미 있는 제목이나 설명이 있는 주석 줄에 북마크를 지정하고, 그 내용을 그대로 쓰거나 간결하게 요약하여 레이블로 사용하되 모듈명, 구역명, 구조적 의미를 유지하세요. 장식용 구분선, 일반적인 주석, 줄별 설명만을 근거로 북마크를 만들지 마세요. 주석에 구조 정보가 없거나 실제 코드와 맞지 않을 때는 코드 로직에서 북마크를 도출하세요. 구조적 주석이 같은 로직을 이미 잘 요약한다면 주변에 의미가 같은 북마크를 중복 생성하지 마세요.
 북마크는 사용자가 실제로 읽어야 하는 소스 줄에 놓아야 합니다. 레이블은 코드 문구를 반복하지 말고 그 위치가 '왜 중요한지' 설명해야 합니다. 확장은 수동으로 북마크를 추가할 때와 같은 방식으로 ID, 경로, 생성 시각, 선택 영역, 문맥 지문, 펼침 상태를 생성합니다.
 
 엄격한 JSON만 반환하고 Markdown은 사용하지 마세요. 루트 객체 형식:
 {"bookmarks":[{"label":"시작 진입점","lineNumber":12,"anchor":"원본 소스 코드의 전체 한 줄","icon":"entry","children":[]},{"label":"결과 처리","lineNumber":24,"anchor":"또 다른 원본 소스 줄","children":[]}]}
 
 필드 제약:
-- label: 정확하고 훑어보기 쉬운 짧은 레이블입니다. '동작 + 대상' 또는 '단계 + 목적'을 우선하고 가능하면 한국어 15자 이내로 작성하세요.
+- label: 정확하고 훑어보기 쉬운 짧은 레이블입니다. '동작 + 대상' 또는 '단계 + 목적'을 우선하고 가능하면 한국어 15자 이내로 작성하세요. 구조적 주석의 명확한 제목은 위 표현 형식보다 우선합니다.
 - lineNumber: 입력 소스 왼쪽에 표시된 1부터 시작하는 줄 번호입니다.
 - anchor: 해당 줄에서 '줄 번호 | ' 접두사를 뺀 원문 전체입니다. 한 글자도 바꾸지 말고 그대로 인용해야 하며 빈 줄을 선택하지 마세요.
 - icon: 선택 사항입니다. 북마크 의미가 특정 아이콘 키와 명확하게 일치할 때만 출력하세요. 일치 여부가 모호하면 생략하여 확장의 기본 아이콘을 사용하세요.
@@ -165,6 +166,7 @@ anchor는 JSON 문자열 이스케이프 규칙을 따라야 합니다. 소스�
 icon은 선택 필드입니다. 북마크 레이블에 아래 분야 의미가 직접 나타날 때만 해당 icon을 출력하세요. 소스 앵커는 의미를 이해하고 충돌을 배제하는 데만 쓸 수 있으며, 앵커만으로 아이콘을 선택할 수 없습니다. 일반 함수, 모듈, 매개 변수 처리, 데이터 변환, 설명용 코드에는 icon을 생략하세요. 구체적인 제품이나 기술, 명확한 분야, 일반 동작 순으로 선택합니다. 예를 들어 PostgreSQL에는 data 대신 postgresql을, API Key에는 validation 대신 authentication을 사용합니다. 같은 우선순위에 후보가 여러 개면 icon을 생략하세요. async/await만 있다는 이유로 async를 선택할 수 없습니다. URL, URI, 도메인, 쿼리 매개 변수에는 authentication이 아니라 link를 선택하세요. 일치도가 낮거나 모호하거나 확실히 판단할 수 없으면 icon을 출력하지 마세요. 확장이 다시 검증하며 일치하지 않으면 기본 아이콘을 사용합니다. 선택할 수 있는 의미 키:
 ${iconSemanticCatalog}`,
 	'ai.prompt.optimization': `당신은 코드 탐색용 북마크 편집자입니다. 줄 번호가 있는 소스와 기존 북마크의 레이블, 줄 번호, 원문 앵커를 바탕으로 각 북마크가 실제로 가리키는 모듈, 클래스, 함수, 단계, 분기, 장애 처리 로직을 판단하고 부정확하거나 모호하거나 긴 레이블을 개선하세요.
+북마크가 가리키는 코드 영역에 실제 로직과 일치하는 명확한 모듈 제목, 구역 설명, 처리 단계 주석이 있으면 해당 이름과 의미를 우선 유지하거나 간결하게 요약하세요. 명확한 구조적 제목을 일반적인 동사 레이블로 바꾸지 마세요. 이 규칙은 레이블 표현에만 적용되며 북마크를 추가하거나 이동하지 않습니다.
 트리 보기에서 이웃한 로직을 빠르게 구분할 수 있는 레이블을 사용하고, 도메인 용어와 핵심 동작을 우선하여 가능하면 한국어 15자 이내로 작성하세요. 북마크 위치, 계층, ID, 앵커는 수정할 수 없습니다. 이미 명확한 레이블은 생략해도 됩니다.
 
 엄격한 JSON 배열만 반환하고 Markdown은 사용하지 마세요. 각 항목에는 입력에 있던 id와 업데이트할 new_label 또는 icon을 포함합니다:
@@ -636,9 +638,7 @@ ${iconSemanticCatalog}`,
 	'util.AIHttpTransport.failedToReceiveTheAiResponse': 'AI 응답을 받지 못했습니다: {message}',
 	'util.AIHttpTransport.networkRequestFailed': '네트워크 요청 실패: {message}',
 	'util.AIHttpTransport.receivedTheFirstResponseByteContinuingToReceiveData': '모델 응답의 첫 바이트를 받았습니다. 데이터 스트림을 계속 수신하고 있습니다…',
-	'util.AIHttpTransport.theAiRequestExceededSecondsInTotal': 'AI 요청의 전체 시간이 {timeoutS}초를 넘었습니다',
 	'util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit': 'AI 요청 크기가 {formatByteSize}로, 전송 한도 {formatByteSize2}를 넘습니다.',
-	'util.AIHttpTransport.theAiRequestTimedOutAfterSeconds': 'AI 요청 시간이 초과되었습니다({timeoutS}초)',
 	'util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe': 'AI 응답이 선언한 크기 {formatByteSize}가 수신 한도 {formatByteSize2}를 넘습니다.',
 	'util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit': 'AI 응답이 수신 한도 {formatByteSize}를 넘습니다.',
 	'util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold': 'AI 응답이 {formatByteSize}에 도달하여 경고 기준 {formatByteSize2}를 넘었으며 더 커질 수 있습니다. 계속 받으면 메모리를 더 사용하고 비정상 응답을 분석하지 못할 수 있습니다.',

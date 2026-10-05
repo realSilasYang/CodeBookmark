@@ -77,7 +77,7 @@ Khi nhập, CodeBookmark tự nhận biết gói dành cho một script hay work
 
 AI có thể tạo dấu trang cho tệp hiện tại hoặc mọi tệp chưa có dấu trang trong workspace; với tệp đã có dữ liệu, AI có thể bổ sung, tạo lại hoặc tối ưu nhãn. Menu tự ẩn những lựa chọn không phù hợp dựa trên trạng thái tệp, workspace và dữ liệu hiện có.
 
-Phản hồi phải vượt qua kiểm tra cấu trúc JSON, số dòng, neo khớp nguyên văn, số lượng, độ sâu, quyền sở hữu ID và danh sách biểu tượng cho phép. Mã nguồn và tên tệp chỉ là dữ liệu, không phải chỉ thị. AI bị tắt trong workspace không đáng tin cậy; timeout, hủy, tệp thay đổi giữa lúc phân tích hoặc phản hồi vượt giới hạn đều không áp dụng kết quả dở dang.
+Phản hồi phải vượt qua kiểm tra cấu trúc JSON, số dòng, neo khớp nguyên văn, số lượng, độ sâu, quyền sở hữu ID và danh sách biểu tượng cho phép. Mã nguồn và tên tệp chỉ là dữ liệu, không phải chỉ thị. AI bị tắt trong workspace không đáng tin cậy; hủy, tệp thay đổi giữa lúc phân tích hoặc phản hồi vượt giới hạn đều không áp dụng kết quả dở dang. Tiện ích không giới hạn tổng thời gian yêu cầu hoặc thời gian chờ không có dữ liệu; có thể hủy yêu cầu bất cứ lúc nào.
 
 ## 9. Hoàn tác, làm lại và xung đột
 

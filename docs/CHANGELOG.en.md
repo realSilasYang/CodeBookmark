@@ -2,6 +2,34 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.5 - 2026-10-05
+
+### ⚠️ Important Notes
+
+- **AI timeout setting:** Removed `codebookmark.AI.timeoutS`; existing values are no longer used. The extension no longer imposes connection idle or total request timeouts, and tasks remain cancellable while waiting. AI service timeout policies are unaffected.
+
+---
+
+### ✨ Added
+
+- **Greasy Fork icon:** Added a brand icon with Chinese and English search keywords, available for AI selection when a bookmark explicitly refers to Greasy Fork or its Chinese platform name.
+
+---
+
+### 🚀 Improvements
+
+- **AI bookmarks for large scripts:** Large source files are analyzed in segments with adjacent context and original file line numbers; results are sorted and deduplicated by line to improve structural coverage across long scripts.
+- **Structural comment priority:** Comments that clearly describe modules, sections, phases, or responsibility boundaries are prioritized as bookmark candidates, with instructions to scan the entire source and avoid stopping after the first few functions; prompts are updated in all 13 supported languages.
+- **GitHub icon resource:** Replaced the GitHub brand artwork while preserving the icon identifier used by existing bookmarks.
+- **Publishing dependency security:** Updated affected development dependencies and pinned the publishing tool to a secure version so CI dependency audits and release validation continue to pass.
+
+---
+
+### 🐛 Fixed
+
+- **Hover action buttons:** Fixed buttons staying visible after bookmark navigation and appearing only while the mouse button was held down; normal hover behavior and multi-selection actions are preserved.
+- **Bookmark navigation position:** Clicking a bookmark preserves the navigation tree's scroll position instead of moving the item to the middle of the view, while still navigating to the target code.
+
 ## 🎉 Version 3.2.4 - 2026-09-06
 
 ### 🚀 Improvements

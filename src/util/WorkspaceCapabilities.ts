@@ -8,7 +8,6 @@ export const RESTRICTED_WORKSPACE_CONFIGURATION_KEYS = Object.freeze([
 	'codebookmark.AI.APIKey',
 	'codebookmark.AI.model',
 	'codebookmark.AI.assignIcons',
-	'codebookmark.AI.timeoutS',
 	'codebookmark.AI.prompt',
 	'codebookmark.AI.optimizePrompt',
 ])

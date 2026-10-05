@@ -1,5 +1,5 @@
 /**
- * 发送带超时和取消信号的 JSON POST，请求完成前限制响应体大小并统一转换 HTTP 错误。
+ * 发送可取消的 JSON POST，请求完成前限制响应体大小并统一转换 HTTP 错误。
  * 传输层不解释模型业务字段，只保证网络状态、编码和资源上限对上层可预测。
  */
 import * as http from 'http'
@@ -21,7 +21,6 @@ interface AIHttpRequest {
 	url: URL
 	headers: Record<string, string>
 	payload: string
-	timeoutS: number
 	onProgress?: (message: string) => void
 	token?: vscode.CancellationToken
 }
@@ -68,15 +67,12 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 		throw new Error(localize("util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit", { formatByteSize: formatBinaryByteSize(payloadBytes), formatByteSize2: formatBinaryByteSize(AI_REQUEST_MAX_BYTES) }))
 	}
 
-	const timeoutMs = request.timeoutS * 1000
 	return new Promise((resolve, reject) => {
 		let cancellationDisposable: vscode.Disposable | undefined
-		let totalTimeout: NodeJS.Timeout | undefined
 		let settled = false
 		const finish = <T>(callback: (value: T) => void, value: T) => {
 			if (settled) return
 			settled = true
-			if (totalTimeout) clearTimeout(totalTimeout)
 			cancellationDisposable?.dispose()
 			callback(value)
 		}
@@ -123,7 +119,6 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 
 					if (receivedBytes > AI_RESPONSE_WARNING_BYTES && !oversizedResponseApproved && !responseApproval) {
 						response.pause()
-						clientRequest.setTimeout(0)
 						const actions = [
 							{ title: localize("util.AIHttpTransport.continueReceiving"), action: 'continue' as const },
 							{ title: localize("util.AIHttpTransport.cancel"), action: 'cancel' as const },
@@ -139,7 +134,6 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 							if (settled) return
 							if (approved) {
 								oversizedResponseApproved = true
-								clientRequest.setTimeout(timeoutMs)
 								response.resume()
 								return
 							}
@@ -187,12 +181,8 @@ export function postAIJson(request: AIHttpRequest): Promise<unknown> {
 				}
 			}
 
-			clientRequest.setTimeout(timeoutMs, () => {
-				clientRequest.destroy(new Error(localize("util.AIHttpTransport.theAiRequestTimedOutAfterSeconds", { timeoutS: request.timeoutS })))
-			})
-			totalTimeout = setTimeout(() => {
-				clientRequest.destroy(new Error(localize("util.AIHttpTransport.theAiRequestExceededSecondsInTotal", { timeoutS: request.timeoutS })))
-			}, timeoutMs)
+			// 模型可能在首字节或两个响应块之间长时间思考；等待由用户取消，不设超时。
+			clientRequest.setTimeout(0)
 
 			request.onProgress?.(localize("util.AIHttpTransport.connectingAndWaitingForTheAiResponseThisMay"))
 			clientRequest.write(request.payload)

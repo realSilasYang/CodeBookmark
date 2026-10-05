@@ -59,6 +59,7 @@ const semanticAliases = {
   rocket: ['发布', '启动', '加速', '上线'],
   fire: ['热门', '紧急', '高优先级', '告警'],
   github: ['GitHub', '仓库', '代码托管', '版本控制'],
+  greasyfork: ['Greasy Fork', 'greasy fork', '油叉', '油猴', '用户脚本', '脚本发布', '脚本分享', '浏览器脚本', '脚本平台', 'userscript', 'userscripts', 'Tampermonkey', 'Greasemonkey'],
   git: ['Git', '版本控制', '提交', '分支'],
   docker: ['Docker', '容器', '镜像', '部署'],
   kubernetes: ['Kubernetes', 'K8s', '容器编排', '集群'],

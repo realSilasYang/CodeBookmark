@@ -153,6 +153,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	private readonly bookmarkTreeDataProjection = new BookmarkTreeDataProjection<Bookmark, vscode.Uri>()
 	private readonly bookmarkTreeViewLifecycle =
 		new BookmarkTreeViewLifecycle<vscode.TreeView<Bookmark>, vscode.TextEditor, Bookmark, BookmarkSet>()
+	readonly preserveTreeScrollDuringNavigation = this.bookmarkTreeViewLifecycle.preserveScrollDuringNavigation.bind(this.bookmarkTreeViewLifecycle)
 	private _pathIndex: Map<string, Bookmark[]> | null = null;
 	public invalidatePathIndex() {
 		this._pathIndex = null;

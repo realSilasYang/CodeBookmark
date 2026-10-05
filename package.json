@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "3.2.4",
+  "version": "3.2.5",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -74,7 +74,6 @@
         "codebookmark.AI.APIKey",
         "codebookmark.AI.model",
         "codebookmark.AI.assignIcons",
-        "codebookmark.AI.timeoutS",
         "codebookmark.AI.prompt",
         "codebookmark.AI.optimizePrompt"
       ]
@@ -140,7 +139,7 @@
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^3.0.0",
-    "@vscode/vsce": "3.9.2",
+    "@vscode/vsce": "4.0.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
@@ -1610,23 +1609,15 @@
             "default": true,
             "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.assignIcons.description%"
           },
-          "codebookmark.AI.timeoutS": {
-            "order": 9,
-            "type": "integer",
-            "default": 60,
-            "minimum": 1,
-            "maximum": 600,
-            "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.timeoutS.description%"
-          },
           "codebookmark.AI.prompt": {
-            "order": 10,
+            "order": 9,
             "type": "string",
             "editPresentation": "multilineText",
             "default": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.prompt.default%",
             "description": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.prompt.description%"
           },
           "codebookmark.AI.optimizePrompt": {
-            "order": 11,
+            "order": 10,
             "type": "string",
             "editPresentation": "multilineText",
             "default": "%codebookmark.contributes.configuration.main.properties.codebookmark.AI.optimizePrompt.default%",

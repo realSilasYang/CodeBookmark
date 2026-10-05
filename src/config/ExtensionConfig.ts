@@ -1,11 +1,10 @@
 /**
  * 统一读取、规范化并缓存 CodeBookmark 设置，向调用方提供类型明确的配置值。
- * 配置变化时只失效相关缓存，地址、超时和提示词的默认值也在这一层集中确定。
+ * 配置变化时只失效相关缓存，地址和提示词的默认值也在这一层集中确定。
  */
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { normalizeAIRequestTimeoutSeconds } from '../util/AIRequestPolicy';
 import { resolveStoragePath } from '../util/StoragePath';
 import { localize } from '../i18n/Localization';
 import { errorMessage } from '../util/ErrorMessage'
@@ -16,7 +15,6 @@ export class ExtensionConfig {
 		aiAddress: string
 		aiAPIKey: string
 		aiModel: string
-		aiTimeoutS: number
 		aiPrompt: string
 		aiOptimizePrompt: string
 		aiAssignIcons: boolean
@@ -35,7 +33,6 @@ export class ExtensionConfig {
 				aiAddress: String(ai.get('address') || '').trim(),
 				aiAPIKey: String(ai.get('APIKey') || '').trim(),
 				aiModel: String(ai.get('model') || '').trim(),
-				aiTimeoutS: normalizeAIRequestTimeoutSeconds(ai.get('timeoutS')),
 				aiPrompt: String(ai.get('prompt') || '').trim(),
 				aiOptimizePrompt: String(ai.get('optimizePrompt') || '').trim(),
 				aiAssignIcons: ai.get<boolean>('assignIcons') ?? true,
@@ -68,9 +65,6 @@ export class ExtensionConfig {
 	}
 	static get aiModel(): string {
 		return this.values().aiModel;
-	}
-	static get aiTimeoutS(): number {
-		return this.values().aiTimeoutS;
 	}
 	static get aiPrompt(): string {
 		return this.values().aiPrompt;

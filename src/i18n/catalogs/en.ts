@@ -141,13 +141,14 @@ export const messages = {
 	'undoAction.setBookmarkContainer': 'Set as Bookmark Container',
 	'undoAction.unsetBookmarkContainer': 'Stop Using as Bookmark Container',
 	'ai.prompt.generation': `You plan bookmarks for code navigation. First understand the file's overall responsibility. Then identify module entry points, classes and interfaces, functions and methods, lifecycle stages, state transitions, important branches, error handling, external I/O, performance-critical paths, and valuable comments that users will want to revisit. Ignore imports, boilerplate, simple assignments, repeated wrappers, and trivial statements.
+When comments clearly describe modules, sections, responsibilities, or workflow stages, prioritize them as bookmarks. Anchor each bookmark on the comment line containing a meaningful heading or description, and use or concisely summarize that text as the label while preserving module names, section names, and structural meaning. Do not create bookmarks from decorative separators, generic comments, or line-by-line explanations alone. Derive bookmarks from code logic when comments lack structural information or disagree with the code. If a structural comment already summarizes the same logic well, avoid duplicate bookmarks with equivalent meanings nearby.
 Place bookmarks only on source lines that are genuinely worth returning to. A label should explain why its location matters instead of restating the code. The extension will create IDs, paths, timestamps, selections, context fingerprints, and expansion state in the same way as a manually added bookmark.
 
 Return strict JSON only, with no Markdown. The root object must have this shape:
 {"bookmarks":[{"label":"Initialize application","lineNumber":12,"anchor":"the complete original source line","icon":"entry","children":[]},{"label":"Process result","lineNumber":24,"anchor":"another complete source line","children":[]}]}
 
 Field requirements:
-- label: a short, accurate, scannable label. Prefer “Action + Object” or “Stage + Purpose” and keep it to roughly eight words or fewer.
+- label: a short, accurate, scannable label. Prefer “Action + Object” or “Stage + Purpose” and keep it to roughly eight words or fewer. A clear structural comment heading takes priority over these phrasing patterns.
 - lineNumber: the 1-based line number displayed to the left of the input source.
 - anchor: the complete original text of that line after the “line number | ” prefix is removed. Copy it verbatim, do not rewrite it, and never select a blank line.
 - icon: optional. Include it only when the bookmark meaning strongly matches an icon key. If the match is uncertain, omit it so the extension uses the default icon.
@@ -165,6 +166,7 @@ Omit an item if you cannot verify its anchor in the source. Never select a blank
 icon is optional. Include it only when the bookmark label directly expresses one of the domain meanings listed below. The source anchor may clarify the meaning or rule out a conflict, but it cannot authorize an icon by itself. Omit icon for ordinary functions, modules, parameter handling, data transformations, and explanatory code. Prefer a specific product or technology over a clear domain, and a clear domain over a generic action. For example, use postgresql instead of data for PostgreSQL, and authentication instead of validation for an API Key. Omit icon when several candidates have the same priority. async/await alone does not justify async. Use link, not authentication, for URLs, URIs, domain names, and query parameters. When confidence is not high, the meaning is ambiguous, or no key is a reliable match, omit icon so the extension can use its default. Available semantic keys:
 ${iconSemanticCatalog}`,
 	'ai.prompt.optimization': `You edit bookmarks for code navigation. Using the numbered source plus each existing bookmark's label, line number, and verbatim anchor, determine the module, class, function, stage, branch, or failure-handling logic that each bookmark actually identifies. Improve labels that are inaccurate, vague, or unnecessarily long.
+If the bookmarked code region has clear module headings, section descriptions, or workflow-stage comments that match the actual logic, preserve or concisely summarize their names and meaning rather than replacing clear structural headings with generic verb labels. This rule affects label wording only; do not add or move bookmarks.
 Labels should help users distinguish neighboring logic at a glance in the tree. Preserve domain terms and important actions, keep each label to roughly eight words or fewer, and never change bookmark positions, hierarchy, IDs, or anchors. Omit bookmarks whose labels are already clear.
 
 Return a strict JSON array only, with no Markdown. Every item must contain an id from the input and the new_label or icon that needs to be updated:
@@ -636,9 +638,7 @@ ${iconSemanticCatalog}`,
 	'util.AIHttpTransport.failedToReceiveTheAiResponse': 'Failed to receive the AI response: {message}',
 	'util.AIHttpTransport.networkRequestFailed': 'Network request failed: {message}',
 	'util.AIHttpTransport.receivedTheFirstResponseByteContinuingToReceiveData': 'Received the first response byte. Continuing to receive data…',
-	'util.AIHttpTransport.theAiRequestExceededSecondsInTotal': 'The AI request exceeded {timeoutS} seconds in total',
 	'util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit': 'The AI request is {formatByteSize}, which exceeds the {formatByteSize2} send limit.',
-	'util.AIHttpTransport.theAiRequestTimedOutAfterSeconds': 'The AI request timed out after {timeoutS} seconds',
 	'util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe': 'The AI response declares a size of {formatByteSize}, above the {formatByteSize2} receive limit.',
 	'util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit': 'The AI response exceeds the {formatByteSize} receive limit.',
 	'util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold': 'The AI response has reached {formatByteSize}, above the {formatByteSize2} warning threshold, and may continue growing. Continuing will use more memory, and a malformed response may not be parseable.',

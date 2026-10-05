@@ -84,8 +84,8 @@ assert.equal(lockfile.version, manifest.version)
 assert.equal(lockfile.packages[''].version, manifest.version)
 assert.deepEqual(manifest.dependencies, lockfile.packages[''].dependencies ?? {})
 assert.deepEqual(manifest.devDependencies, lockfile.packages[''].devDependencies ?? {})
-assert.equal(manifest.devDependencies['@vscode/vsce'], '3.9.2')
-assert.equal(lockfile.packages['node_modules/@vscode/vsce'].version, '3.9.2')
+assert.equal(manifest.devDependencies['@vscode/vsce'], '4.0.0')
+assert.equal(lockfile.packages['node_modules/@vscode/vsce'].version, '4.0.0')
 
 assert.deepEqual(manifest.files, [
   'out/extension.js',

@@ -141,13 +141,14 @@ export const messages = {
 	'undoAction.setBookmarkContainer': 'Definir como contêiner de marcadores',
 	'undoAction.unsetBookmarkContainer': 'Deixar de usar como contêiner de marcadores',
 	'ai.prompt.generation': `Você planeja marcadores para navegação no código. Primeiro entenda a responsabilidade geral do arquivo e depois identifique pontos que merecem ser revisitados: entradas de módulos, classes e interfaces, funções e métodos, etapas do ciclo de vida, transições de estado, ramificações importantes, tratamento de erros, E/S externa, pontos críticos de desempenho e comentários valiosos. Ignore imports, código repetitivo, atribuições simples, wrappers duplicados e instruções triviais.
+Quando os comentários descrevem claramente módulos, seções, responsabilidades ou etapas do fluxo, priorize-os como marcadores. Posicione o marcador na linha do comentário que contém um título ou uma descrição significativa e use esse texto, ou um resumo conciso, como rótulo, preservando os nomes dos módulos, das seções e seu significado estrutural. Não crie marcadores apenas a partir de separadores decorativos, comentários genéricos ou explicações linha a linha. Derive os marcadores da lógica do código quando os comentários não descrevem sua estrutura ou contradizem o código. Se um comentário estrutural já resume bem a mesma lógica, evite marcadores próximos com significados equivalentes.
 Cada marcador deve ficar em uma linha de código-fonte que o usuário realmente precise ler. O rótulo deve explicar “por que essa posição importa”, sem repetir o texto do código. A extensão gera ID, caminho, data de criação, seleção, impressão digital de contexto e estado de expansão da mesma forma que ao adicionar um marcador manualmente.
 
 Retorne somente JSON estrito, sem Markdown. O objeto raiz deve seguir este formato:
 {"bookmarks":[{"label":"Ponto de inicialização","lineNumber":12,"anchor":"linha completa do código-fonte original","icon":"entry","children":[]},{"label":"Processar resultado","lineNumber":24,"anchor":"outra linha original do código-fonte","children":[]}]}
 
 Restrições dos campos:
-- label: rótulo curto, preciso e fácil de percorrer; dê preferência a “ação + objeto” ou “etapa + finalidade” e tente não ultrapassar 15 palavras em português.
+- label: rótulo curto, preciso e fácil de percorrer; dê preferência a “ação + objeto” ou “etapa + finalidade” e tente não ultrapassar 15 palavras em português. Um título estrutural claro de um comentário tem prioridade sobre essas formulações.
 - lineNumber: número de linha baseado em 1 mostrado à esquerda do código-fonte de entrada.
 - anchor: texto original completo da linha correspondente depois de remover o prefixo “número da linha | ”; copie caractere por caractere, sem reescrever, e não escolha linhas vazias.
 - icon: opcional. Inclua somente quando o significado do marcador corresponder claramente a uma chave de ícone; se a correspondência não for clara, omita para que a extensão use o ícone padrão.
@@ -165,6 +166,7 @@ Se não for possível confirmar a âncora no código-fonte, não gere o item. N�
 icon é opcional. Retorne o icon correspondente somente quando o rótulo do marcador expressar diretamente um dos significados de domínio abaixo. A âncora do código serve apenas para entender o contexto e excluir conflitos; sozinha, não autoriza a escolha do ícone. Omita icon para funções comuns, módulos, tratamento de parâmetros, transformações de dados e código explicativo. Priorize produtos ou tecnologias específicos, depois domínios claros e por último ações genéricas. Por exemplo, PostgreSQL deve usar postgresql em vez de data, e API Key deve usar authentication em vez de validation. Se houver vários candidatos com a mesma prioridade, omita icon. A simples presença de async/await não permite escolher async. URLs, URIs, domínios e parâmetros de consulta devem usar link, não authentication. Quando a correspondência for fraca, ambígua ou pouco confiável, não retorne icon. A extensão fará outra validação e usará o ícone padrão se não houver correspondência. Chaves semânticas disponíveis:
 ${iconSemanticCatalog}`,
 	'ai.prompt.optimization': `Você edita marcadores para navegação no código. Com base no código-fonte numerado e no rótulo, número da linha e âncora original de cada marcador existente, determine o módulo, classe, função, etapa, ramificação ou tratamento de falha ao qual ele realmente aponta e melhore rótulos imprecisos, ambíguos ou longos demais.
+Se a região de código marcada contém títulos de módulos, descrições de seções ou comentários sobre etapas do fluxo claros e coerentes com a lógica real, preserve ou resuma seus nomes e significado em vez de substituir títulos estruturais claros por rótulos com verbos genéricos. Esta regra afeta apenas a redação dos rótulos; não adicione nem mova marcadores.
 Os rótulos devem permitir diferenciar rapidamente lógicas próximas na árvore. Preserve termos do domínio e ações importantes, tentando não ultrapassar 15 palavras em português. Não altere a posição, a hierarquia, o ID nem a âncora do marcador. Rótulos que já estejam claros podem ser omitidos.
 
 Retorne somente uma matriz JSON estrita, sem Markdown. Cada item contém um id existente na entrada e o new_label ou icon que precisa ser atualizado:
@@ -636,9 +638,7 @@ ${iconSemanticCatalog}`,
 	'util.AIHttpTransport.failedToReceiveTheAiResponse': 'Falha ao receber a resposta da IA: {message}',
 	'util.AIHttpTransport.networkRequestFailed': 'Falha na solicitação de rede: {message}',
 	'util.AIHttpTransport.receivedTheFirstResponseByteContinuingToReceiveData': 'O primeiro byte da resposta do modelo foi recebido; o fluxo de dados continua sendo recebido…',
-	'util.AIHttpTransport.theAiRequestExceededSecondsInTotal': 'A duração total da solicitação à IA ultrapassou {timeoutS} segundos',
 	'util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit': 'A solicitação à IA tem {formatByteSize}, acima do limite de envio de {formatByteSize2}.',
-	'util.AIHttpTransport.theAiRequestTimedOutAfterSeconds': 'A solicitação à IA expirou após {timeoutS} segundos',
 	'util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe': 'A resposta da IA declara um tamanho de {formatByteSize}, acima do limite de recebimento de {formatByteSize2}.',
 	'util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit': 'A resposta da IA ultrapassou o limite de recebimento de {formatByteSize}.',
 	'util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold': 'A resposta da IA já atingiu {formatByteSize}, acima do alerta de {formatByteSize2}, e pode continuar crescendo. Continuar o recebimento consumirá mais memória, e talvez não seja possível analisar uma resposta anormal.',

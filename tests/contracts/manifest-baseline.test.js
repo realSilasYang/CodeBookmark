@@ -22,7 +22,6 @@ describe('generated extension manifest baseline', () => {
 			'codebookmark.AI.APIKey',
 			'codebookmark.AI.model',
 			'codebookmark.AI.assignIcons',
-			'codebookmark.AI.timeoutS',
 			'codebookmark.AI.prompt',
 			'codebookmark.AI.optimizePrompt',
 		])

@@ -72,52 +72,72 @@ async function closeOnlyWelcomeTabsInFolderWindow(): Promise<void> {
 	} catch {}
 }
 
-export function openNodeCommand(context: vscode.ExtensionContext) {
+async function clearNavigatedTreeSelection(treeView: vscode.TreeView<Bookmark>, bookmark: Bookmark): Promise<void> {
+	const hasSingleNavigatedSelection = () => treeView.visible
+		&& treeView.selection.length === 1 && treeView.selection[0].id === bookmark.id
+	if (!hasSingleNavigatedSelection()) return
+	try {
+		// list.clear 同时清除行选择和行焦点，避免原生按钮在失焦后因残留状态持续显示。
+		// 点击时书签树已经获得列表焦点；再次聚焦会让宿主把选中行滚动到视图中间。
+		await vscode.commands.executeCommand('list.clear')
+	} catch {
+		// 视图关闭或销毁导致清理失败时，仍继续正常的文件跳转。
+	}
+}
+
+export function openNodeCommand(
+	context: vscode.ExtensionContext,
+	treeView: vscode.TreeView<Bookmark>,
+	preserveTreeScrollDuringNavigation: (navigation: () => Promise<void>) => Promise<void>,
+) {
 	const openBookmark = vscode.commands.registerCommand(Commands.openBookmark,
-		async (bookmark: Bookmark) => {
+		async (bookmark: Bookmark, fromTree = false) => {
 			if (!bookmark || typeof bookmark.path !== 'string' || bookmark.path.trim() === '') {
 				void vscode.window.showErrorMessage(localize("commands.openNodeCommand.theBookmarkPathIsInvalidAndCannotBeOpened"))
 				return
 			}
-			try {
-				const fileUri = bookmark.isFile && bookmark.resourceUri
-					? bookmark.resourceUri
-					: fileUtils.relativeToUri(bookmark.path)
-				const existingColumn = openedViewColumn(fileUri)
-				const document = await vscode.workspace.openTextDocument(fileUri)
-				const fallbackColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active
-				if (!existingColumn) await closeOnlyWelcomeTabsInFolderWindow()
+			await preserveTreeScrollDuringNavigation(async () => {
+				try {
+					const fileUri = bookmark.isFile && bookmark.resourceUri
+						? bookmark.resourceUri
+						: fileUtils.relativeToUri(bookmark.path)
+					const existingColumn = openedViewColumn(fileUri)
+					const document = await vscode.workspace.openTextDocument(fileUri)
+					const fallbackColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active
+					if (!existingColumn) await closeOnlyWelcomeTabsInFolderWindow()
 
-				const clampPosition = (lineValue: unknown, columnValue: unknown): vscode.Position => {
-					const rawLine = typeof lineValue === 'number' && Number.isFinite(lineValue) ? Math.floor(lineValue) : 0
-					const line = Math.min(Math.max(rawLine, 0), document.lineCount - 1)
-					const rawColumn = typeof columnValue === 'number' && Number.isFinite(columnValue) ? Math.floor(columnValue) : 0
-					const column = Math.min(Math.max(rawColumn, 0), document.lineAt(line).text.length)
-					return new vscode.Position(line, column)
+					const clampPosition = (lineValue: unknown, columnValue: unknown): vscode.Position => {
+						const rawLine = typeof lineValue === 'number' && Number.isFinite(lineValue) ? Math.floor(lineValue) : 0
+						const line = Math.min(Math.max(rawLine, 0), document.lineCount - 1)
+						const rawColumn = typeof columnValue === 'number' && Number.isFinite(columnValue) ? Math.floor(columnValue) : 0
+						const column = Math.min(Math.max(rawColumn, 0), document.lineAt(line).text.length)
+						return new vscode.Position(line, column)
+					}
+
+					const start = bookmark.isFile ? new vscode.Position(0, 0) : clampPosition(bookmark.start?.line, bookmark.start?.column)
+					const end = bookmark.isFile ? new vscode.Position(0, 0) : clampPosition(bookmark.end?.line, bookmark.end?.column)
+					let range = new vscode.Range(start, end)
+					if (!bookmark.isFile && start.isEqual(end)) {
+						const line = document.lineAt(start.line)
+						const indentation = line.text.length - line.text.trimStart().length
+						range = new vscode.Range(new vscode.Position(line.lineNumber, indentation), line.range.end)
+					}
+
+					if (fromTree === true) await clearNavigatedTreeSelection(treeView, bookmark)
+					const editor = await vscode.window.showTextDocument(document, existingColumn
+						? { viewColumn: existingColumn, preserveFocus: false }
+						: {
+							viewColumn: fallbackColumn,
+							preserveFocus: false,
+							preview: false,
+						})
+					editor.selection = new vscode.Selection(range.start, range.end)
+					if (!bookmark.isFile) editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport)
+				} catch (error) {
+					logger.error(localize("commands.openNodeCommand.failedToOpenBookmark", { path: bookmark.path, error }))
+					void vscode.window.showErrorMessage(localize("commands.openNodeCommand.unableToOpenTheFileForThisBookmark", { path: bookmark.path }))
 				}
-
-				const start = bookmark.isFile ? new vscode.Position(0, 0) : clampPosition(bookmark.start?.line, bookmark.start?.column)
-				const end = bookmark.isFile ? new vscode.Position(0, 0) : clampPosition(bookmark.end?.line, bookmark.end?.column)
-				let range = new vscode.Range(start, end)
-				if (!bookmark.isFile && start.isEqual(end)) {
-					const line = document.lineAt(start.line)
-					const indentation = line.text.length - line.text.trimStart().length
-					range = new vscode.Range(new vscode.Position(line.lineNumber, indentation), line.range.end)
-				}
-
-				const editor = await vscode.window.showTextDocument(document, existingColumn
-					? { viewColumn: existingColumn, preserveFocus: false }
-					: {
-						viewColumn: fallbackColumn,
-						preserveFocus: false,
-						preview: false,
-					})
-				editor.selection = new vscode.Selection(range.start, range.end)
-				if (!bookmark.isFile) editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport)
-			} catch (error) {
-				logger.error(localize("commands.openNodeCommand.failedToOpenBookmark", { path: bookmark.path, error }))
-				void vscode.window.showErrorMessage(localize("commands.openNodeCommand.unableToOpenTheFileForThisBookmark", { path: bookmark.path }))
-			}
+			})
 		})
 
 	context.subscriptions.push(openBookmark)

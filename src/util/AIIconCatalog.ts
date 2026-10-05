@@ -111,6 +111,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'azure', iconName: 'brand_microsoft_azure_logo.svg', description: 'Microsoft Azure、微软云', evidence: [/微软云|\b(microsoft azure|azure)\b/iu] },
 	{ key: 'gcp', iconName: 'brand_google_cloud_logo.svg', description: 'Google Cloud、GCP、谷歌云', evidence: [/谷歌云|\b(google cloud|gcp)\b/iu] },
 	{ key: 'github', iconName: 'brand_github.svg', description: 'GitHub 仓库、Issue、Pull Request、Actions', evidence: [/\bgithub\b|GitHub 仓库|GitHub Actions|Pull Request/iu] },
+	{ key: 'greasyfork', iconName: 'brand_greasyfork.svg', description: 'Greasy Fork、油叉脚本平台', evidence: [/\bgreasy\s*fork\b|油叉/iu] },
 	{ key: 'gitlab', iconName: 'brand_gitlab_logo.svg', description: 'GitLab 仓库、Merge Request、CI', evidence: [/\bgitlab\b|GitLab 仓库|Merge Request/iu] },
 	{ key: 'terraform', iconName: 'brand_terraform_icon_logo.svg', description: 'Terraform、基础设施即代码', evidence: [/基础设施即代码|\b(terraform|infrastructure as code|iac)\b/iu] },
 

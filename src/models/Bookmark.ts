@@ -130,7 +130,7 @@ export class Bookmark extends vscode.TreeItem {
 			this.command = {
 				command: Commands.openBookmark,
 				title: localize('models.Bookmark.openBookmark'),
-				arguments: [this]
+				arguments: [this, true]
 			}
 		}
 	}

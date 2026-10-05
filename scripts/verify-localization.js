@@ -138,7 +138,7 @@ assert.deepEqual(
 )
 const englishManifestSource = sourceManifestCatalogs.get('en')
 const sourceManifestKeys = Object.keys(sourceManifestCatalogs.get('zh-cn')).sort()
-assert.equal(sourceManifestKeys.length, 126, 'Every manifest source catalog must contain all 126 stable keys')
+assert.equal(sourceManifestKeys.length, 125, 'Every manifest source catalog must contain all 125 stable keys')
 const manifestGenerationPromptKey = 'codebookmark.contributes.configuration.main.properties.codebookmark.AI.prompt.default'
 const manifestOptimizationPromptKey = 'codebookmark.contributes.configuration.main.properties.codebookmark.AI.optimizePrompt.default'
 for (const [locale, messages] of sourceManifestCatalogs) {

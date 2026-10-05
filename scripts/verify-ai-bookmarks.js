@@ -167,9 +167,7 @@ assert.equal(settings['codebookmark.AI.optimizePrompt'].default, DEFAULT_AI_OPTI
 assert.equal(settings['codebookmark.AI.assignIcons'].description, '让 AI 在生成书签后选择书签图标')
 assert.equal(settings['codebookmark.AI.prompt'].description, 'AI 自动提取书签的系统提示词。')
 assert.equal(settings['codebookmark.AI.optimizePrompt'].description, 'AI 优化书签标签和语义图标时的提示词。')
-assert.equal(settings['codebookmark.AI.timeoutS'].default, 60)
-assert.equal(settings['codebookmark.AI.timeoutS'].minimum, 1)
-assert.equal(settings['codebookmark.AI.timeoutS'].maximum, 600)
+assert.equal(settings['codebookmark.AI.timeoutS'], undefined)
 assert.deepEqual(Object.keys(settings), [
 	'codebookmark.globalStoragePath',
   'codebookmark.defaultExpandLevel',
@@ -179,11 +177,10 @@ assert.deepEqual(Object.keys(settings), [
   'codebookmark.AI.APIKey',
   'codebookmark.AI.model',
   'codebookmark.AI.assignIcons',
-  'codebookmark.AI.timeoutS',
 	'codebookmark.AI.prompt',
 	'codebookmark.AI.optimizePrompt',
 ])
-assert.deepEqual(Object.values(settings).map(setting => setting.order), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+assert.deepEqual(Object.values(settings).map(setting => setting.order), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 const commandsById = new Map(manifest.contributes.commands.map(command => [command.command, command]))
 assert.equal(commandsById.get('codebookmark.ai.generateSkip').title, menuTitle('✦', '生成书签'))
@@ -648,6 +645,7 @@ const folderRunnerSource = fs.readFileSync('src/providers/AIFolderWorkflowRunner
 const workflowControllerSource = fs.readFileSync('src/providers/AIWorkflowController.ts', 'utf8')
 const selectedRunnerSource = fs.readFileSync('src/providers/AISelectedBookmarksWorkflowRunner.ts', 'utf8')
 const serviceSource = fs.readFileSync('src/util/AIService.ts', 'utf8')
+const generationChunksSource = fs.readFileSync('src/util/AIGenerationChunks.ts', 'utf8')
 const endpointResolverSource = fs.readFileSync('src/util/AIEndpointResolver.ts', 'utf8')
 const protocolCodecSource = fs.readFileSync('src/util/AIProtocolCodec.ts', 'utf8')
 const httpTransportSource = fs.readFileSync('src/util/AIHttpTransport.ts', 'utf8')
@@ -748,6 +746,12 @@ assert.match(httpTransportSource, /response\.resume\(\)/)
 assert.match(httpTransportSource, /AI_REQUEST_MAX_BYTES/)
 assert.match(httpTransportSource, /AI_RESPONSE_MAX_BYTES/)
 assert.match(serviceSource, /MAX_AI_OPTIMIZATION_BATCH = 300/)
+assert.match(serviceSource, /splitAIGenerationChunks/)
+assert.match(serviceSource, /filterAIBookmarksToRange/)
+assert.match(serviceSource, /mergeGeneratedBookmarks/)
+assert.match(generationChunksSource, /AI_GENERATION_CONTEXT_LINES/)
+assert.match(generationChunksSource, /numberedSource: formatLineNumberedRange/)
+assert.match(generationChunksSource, /负责范围连续/)
 assert.match(bookmarkCommandsSource, /if \(!ExtensionConfig\.ensureAIConfigured\(\)\) return undefined/)
 assert.match(bookmarkCommandsSource, /ExtensionConfig\.updateAIAddress\(successfulAddress\)/)
 assert.match(bookmarkCommandsSource, /aiGenerateSkipFolder\.command,[\s\S]*?withAIConfiguration/)
@@ -756,4 +760,5 @@ assert.match(bookmarkCommandsSource, /aiGenerateOverwriteFolderDirect\.command,[
 assert.match(bookmarkCommandsSource, /aiOptimizeFolder\.command,[\s\S]*?withAIConfiguration/)
 assert.doesNotMatch(bookmarkCommandsSource, /aiUnavailable|ai\.unavailable/)
 assert.match(serviceSource, /start \+= MAX_AI_OPTIMIZATION_BATCH/)
-assert.match(httpTransportSource, /util\.AIHttpTransport\.theAiRequestExceededSecondsInTotal/)
+assert.match(httpTransportSource, /clientRequest\.setTimeout\(0\)/)
+assert.doesNotMatch(httpTransportSource, /theAiRequestExceededSecondsInTotal|theAiRequestTimedOutAfterSeconds/)

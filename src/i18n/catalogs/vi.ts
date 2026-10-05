@@ -141,13 +141,14 @@ export const messages = {
 	'undoAction.setBookmarkContainer': 'Đặt làm vùng chứa dấu trang',
 	'undoAction.unsetBookmarkContainer': 'Bỏ làm vùng chứa dấu trang',
 	'ai.prompt.generation': `Bạn là người thiết kế dấu trang điều hướng mã. Trước tiên hãy hiểu trách nhiệm tổng thể của tệp, rồi xác định các điểm đáng quay lại nhiều lần: điểm vào mô-đun, lớp/giao diện, hàm/phương thức, giai đoạn vòng đời, chuyển trạng thái, nhánh quan trọng, xử lý lỗi, I/O bên ngoài, điểm then chốt về hiệu năng và chú thích có giá trị. Bỏ qua import, mã khuôn mẫu, phép gán đơn giản, lớp bọc lặp lại và câu lệnh vụn vặt.
+Khi chú thích mô tả rõ mô-đun, các phần, trách nhiệm hoặc giai đoạn xử lý, hãy ưu tiên dùng chúng làm dấu trang. Đặt dấu trang tại dòng chú thích có tiêu đề hoặc mô tả mang ý nghĩa, rồi dùng nguyên nội dung hoặc tóm tắt ngắn gọn làm nhãn, giữ lại tên mô-đun, tên phần và ý nghĩa cấu trúc. Không tạo dấu trang chỉ từ đường phân cách trang trí, chú thích chung chung hoặc giải thích từng dòng. Suy ra dấu trang từ logic mã khi chú thích thiếu thông tin cấu trúc hoặc không khớp với mã thực tế. Nếu một chú thích cấu trúc đã tóm tắt tốt cùng logic, tránh tạo dấu trang gần đó với ý nghĩa trùng lặp.
 Dấu trang phải nằm trên dòng mã nguồn mà người dùng thực sự cần đọc. Nhãn phải giải thích “vì sao vị trí này quan trọng”, không lặp lại nguyên văn mã. Tiện ích sẽ tạo ID, đường dẫn, thời điểm tạo, vùng chọn, dấu vân tay ngữ cảnh và trạng thái mở rộng giống như khi thêm dấu trang thủ công.
 
 Chỉ trả về JSON nghiêm ngặt, không dùng Markdown. Đối tượng gốc có dạng:
 {"bookmarks":[{"label":"Điểm khởi động","lineNumber":12,"anchor":"toàn bộ dòng mã nguồn gốc","icon":"entry","children":[]},{"label":"Xử lý kết quả","lineNumber":24,"anchor":"một dòng mã nguồn gốc khác","children":[]}]}
 
 Ràng buộc trường:
-- label: nhãn ngắn, chính xác và dễ quét; ưu tiên “hành động + đối tượng” hoặc “giai đoạn + mục đích”, cố gắng không quá 15 từ tiếng Việt.
+- label: nhãn ngắn, chính xác và dễ quét; ưu tiên “hành động + đối tượng” hoặc “giai đoạn + mục đích”, cố gắng không quá 15 từ tiếng Việt. Tiêu đề rõ ràng trong chú thích cấu trúc được ưu tiên hơn các cách diễn đạt trên.
 - lineNumber: số dòng bắt đầu từ 1 hiển thị ở bên trái mã nguồn đầu vào.
 - anchor: toàn bộ nguyên văn của dòng tương ứng sau khi bỏ tiền tố “số dòng | ”; phải trích chính xác từng ký tự, không viết lại và không chọn dòng trống.
 - icon: không bắt buộc. Chỉ xuất khi ý nghĩa dấu trang khớp rất rõ với một khóa biểu tượng; nếu chưa rõ, hãy bỏ qua để tiện ích dùng biểu tượng mặc định.
@@ -165,6 +166,7 @@ Nếu không xác nhận được neo trong mã nguồn thì không tạo mục 
 icon là trường tùy chọn. Chỉ xuất icon tương ứng khi nhãn dấu trang trực tiếp thể hiện một trong các lĩnh vực dưới đây. Neo mã nguồn chỉ được dùng để hiểu ngữ cảnh và loại xung đột, không thể tự nó làm căn cứ chọn biểu tượng. Luôn bỏ icon cho hàm thông thường, mô-đun, xử lý tham số, chuyển đổi dữ liệu và mã giải thích. Thứ tự ưu tiên là sản phẩm hoặc công nghệ cụ thể, lĩnh vực rõ ràng, rồi hành động chung. Ví dụ, PostgreSQL dùng postgresql thay vì data; API Key dùng authentication thay vì validation. Nếu có nhiều ứng viên cùng mức ưu tiên thì bỏ icon. Chỉ có async/await không đủ để chọn async. URL, URI, tên miền và tham số truy vấn phải chọn link, không chọn authentication. Khi độ khớp thấp, còn mơ hồ hoặc không thể xác định đáng tin cậy, đừng xuất icon. Tiện ích sẽ kiểm tra lại và dùng biểu tượng mặc định nếu không khớp. Các khóa ngữ nghĩa có thể chọn:
 ${iconSemanticCatalog}`,
 	'ai.prompt.optimization': `Bạn là người biên tập dấu trang điều hướng mã. Dựa trên mã nguồn có số dòng cùng nhãn, số dòng và neo nguyên văn của các dấu trang hiện có, hãy xác định mô-đun, lớp, hàm, giai đoạn, nhánh hoặc logic xử lý sự cố mà mỗi dấu trang thực sự trỏ tới, rồi cải thiện những nhãn không chính xác, mơ hồ hoặc dài dòng.
+Nếu vùng mã được đánh dấu có tiêu đề mô-đun, mô tả các phần hoặc chú thích giai đoạn xử lý rõ ràng và phù hợp với logic thực tế, hãy ưu tiên giữ lại hoặc tóm tắt ngắn gọn tên và ý nghĩa của chúng. Không thay tiêu đề cấu trúc rõ ràng bằng nhãn động từ chung chung. Quy tắc này chỉ ảnh hưởng đến cách diễn đạt nhãn; không thêm hay di chuyển dấu trang.
 Nhãn phải giúp phân biệt nhanh các logic gần nhau trong dạng xem cây; ưu tiên thuật ngữ miền và hành động chính, cố gắng không quá 15 từ tiếng Việt. Không được đổi vị trí, cấp bậc, ID hoặc neo của dấu trang. Có thể bỏ qua nhãn đã rõ ràng.
 
 Chỉ trả về một mảng JSON nghiêm ngặt, không dùng Markdown. Mỗi mục chứa id đã có trong đầu vào và new_label hoặc icon cần cập nhật:
@@ -636,9 +638,7 @@ ${iconSemanticCatalog}`,
 	'util.AIHttpTransport.failedToReceiveTheAiResponse': 'Không thể nhận phản hồi AI: {message}',
 	'util.AIHttpTransport.networkRequestFailed': 'Yêu cầu mạng thất bại: {message}',
 	'util.AIHttpTransport.receivedTheFirstResponseByteContinuingToReceiveData': 'Đã nhận byte đầu tiên của phản hồi mô hình và đang tiếp tục nhận luồng dữ liệu…',
-	'util.AIHttpTransport.theAiRequestExceededSecondsInTotal': 'Tổng thời gian yêu cầu AI vượt quá {timeoutS} giây',
 	'util.AIHttpTransport.theAiRequestIsWhichExceedsTheSendLimit': 'Yêu cầu AI có kích thước {formatByteSize}, vượt giới hạn gửi {formatByteSize2}.',
-	'util.AIHttpTransport.theAiRequestTimedOutAfterSeconds': 'Yêu cầu AI hết thời gian chờ sau {timeoutS} giây',
 	'util.AIHttpTransport.theAiResponseDeclaresASizeOfAboveThe': 'Phản hồi AI khai báo kích thước {formatByteSize}, vượt giới hạn nhận {formatByteSize2}.',
 	'util.AIHttpTransport.theAiResponseExceedsTheReceiveLimit': 'Phản hồi AI vượt giới hạn nhận {formatByteSize}.',
 	'util.AIHttpTransport.theAiResponseHasReachedAboveTheWarningThreshold': 'Phản hồi AI đã đạt {formatByteSize}, vượt ngưỡng cảnh báo {formatByteSize2} và có thể tiếp tục tăng. Tiếp tục nhận sẽ dùng thêm bộ nhớ, đồng thời phản hồi bất thường có thể không phân tích được.',

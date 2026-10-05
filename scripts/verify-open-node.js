@@ -52,11 +52,16 @@ const tabGroups = {
     return true
   },
 }
+const treeView = { visible: true, selection: [] }
+let openDocumentHook = () => undefined
+let clearHook = () => undefined
+let navigationInProgress = false
 const window = {
   activeTextEditor: activeEditor,
   visibleTextEditors: [activeEditor],
   tabGroups,
   showTextDocument: async (document, options) => {
+    assert.equal(navigationInProgress, true, 'Editor focus must change inside scroll-preserving navigation')
     eventOrder.push('show')
     const editor = { document, viewColumn: options.viewColumn, revealRange() {} }
     shown.push({ document, options, editor })
@@ -74,11 +79,18 @@ const { vscode } = createVscodeFake({
   workspace: {
     workspaceFolders: [{ uri: workspaceFolderUri }],
     workspaceFile: undefined,
-    openTextDocument: async fileUri => documentFor(fileUri),
+    openTextDocument: async fileUri => {
+      await openDocumentHook()
+      return documentFor(fileUri)
+    },
   },
   commands: {
     registerCommand: (command, handler) => { commands.set(command, handler); return { dispose() {} } },
-    executeCommand: async command => { throw new Error(`Unexpected command execution: ${command}`) },
+    executeCommand: async command => {
+      eventOrder.push(command)
+      if (command === 'list.clear') { clearHook(); treeView.selection = []; return }
+      throw new Error(`Unexpected command execution: ${command}`)
+    },
   },
 })
 const restoreModules = installModuleMocks({
@@ -89,10 +101,15 @@ const restoreModules = installModuleMocks({
 async function main() {
   try {
     const { openNodeCommand } = require('../out/commands/openNodeCommand')
-    openNodeCommand({ subscriptions: [] })
-    const open = [...commands.values()][0]
-    assert.equal(typeof open, 'function')
+    openNodeCommand({ subscriptions: [] }, treeView, async navigation => {
+      navigationInProgress = true
+      try { await navigation() } finally { navigationInProgress = false }
+    })
+    const openCommand = [...commands.values()][0]
+    assert.equal(typeof openCommand, 'function')
+    const open = bookmark => openCommand(bookmark, true)
     const bookmark = {
+      id: 'navigation-bookmark',
       path: 'src/target.ts',
       isFile: false,
       start: { line: 1, column: 0 },
@@ -133,6 +150,67 @@ async function main() {
     await open(bookmark)
     assert.deepEqual(shown.at(-1).options, { viewColumn: 3, preserveFocus: false })
     assert.equal(shown.at(-1).editor.selection.start.line, 1)
+
+    // 点击已聚焦书签树，直接清理残留选择；重复聚焦会使宿主滚动到中间。
+    eventOrder.length = 0
+    treeView.selection = [bookmark]
+    await open(bookmark)
+    assert.deepEqual(eventOrder, ['list.clear', 'show'])
+    assert.deepEqual(treeView.selection, [])
+    assert.equal(shown.at(-1).options.preserveFocus, false)
+
+    // 搜索或外部命令没有从树点击，不能清理其他列表的焦点和选择。
+    eventOrder.length = 0
+    treeView.selection = [bookmark]
+    await openCommand(bookmark)
+    assert.deepEqual(eventOrder, ['show'])
+    assert.deepEqual(treeView.selection, [bookmark])
+
+    const otherBookmark = { ...bookmark, id: 'other-bookmark' }
+    for (const selection of [[], [otherBookmark], [bookmark, otherBookmark]]) {
+      eventOrder.length = 0
+      treeView.selection = selection
+      await open(bookmark)
+      assert.deepEqual(eventOrder, ['show'])
+      assert.equal(treeView.selection, selection)
+    }
+
+    eventOrder.length = 0
+    treeView.visible = false
+    treeView.selection = [bookmark]
+    await open(bookmark)
+    assert.deepEqual(eventOrder, ['show'])
+    assert.deepEqual(treeView.selection, [bookmark])
+    treeView.visible = true
+
+    // 等待文档打开时用户改选或开始多选，不清除新的选择。
+    for (const replacement of [[otherBookmark], [bookmark, otherBookmark]]) {
+      eventOrder.length = 0
+      treeView.selection = [bookmark]
+      openDocumentHook = () => { treeView.selection = replacement }
+      await open(bookmark)
+      assert.deepEqual(eventOrder, ['show'])
+      assert.equal(treeView.selection, replacement)
+    }
+    openDocumentHook = () => undefined
+
+    // 清理失败不能阻止书签跳转；打不开文档时则保留原选择。
+    eventOrder.length = 0
+    treeView.selection = [bookmark]
+    clearHook = () => { throw new Error('View disposed') }
+    await open(bookmark)
+    assert.deepEqual(eventOrder, ['list.clear', 'show'])
+    assert.deepEqual(treeView.selection, [bookmark])
+    clearHook = () => undefined
+
+    eventOrder.length = 0
+    const originalOpenTextDocument = vscode.workspace.openTextDocument
+    vscode.workspace.openTextDocument = async () => { throw new Error('Missing document') }
+    await open(bookmark)
+    assert.deepEqual(eventOrder, [])
+    assert.deepEqual(treeView.selection, [bookmark])
+    assert.equal(navigationInProgress, false)
+    vscode.workspace.openTextDocument = originalOpenTextDocument
   } finally {
     restoreModules()
   }

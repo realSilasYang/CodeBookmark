@@ -83,7 +83,6 @@ async function main() {
     aiAddress: { configurable: true, get: () => `http://127.0.0.1:${address.port}/v1/chat/completions` },
     aiAPIKey: { configurable: true, get: () => 'test-key' },
     aiModel: { configurable: true, get: () => 'test-model' },
-    aiTimeoutS: { configurable: true, get: () => 10 },
     aiPrompt: { configurable: true, get: () => 'custom generation instruction' },
     aiOptimizePrompt: { configurable: true, get: () => 'custom optimization instruction' },
   })

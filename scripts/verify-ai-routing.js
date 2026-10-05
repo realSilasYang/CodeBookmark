@@ -28,7 +28,6 @@ Object.defineProperties(ExtensionConfig, {
   aiAddress: { configurable: true, get: () => configuredAddress },
   aiAPIKey: { configurable: true, get: () => apiKey },
   aiModel: { configurable: true, get: () => 'test-model' },
-  aiTimeoutS: { configurable: true, get: () => 10 },
 })
 
 let scenario = () => ({ status: 500, body: { error: 'scenario not configured' } })

@@ -50,7 +50,7 @@ Der Import erkennt Skript- und Workspace-Pakete automatisch und bindet nur ein e
 
 Konfiguriere `Codebookmark.AI: Address`, `API Key` und Modell. Address akzeptiert Resource Endpoint, API Base URL, Chat Completions, Responses, Anthropic Messages, Gemini `generateContent` und Ollama; nach erfolgreichem Test wird die tatsächlich funktionierende Adresse gespeichert. Entfernte Dienste sollen HTTPS verwenden. Die KI erzeugt für das aktuelle Skript oder unmarkierte Workspace-Skripte und kann bestehende Daten ergänzen, neu erzeugen oder Beschriftungen verbessern. Unpassende Menüeinträge werden automatisch ausgeblendet.
 
-Antworten werden auf JSON-Struktur, Zeile, wörtlichen Anker, Anzahl, Tiefe, ID-Besitz und Symbolfreigabe geprüft. Code und Dateinamen sind Daten, keine Anweisungen. In nicht vertrauenswürdigen Workspaces ist KI deaktiviert; Abbruch, Timeout, Änderungen während der Analyse oder Grenzwertüberschreitung verhindern Teilergebnisse.
+Antworten werden auf JSON-Struktur, Zeile, wörtlichen Anker, Anzahl, Tiefe, ID-Besitz und Symbolfreigabe geprüft. Code und Dateinamen sind Daten, keine Anweisungen. In nicht vertrauenswürdigen Workspaces ist KI deaktiviert; Abbruch, Änderungen während der Analyse oder Grenzwertüberschreitung verhindern Teilergebnisse. Die Erweiterung setzt weder ein Zeitlimit für die gesamte Anfrage noch für Inaktivität; Anfragen können jederzeit abgebrochen werden.
 
 ## 7. Undo, Konflikte und Einstellungen
 

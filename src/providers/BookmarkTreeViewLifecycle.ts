@@ -40,6 +40,8 @@ export class BookmarkTreeViewLifecycle<TreeView, Editor, Node, BookmarkState> {
 	private initialLoadWatchdog: TreeLifecycleTimer | undefined
 	private initialLoadSettled = false
 	private revealGeneration = 0
+	private bookmarkNavigationDepth = 0
+	private activeFileRevealSuppressed = false
 	private pendingPopulation: {
 		generation: number
 		resolve: () => void
@@ -104,7 +106,18 @@ export class BookmarkTreeViewLifecycle<TreeView, Editor, Node, BookmarkState> {
 	}
 
 	nextRevealGeneration(): number {
+		this.activeFileRevealSuppressed = this.bookmarkNavigationDepth > 0
 		return ++this.revealGeneration
+	}
+
+	async preserveScrollDuringNavigation<T>(navigation: () => Promise<T>): Promise<T> {
+		this.bookmarkNavigationDepth++
+		this.nextRevealGeneration()
+		try {
+			return await navigation()
+		} finally {
+			this.bookmarkNavigationDepth--
+		}
 	}
 
 	scheduleActiveFileReveal(
@@ -113,11 +126,14 @@ export class BookmarkTreeViewLifecycle<TreeView, Editor, Node, BookmarkState> {
 		revealGeneration: number,
 		port: BookmarkTreeViewLifecyclePort<TreeView, Editor, Node, BookmarkState>,
 	): void {
+		// 跳转触发的刷新可能晚于 showTextDocument 完成；保留该代的抑制状态，直到下一次独立刷新。
 		if (!port.isWorkspaceScope()) return
+		if (this.activeFileRevealSuppressed) return
 		const bookmarkPath = port.bookmarkPathForEditor(editor)
 		if (!port.hasFileNode(bookmarkPath) || !port.treeVisible()) return
 		this.scheduling.setTimer(() => {
 			if (port.isDisposed()
+				|| this.activeFileRevealSuppressed
 				|| viewGeneration !== port.currentViewLoadGeneration()
 				|| revealGeneration !== this.revealGeneration
 				|| !port.treeVisible()

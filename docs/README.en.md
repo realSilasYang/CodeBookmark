@@ -256,7 +256,7 @@ AI work is bounded so a large file, malformed response, or long-running task can
 
 - CodeBookmark asks before sending source over 512 KiB or accepting a response over 2 MiB. Source has an 8 MiB hard limit; both requests and responses have a 16 MiB hard limit.
 - A folder scan handles at most 500 supported scripts, 20,000 directory entries, and 64 directory levels. Dependency, build, cache, and version-control directories are skipped.
-- Requests can be cancelled. The default timeout is 60 seconds and the allowed range is 1–600 seconds. It measures absolute request duration, so a continuous response stream cannot extend it forever. A folder task stops after an authentication error, rate limit, or three consecutive request failures.
+- Requests can be cancelled at any time. The extension imposes neither an absolute deadline nor an inactivity timeout, allowing models to think before the first byte or pause between response chunks. The former `codebookmark.AI.timeoutS` setting has been removed and is ignored. A folder task stops after an authentication error, rate limit, or three consecutive request failures.
 - If the source, bookmark data, or active scope changes while a response is in flight, the stale result is discarded. A folder task queues each successfully processed file for saving immediately, so cancellation retains completed results.
 
 ## 9. Undo, Redo, and Failure Handling
@@ -289,7 +289,6 @@ After `globalStoragePath` changes, CodeBookmark first flushes pending data to th
 | `codebookmark.AI.APIKey` | Empty | API key stored as plain text in VS Code settings; may remain empty for an unauthenticated local service |
 | `codebookmark.AI.model` | Empty | AI model name |
 | `codebookmark.AI.assignIcons` | `true` | Let AI choose bookmark icons after generation |
-| `codebookmark.AI.timeoutS` | `60` | Absolute timeout for one request in seconds, from 1 to 600 |
 | `codebookmark.AI.prompt` | Built-in generation prompt | System prompt used to generate bookmarks |
 | `codebookmark.AI.optimizePrompt` | Built-in improvement prompt | System prompt used to improve bookmark labels and semantic icons |
 
@@ -474,13 +473,13 @@ The network path has three distinct boundaries. `AIAddressClassifier` consistent
 
 `AIProtocolCodec` independently builds and parses OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, Gemini generateContent, and Ollama Chat. OpenAI-compatible services default to Bearer authentication, Azure uses `api-key`, Anthropic uses `x-api-key` plus a fixed protocol version, and Gemini Developer API uses `x-goog-api-key`. No empty authentication header is sent when a service needs no key. Responses requests explicitly set `store: false`.
 
-`AIHttpTransport` owns only POST transport, response status, size limits, pause confirmation, timeouts, and cancellation. `AIService` sequences resolution, codecs, and transport. Automatic candidates always keep the same origin and continue only after a 405 or a 404 that can be identified as a missing route. A business-level 404 for a missing deployment, model, or resource is reported unchanged. A 400, 401/403, 429, 5xx, timeout, cancellation, or malformed response stops immediately and preserves the original error, avoiding duplicate charges, key exposure, or a masked configuration problem.
+`AIHttpTransport` owns only POST transport, response status, size limits, pause confirmation, and cancellation. `AIService` sequences resolution, codecs, and transport. Automatic candidates always keep the same origin and continue only after a 405 or a 404 that can be identified as a missing route. A business-level 404 for a missing deployment, model, or resource is reported unchanged. A 400, 401/403, 429, 5xx, network failure, cancellation, or malformed response stops immediately and preserves the original error, avoiding duplicate charges, key exposure, or a masked configuration problem.
 
 The generation schema accepts only `label`, `lineNumber`, `anchor`, a controlled `icon` semantic key, and `children`. The improvement schema accepts only an input `id` plus optional `new_label` or `icon`. A runtime contract is appended after the user-editable prompt and declares source, file names, labels, and identities to be data rather than instructions, reducing prompt-injection influence. Parsing then enforces field allowlists, icon-key allowlists, a count limit of 300, depth limit of 8, label length limit of 120, line-by-line anchor matching, and the exact set of allowed identities.
 
 Source is read between two `stat` snapshots. After the network response, the source content or document version, bookmark JSON snapshot, and storage scope are checked again. Results apply only when all three remain unchanged. Regeneration removes only manual bookmarks; automatic source markers stay protected and keep their source lines occupied.
 
-Transport limits request and response bytes, declared content length, accumulated chunk length, timeout, and cancellation. While the user decides whether to accept a large response, the stream and idle timer pause, but the request's absolute deadline continues. Redirects are never followed automatically, preventing credentials from crossing origins. Folder batches classify 401/403, 429, and consecutive failures as circuit breakers.
+Transport limits request and response bytes, declared content length, and accumulated chunk length, and supports cancellation. While the user decides whether to accept a large response, the stream pauses. The extension disables socket inactivity timeouts and imposes no absolute request deadline. Redirects are never followed automatically, preventing credentials from crossing origins. Folder batches classify 401/403, 429, and consecutive failures as circuit breakers.
 
 ## 10. Automatic Markers and Language Profiles
 

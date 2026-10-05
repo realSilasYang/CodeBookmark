@@ -1,5 +1,5 @@
 /**
- * 锁定 AI 请求的文件类型、UTF-8 字节上限、超时范围与远程 HTTPS 安全规则。
+ * 锁定 AI 请求的文件类型、UTF-8 字节上限与远程 HTTPS 安全规则。
  * 脚本直接调用编译后的 `AIRequestPolicy`，只在 VS Code 或文件系统边界使用最小替身。
  */
 const assert = require('node:assert/strict')
@@ -7,13 +7,7 @@ const assert = require('node:assert/strict')
 const {
   isAISourceFile,
   isRemoteHttpEndpoint,
-  normalizeAIRequestTimeoutSeconds,
 } = require('../out/util/AIRequestPolicy')
-
-assert.equal(normalizeAIRequestTimeoutSeconds(undefined), 60)
-assert.equal(normalizeAIRequestTimeoutSeconds(30), 30)
-assert.equal(normalizeAIRequestTimeoutSeconds(0), 1)
-assert.equal(normalizeAIRequestTimeoutSeconds(9999999), 600)
 
 assert.equal(isRemoteHttpEndpoint('http://example.com/v1/chat/completions'), true)
 assert.equal(isRemoteHttpEndpoint('https://example.com/v1/chat/completions'), false)

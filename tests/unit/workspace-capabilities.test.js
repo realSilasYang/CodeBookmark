@@ -23,7 +23,6 @@ describe('workspace capabilities', () => {
       'codebookmark.AI.APIKey',
       'codebookmark.AI.model',
       'codebookmark.AI.assignIcons',
-      'codebookmark.AI.timeoutS',
       'codebookmark.AI.prompt',
       'codebookmark.AI.optimizePrompt',
     ])

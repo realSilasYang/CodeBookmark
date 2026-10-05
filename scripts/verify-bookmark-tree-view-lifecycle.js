@@ -92,6 +92,39 @@ async function main() {
   active.scheduling.runDelay(10)
   assert.equal(active.events.at(-1), 'reveal:file')
 
+  // 书签点击取消先前的自动定位，跳转引起的异步刷新在导航结束后也不能再滚动树。
+  const navigation = createHarness()
+  const pendingGeneration = navigation.lifecycle.nextRevealGeneration()
+  navigation.lifecycle.scheduleActiveFileReveal(editor, 1, pendingGeneration, navigation.port)
+  let navigationGeneration
+  await navigation.lifecycle.preserveScrollDuringNavigation(async () => {
+    navigationGeneration = navigation.lifecycle.nextRevealGeneration()
+    navigation.lifecycle.scheduleActiveFileReveal(editor, 1, navigationGeneration, navigation.port)
+    navigation.scheduling.runDelay(10)
+  })
+  navigation.lifecycle.scheduleActiveFileReveal(editor, 1, navigationGeneration, navigation.port)
+  assert.equal(navigation.scheduling.timers.length, 0)
+  assert.equal(navigation.events.some(event => event.startsWith('reveal:')), false)
+
+  // 独立的编辑器切换继续自动定位，失败与重叠的导航也要正确释放抑制范围。
+  const independentGeneration = navigation.lifecycle.nextRevealGeneration()
+  navigation.lifecycle.scheduleActiveFileReveal(editor, 1, independentGeneration, navigation.port)
+  navigation.scheduling.runDelay(10)
+  assert.equal(navigation.events.at(-1), 'reveal:file')
+  await assert.rejects(navigation.lifecycle.preserveScrollDuringNavigation(async () => {
+    throw new Error('Cannot open document')
+  }), /Cannot open document/)
+  await navigation.lifecycle.preserveScrollDuringNavigation(async () => {
+    await navigation.lifecycle.preserveScrollDuringNavigation(async () => undefined)
+    const nestedGeneration = navigation.lifecycle.nextRevealGeneration()
+    navigation.lifecycle.scheduleActiveFileReveal(editor, 1, nestedGeneration, navigation.port)
+  })
+  assert.equal(navigation.scheduling.timers.length, 0)
+  const recoveredGeneration = navigation.lifecycle.nextRevealGeneration()
+  navigation.lifecycle.scheduleActiveFileReveal(editor, 1, recoveredGeneration, navigation.port)
+  navigation.scheduling.runDelay(10)
+  assert.equal(navigation.events.filter(event => event === 'reveal:file').length, 2)
+
   const staleActive = createHarness()
   const staleRevealGeneration = staleActive.lifecycle.nextRevealGeneration()
   staleActive.lifecycle.scheduleActiveFileReveal(editor, 1, staleRevealGeneration, staleActive.port)

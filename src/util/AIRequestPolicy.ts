@@ -1,12 +1,9 @@
 /**
- * 定义 AI 源码、请求和响应的字节上限，以及超时、文件类型和远程 HTTPS 规则。
+ * 定义 AI 源码、请求和响应的字节上限，以及文件类型和远程 HTTPS 规则。
  * 限制按 UTF-8 实际字节计算，避免多字节文本绕过容量控制或把本地 HTTP 误判为远程不安全地址。
  */
 import { isLocalAIHostname } from './AIAddressClassifier'
 
-const DEFAULT_TIMEOUT_S = 60
-const MIN_TIMEOUT_S = 1
-const MAX_TIMEOUT_S = 10 * 60
 export const AI_SOURCE_WARNING_BYTES = 512 * 1024
 export const AI_RESPONSE_WARNING_BYTES = 2 * 1024 * 1024
 export const AI_SOURCE_MAX_BYTES = 8 * 1024 * 1024
@@ -33,12 +30,6 @@ export function isAISourceFile(filePath: string): boolean {
 	const extensionIndex = basename.lastIndexOf('.')
 	const extension = extensionIndex >= 0 ? basename.slice(extensionIndex) : ''
 	return AI_SOURCE_FILENAMES.has(basename) || AI_SOURCE_EXTENSIONS.has(extension)
-}
-
-export function normalizeAIRequestTimeoutSeconds(value: unknown): number {
-	const parsed = Number(value)
-	if (!Number.isFinite(parsed)) return DEFAULT_TIMEOUT_S
-	return Math.min(MAX_TIMEOUT_S, Math.max(MIN_TIMEOUT_S, Math.round(parsed)))
 }
 
 export function isRemoteHttpEndpoint(endpoint: string): boolean {

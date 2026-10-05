@@ -18,7 +18,9 @@ import {
 	formatLineNumberedSource,
 	normalizeAIBookmarkPayload,
 	normalizeAIOptimizedBookmarks,
+	resolveAIBookmarkLine,
 } from './AIBookmarkSchema';
+import { filterAIBookmarksToRange, splitAIGenerationChunks } from './AIGenerationChunks'
 import { resolveAIRequestTargets } from './AIEndpointResolver'
 import { decodeAIProtocolResponse, encodeAIProtocolRequest, type AIMessage } from './AIProtocolCodec'
 import { AIHttpStatusError, postAIJson } from './AIHttpTransport'
@@ -70,6 +72,30 @@ function labelText(label: string | vscode.TreeItemLabel | undefined): string {
 	return typeof label === 'string' ? label : label?.label ?? ''
 }
 
+function mergeGeneratedBookmarks(
+	bookmarks: readonly AIBookmark[],
+	lines: string[],
+): AIBookmark[] {
+	const occupiedLines = new Set<number>()
+
+	const mergeItems = (items: readonly AIBookmark[]): AIBookmark[] => {
+		const merged: AIBookmark[] = []
+		for (const bookmark of items) {
+			const line = resolveAIBookmarkLine(lines, bookmark)
+			if (line === undefined || occupiedLines.has(line)) {
+				merged.push(...mergeItems(bookmark.subs))
+				continue
+			}
+			occupiedLines.add(line)
+			const children = mergeItems(bookmark.subs)
+			merged.push({ ...bookmark, line, subs: children })
+		}
+		return merged.sort((left, right) => (left.line ?? Number.MAX_SAFE_INTEGER) - (right.line ?? Number.MAX_SAFE_INTEGER))
+	}
+
+	return mergeItems(bookmarks)
+}
+
 export class AIService {
 	private static approvedInsecureEndpoints = new Set<string>();
 
@@ -104,7 +130,8 @@ export class AIService {
 		const configured = ExtensionConfig.aiPrompt.trim()
 		const basePrompt = configured || localize("ai.prompt.generation")
 		const contract = localize("ai.prompt.generationContract")
-		return `${basePrompt}\n\n${contract}`
+		const coverageGuidance = 'For complete coverage, inspect the supplied source from the first displayed line to the last. Treat every distinct comment that clearly names a module, section, phase, responsibility, or workflow boundary as a first-class bookmark candidate; preserve its structural meaning and do not stop after the first few functions. Use nearby code to validate the heading, and avoid omitting a meaningful structural comment merely because it is not attached to a function declaration.'
+		return `${basePrompt}\n\n${contract}\n\n${coverageGuidance}`
 	}
 
 	private static optimizationPrompt(): string {
@@ -124,7 +151,6 @@ export class AIService {
 		const address = ExtensionConfig.aiAddress;
 		const apiKey = ExtensionConfig.aiAPIKey;
 		const model = ExtensionConfig.aiModel;
-		const timeoutS = ExtensionConfig.aiTimeoutS;
 
 		if (!address) throw new Error(localize("util.AIService.theAiServiceAddressIsNotConfigured"))
 		if (!model) throw new Error(localize("util.AIService.theAiModelNameIsNotConfigured"))
@@ -158,7 +184,6 @@ export class AIService {
 					url: target.url,
 					headers: encoded.headers,
 					payload: encoded.payload,
-					timeoutS,
 					onProgress,
 					token,
 				})
@@ -203,31 +228,52 @@ export class AIService {
 	public static async generateBookmarks(codeContent: string, filePath: string, onProgress?: (msg: string) => void, token?: vscode.CancellationToken): Promise<AIBookmark[]> {
 		onProgress?.(localize("util.AIService.collectingSourceAndFileContext"));
 		const prompt = this.generationPrompt();
-		const numberedSource = formatLineNumberedSource(codeContent);
+		const sourceLines = codeContent.split(/\r\n|\n|\r/)
+		const generationChunks = splitAIGenerationChunks(codeContent)
 		const fileType = path.extname(filePath).toLowerCase() || localize('common.unknown')
+		const generated: AIBookmark[] = []
 
-		const messages = [
-			{ role: 'system', content: prompt },
-			{
-				role: 'user',
-				content: localize("util.AIService.analyzeThisFileAndProposeSemanticCodeBookmarksThe", {
-					fileName: path.basename(filePath),
-					fileType,
-					numberedSource,
-				})
+		for (let index = 0; index < generationChunks.length; index++) {
+			if (token?.isCancellationRequested) {
+				throw new UserCancelledError("util.AIService.theUserCancelledTheAiTask")
 			}
-		];
+			const chunk = generationChunks[index]
+			if (generationChunks.length > 1) {
+				onProgress?.(`${localize("util.AIService.collectingSourceAndFileContext")} (${index + 1}/${generationChunks.length})`)
+			}
+			const scopeInstruction = generationChunks.length > 1
+				? `\n\nThis is analysis segment ${index + 1} of ${generationChunks.length}. The displayed lines may include surrounding context from adjacent segments. Inspect the entire segment in source order, especially every clear module, section, phase, or structural comment. Return bookmarks only for responsible source lines ${chunk.startLine + 1}-${chunk.endLine}; context lines outside that range are reference only and must not produce bookmarks.`
+				: ''
+			const messages = [
+				{ role: 'system', content: prompt },
+				{
+					role: 'user',
+					content: localize("util.AIService.analyzeThisFileAndProposeSemanticCodeBookmarksThe", {
+						fileName: path.basename(filePath),
+						fileType,
+						numberedSource: chunk.numberedSource,
+					}) + scopeInstruction,
+				}
+			]
 
-		const response = await this.sendRequest(messages, onProgress, token);
-		
-		onProgress?.(localize("util.AIService.parsingAndValidatingTheAiBookmarkStructure"));
-
-		try {
-			return normalizeAIBookmarkPayload(parseAIJsonReply(response, '{'));
-		} catch (error) {
-			logger.error(localize("util.AIService.failedToParseTheAiBookmarkResponse", { error }));
-			throw new Error(localize("util.AIService.aiDidNotReturnValidBookmarkJsonCheckThe"), { cause: error });
+			const response = await this.sendRequest(messages, onProgress, token);
+			try {
+				const parsed = normalizeAIBookmarkPayload(parseAIJsonReply(response, '{'))
+				const inResponsibleRange = filterAIBookmarksToRange(
+					parsed,
+					bookmark => resolveAIBookmarkLine(sourceLines, bookmark),
+					chunk.startLine,
+					chunk.endLine,
+				)
+				generated.push(...inResponsibleRange)
+			} catch (error) {
+				logger.error(localize("util.AIService.failedToParseTheAiBookmarkResponse", { error }))
+				throw new Error(localize("util.AIService.aiDidNotReturnValidBookmarkJsonCheckThe"), { cause: error })
+			}
 		}
+
+		onProgress?.(localize("util.AIService.parsingAndValidatingTheAiBookmarkStructure"));
+		return mergeGeneratedBookmarks(generated, sourceLines)
 	}
 
 	/** 请求模型优化已有标签或图标；书签 ID 和树结构仍由本地数据掌握，模型不能改动。 */

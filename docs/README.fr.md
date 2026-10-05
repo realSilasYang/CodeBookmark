@@ -58,7 +58,7 @@ L’importation reconnaît automatiquement un paquet de script ou d’espace de 
 
 Configurez `Codebookmark.AI: Address`, `API Key` et le modèle. Address accepte un Resource Endpoint, une API Base URL, Chat Completions, Responses, Anthropic Messages, Gemini `generateContent` ou Ollama ; après un test réussi, l’adresse réellement opérationnelle est enregistrée. Les services distants doivent utiliser HTTPS. L’IA peut générer pour le script courant ou les scripts sans signets du workspace, puis ajouter, régénérer ou améliorer les libellés des scripts déjà renseignés. Le menu masque automatiquement les choix sans objet.
 
-Chaque réponse est contrôlée : structure JSON, ligne, ancre littérale, quantité, profondeur, propriété des ID et liste d’icônes. Le code et les noms de fichiers sont des données, jamais des instructions. L’IA est désactivée dans un workspace non approuvé ; annulation, délai dépassé, modification pendant l’analyse ou limite franchie empêchent toute application partielle.
+Chaque réponse est contrôlée : structure JSON, ligne, ancre littérale, quantité, profondeur, propriété des ID et liste d’icônes. Le code et les noms de fichiers sont des données, jamais des instructions. L’IA est désactivée dans un workspace non approuvé ; annulation, modification pendant l’analyse ou limite franchie empêchent toute application partielle. L’extension n’impose aucune limite de durée totale ou d’inactivité ; les requêtes peuvent être annulées à tout moment.
 
 ## 9. Annuler, rétablir et conflits
 

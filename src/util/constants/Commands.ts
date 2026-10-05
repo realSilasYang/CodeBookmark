@@ -828,23 +828,15 @@ export class Commands {
 					"default": true,
 					"description": "让 AI 在生成书签后选择书签图标"
 				},
-				"codebookmark.AI.timeoutS": {
-					"order": 9,
-					"type": "integer",
-					"default": 60,
-					"minimum": 1,
-					"maximum": 600,
-					"description": "AI 请求超时时间（秒，范围 1–600）"
-				},
 				"codebookmark.AI.prompt": {
-					"order": 10,
+					"order": 9,
 					"type": "string",
 					"editPresentation": "multilineText",
 					"default": defaultMessages['ai.prompt.generation'],
 					"description": "AI 自动提取书签的系统提示词。"
 				},
 				"codebookmark.AI.optimizePrompt": {
-					"order": 11,
+					"order": 10,
 					"type": "string",
 					"editPresentation": "multilineText",
 					"default": defaultMessages['ai.prompt.optimization'],
