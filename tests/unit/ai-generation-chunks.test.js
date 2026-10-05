@@ -57,4 +57,3 @@ test('context-only parents are promoted while responsible children remain', () =
   const filtered = filterAIBookmarksToRange([parent], bookmark => bookmark.line, 10, 20)
   assert.deepEqual(filtered, [child])
 })
-
