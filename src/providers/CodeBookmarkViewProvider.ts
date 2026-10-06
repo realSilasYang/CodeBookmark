@@ -11,6 +11,7 @@ import { IconPickerWebview } from '../util/quick_pick_icon/IconPickerWebview'
 import { fileChangeFingerprints } from '../util/FileChangeFingerprint'
 import { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
+import { insertGeneratedAIBookmark } from './AIBookmarkBuilder'
 import { allBookmarks, captureWorkspaceLayout } from '../models/BookmarkOwnership'
 import { workspaceOrderPersistence } from '../models/WorkspaceOrder'
 import type { WorkspaceLayout } from '../models/WorkspaceLayout'
@@ -541,7 +542,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	public treeView?: vscode.TreeView<Bookmark>;
-
 	// 光标移动十分频繁，装饰类型必须复用；每次新建都会积累需要显式释放的主题资源。
 	private _inlineLabelDecorationType: vscode.TextEditorDecorationType;
 
@@ -996,7 +996,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			bookmarksForPath: pathRel => this.getBookmarksByPath(pathRel),
 			documentLines: textDocumentLines,
 			deleteBookmark: id => { this.deleteBookmarkRecordOnly(id) },
-			addBookmark: bookmark => { this.codeBookmarks.addNewBookmark(bookmark) },
+			addBookmark: bookmark => insertGeneratedAIBookmark(bookmark, this.codeBookmarks),
 			persistGeneratedExpansion: storageScope => persistGeneratedWorkspaceExpansion(storageScope, () => this.currentStorageScope, this.workspaceMetadataWriteQueue, () => this.flushPendingSaves(true), this.workspaceTopologyCommitPort()),
 			saveUndoState: action => this.saveUndoState(action),
 			saveBookmarks: filePaths => this.saveBookmarksToFile(filePaths),

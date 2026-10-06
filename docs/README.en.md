@@ -126,7 +126,7 @@ The expand/collapse control at the top of the panel uses `codebookmark.defaultEx
 | Inline labels | `codebookmark.inlineLabel` is enabled by default. When the cursor line has a valid bookmark, the first label on that line appears as ghost text at the end of the line |
 | Automatic spacing | `codebookmark.autoSpace` is enabled by default and inserts suitable spaces between Chinese text, Latin text, and numbers |
 | Custom icons | Open the icon picker from a bookmark's context menu. Icons are grouped into code status, core architecture, interface resources, playful labels, and brand marks. The picker supports fuzzy Chinese and English search, incremental pages, and recently used icons |
-| AI semantic icons | `codebookmark.AI.assignIcons` is enabled by default. CodeBookmark exposes a carefully selected semantic subset of the full library, and uses an icon only when a label is an explicit match that also passes conflict checks. Ambiguous labels retain the default icon. When existing bookmarks are improved, manually chosen icons are preserved; only bookmarks still using their default icon may be updated |
+| AI semantic icons | All AI generation, append, and improvement features choose icons from 106 semantic categories using labels, source anchors, nearby code, and structural comments. Short labels can use code context; improvements may add only an icon while preserving manually chosen icons. `codebookmark.AI.assignIcons` controls whether AI icons are applied. |
 | Default icons | An ordinary bookmark's default icon reflects its level and whether it has children. Automatic source markers use a yellow indicator by default. A custom icon can always be reset with Restore Default Icon |
 
 ## 5. Automatic TODO, FIXME, and BUG Bookmarks

@@ -48,6 +48,8 @@ L’importazione riconosce automaticamente un pacchetto per script o workspace e
 
 ## 6. Assistenza IA
 
+Tutte le funzioni IA di generazione, aggiunta e miglioramento scelgono tra 106 categorie usando etichette, ancore, codice vicino e commenti strutturali. Le etichette brevi possono usare il contesto; i miglioramenti possono aggiungere solo un’icona e conservano quelle manuali. `codebookmark.AI.assignIcons` ne controlla l’applicazione.
+
 Configura `Codebookmark.AI: Address`, `API Key` e modello. Address accetta Resource Endpoint, API Base URL, Chat Completions, Responses, Anthropic Messages, Gemini `generateContent` e Ollama; dopo un test riuscito salva l’indirizzo realmente funzionante. I servizi remoti devono usare HTTPS. L’IA genera per lo script corrente o per gli script senza segnalibri del workspace e può aggiungere, rigenerare o migliorare le etichette esistenti. Il menu nasconde automaticamente le azioni non applicabili.
 
 Ogni risposta viene verificata per struttura JSON, riga, ancora letterale, quantità, profondità, proprietà degli ID e lista di icone. Codice e nomi sono dati, non istruzioni. L’IA è disabilitata nei workspace non attendibili; annullamento, modifica durante l’analisi o superamento dei limiti impediscono risultati parziali. L’estensione non impone limiti alla durata totale o all’inattività; le richieste possono essere annullate in qualsiasi momento.

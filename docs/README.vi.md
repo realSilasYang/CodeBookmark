@@ -73,6 +73,8 @@ Khi nhập, CodeBookmark tự nhận biết gói dành cho một script hay work
 
 ## 8. Trợ lý AI
 
+Mọi chức năng AI tạo, bổ sung và cải thiện dùng nhãn, neo mã, mã lân cận và chú thích cấu trúc để chọn biểu tượng trong 106 loại ngữ nghĩa. Nhãn ngắn cũng dùng được ngữ cảnh mã; cải thiện có thể chỉ thêm biểu tượng và giữ biểu tượng chọn thủ công. `codebookmark.AI.assignIcons` điều khiển việc áp dụng.
+
 Điền `Codebookmark.AI: Address`, `API Key` và tên mô hình. Address chấp nhận Resource Endpoint, API Base URL, Chat Completions URL, Responses URL, Anthropic Messages URL, Gemini `generateContent` URL hoặc địa chỉ Ollama; sau khi kiểm tra thành công, ô nhập được cập nhật thành địa chỉ thực sự hoạt động. Dịch vụ từ xa nên dùng HTTPS.
 
 AI có thể tạo dấu trang cho tệp hiện tại hoặc mọi tệp chưa có dấu trang trong workspace; với tệp đã có dữ liệu, AI có thể bổ sung, tạo lại hoặc tối ưu nhãn. Menu tự ẩn những lựa chọn không phù hợp dựa trên trạng thái tệp, workspace và dữ liệu hiện có.

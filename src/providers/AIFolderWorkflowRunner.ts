@@ -119,7 +119,7 @@ export async function runGenerateBookmarksForFolder(
 				try {
 					const aiBookmarks = await AIService.generateBookmarks(codeContent, filePath, (message: string) => {
 						statusMessage.replace(vscode.window.setStatusBarMessage(`AI: ${message}`))
-					}, token)
+					}, token, mode === 'append' ? port.bookmarksForPath(pathRel) : [])
 					consecutiveRequestFailures = 0
 					await assertAISourceSnapshot(filePath, sourceSnapshot)
 					port.workflowGuard.assertStorageScope(taskScope)

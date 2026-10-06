@@ -21,6 +21,7 @@ import {
 	resolveAIBookmarkLine,
 } from './AIBookmarkSchema';
 import { filterAIBookmarksToRange, splitAIGenerationChunks } from './AIGenerationChunks'
+import { buildAIIconSourceContext } from './AIIconCatalog'
 import { resolveAIRequestTargets } from './AIEndpointResolver'
 import { decodeAIProtocolResponse, encodeAIProtocolRequest, type AIMessage } from './AIProtocolCodec'
 import { AIHttpStatusError, postAIJson } from './AIHttpTransport'
@@ -37,6 +38,14 @@ interface ExistingBookmark {
 	content?: string
 	start?: { line: number }
 	isUsingDefaultIcon?: boolean
+}
+
+interface ExistingGenerationBookmark extends ExistingBookmark {
+	start: { line: number }
+	parent?: { id: string }
+	isFile?: boolean
+	isCodeMarker?: boolean
+	isBookmarkInvalid?: boolean
 }
 
 const MAX_BOOKMARK_ANCHOR_LENGTH = 1000
@@ -76,19 +85,27 @@ function mergeGeneratedBookmarks(
 	bookmarks: readonly AIBookmark[],
 	lines: string[],
 ): AIBookmark[] {
-	const occupiedLines = new Set<number>()
+	const bookmarksByLine = new Map<number, AIBookmark>()
 
 	const mergeItems = (items: readonly AIBookmark[]): AIBookmark[] => {
 		const merged: AIBookmark[] = []
 		for (const bookmark of items) {
 			const line = resolveAIBookmarkLine(lines, bookmark)
-			if (line === undefined || occupiedLines.has(line)) {
+			if (line === undefined) {
 				merged.push(...mergeItems(bookmark.subs))
 				continue
 			}
-			occupiedLines.add(line)
-			const children = mergeItems(bookmark.subs)
-			merged.push({ ...bookmark, line, subs: children })
+			const existing = bookmarksByLine.get(line)
+			if (existing) {
+				existing.subs.push(...mergeItems(bookmark.subs))
+				existing.subs.sort((left, right) => (left.line ?? 0) - (right.line ?? 0))
+				continue
+			}
+			const node = { ...bookmark, line, subs: [] as AIBookmark[] }
+			bookmarksByLine.set(line, node)
+			node.subs.push(...mergeItems(bookmark.subs))
+			node.subs.sort((left, right) => (left.line ?? 0) - (right.line ?? 0))
+			merged.push(node)
 		}
 		return merged.sort((left, right) => (left.line ?? Number.MAX_SAFE_INTEGER) - (right.line ?? Number.MAX_SAFE_INTEGER))
 	}
@@ -225,10 +242,30 @@ export class AIService {
 	}
 
 	/** 把源码和生成提示交给模型，再将回复校验成可定位、可构建层级的书签数据。 */
-	public static async generateBookmarks(codeContent: string, filePath: string, onProgress?: (msg: string) => void, token?: vscode.CancellationToken): Promise<AIBookmark[]> {
+	public static async generateBookmarks(
+		codeContent: string,
+		filePath: string,
+		onProgress?: (msg: string) => void,
+		token?: vscode.CancellationToken,
+		existingBookmarks: readonly ExistingGenerationBookmark[] = [],
+	): Promise<AIBookmark[]> {
 		onProgress?.(localize("util.AIService.collectingSourceAndFileContext"));
-		const prompt = this.generationPrompt();
 		const sourceLines = codeContent.split(/\r\n|\n|\r/)
+		const existing = existingBookmarks.filter(bookmark => !bookmark.isFile && !bookmark.isCodeMarker
+			&& !bookmark.isBookmarkInvalid && Number.isSafeInteger(bookmark.start?.line)
+			&& bookmark.start.line >= 0 && bookmark.start.line < sourceLines.length)
+		const existingById = new Map(existing.map(bookmark => [bookmark.id, bookmark]))
+		const existingStructure = existing.map(bookmark => {
+			const parent = bookmark.parent ? existingById.get(bookmark.parent.id) : undefined
+			return {
+				label: labelText(bookmark.label),
+				lineNumber: bookmark.start.line + 1,
+				anchor: sourceLines[bookmark.start.line],
+				parentLineNumber: parent ? parent.start.line + 1 : null,
+			}
+		})
+		const existingParentLines = new Set(existing.map(bookmark => bookmark.start.line))
+		const prompt = this.generationPrompt() + (existing.length > 0 ? `\n\n${localize('ai.prompt.appendGeneration')}` : '')
 		const generationChunks = splitAIGenerationChunks(codeContent)
 		const fileType = path.extname(filePath).toLowerCase() || localize('common.unknown')
 		const generated: AIBookmark[] = []
@@ -242,7 +279,7 @@ export class AIService {
 				onProgress?.(`${localize("util.AIService.collectingSourceAndFileContext")} (${index + 1}/${generationChunks.length})`)
 			}
 			const scopeInstruction = generationChunks.length > 1
-				? `\n\nThis is analysis segment ${index + 1} of ${generationChunks.length}. The displayed lines may include surrounding context from adjacent segments. Inspect the entire segment in source order, especially every clear module, section, phase, or structural comment. Return bookmarks only for responsible source lines ${chunk.startLine + 1}-${chunk.endLine}; context lines outside that range are reference only and must not produce bookmarks.`
+				? `\n\nThis is analysis segment ${index + 1} of ${generationChunks.length}. The displayed lines may include surrounding context from adjacent segments. Inspect the entire segment in source order, especially every clear module, section, phase, or structural comment. Return new bookmarks only for responsible source lines ${chunk.startLine + 1}-${chunk.endLine}; context lines outside that range are reference only and must not produce new bookmarks. Existing bookmarks outside that range may be returned only as containers for new children, using their provided lineNumber and anchor.`
 				: ''
 			const messages = [
 				{ role: 'system', content: prompt },
@@ -252,18 +289,19 @@ export class AIService {
 						fileName: path.basename(filePath),
 						fileType,
 						numberedSource: chunk.numberedSource,
-					}) + scopeInstruction,
+					}) + scopeInstruction + (existing.length > 0 ? `\n\n${JSON.stringify({ existingBookmarks: existingStructure })}` : ''),
 				}
 			]
 
 			const response = await this.sendRequest(messages, onProgress, token);
 			try {
-				const parsed = normalizeAIBookmarkPayload(parseAIJsonReply(response, '{'))
+				const parsed = normalizeAIBookmarkPayload(parseAIJsonReply(response, '{'), sourceLines)
 				const inResponsibleRange = filterAIBookmarksToRange(
 					parsed,
 					bookmark => resolveAIBookmarkLine(sourceLines, bookmark),
 					chunk.startLine,
 					chunk.endLine,
+					existingParentLines,
 				)
 				generated.push(...inResponsibleRange)
 			} catch (error) {
@@ -282,6 +320,7 @@ export class AIService {
 		if (existingBookmarks.length === 0) return []
 		const prompt = this.optimizationPrompt();
 		const numberedSource = formatLineNumberedSource(codeContent);
+		const sourceLines = codeContent.split(/\r\n|\n|\r/)
 		const fileType = path.extname(filePath).toLowerCase() || localize('common.unknown')
 		const optimized: AIOptimizedBookmark[] = []
 		const batchCount = Math.ceil(existingBookmarks.length / MAX_AI_OPTIMIZATION_BATCH)
@@ -292,11 +331,23 @@ export class AIService {
 			const batch = existingBookmarks.slice(start, start + MAX_AI_OPTIMIZATION_BATCH)
 			const batchNumber = Math.floor(start / MAX_AI_OPTIMIZATION_BATCH) + 1
 			if (batchCount > 1) onProgress?.(localize("util.AIService.improvingBookmarkBatch", { batchNumber, batchCount }))
+			const semanticContextById = new Map(batch.map(bookmark => {
+				const line = resolveAIBookmarkLine(sourceLines, {
+					label: labelText(bookmark.label), line: bookmark.start?.line, content: bookmark.content ?? '', subs: [],
+				})
+				return [bookmark.id, {
+					label: labelText(bookmark.label),
+					anchor: line === undefined ? bookmark.content ?? '' : sourceLines[line],
+					sourceContext: buildAIIconSourceContext(sourceLines, line),
+					canAssignIcon: bookmark.isUsingDefaultIcon !== false,
+				}]
+			}))
 			const bookmarksJson = JSON.stringify(batch.map(b => ({
 				id: b.id,
 				label: labelText(b.label),
 				lineNumber: (b.start?.line ?? 0) + 1,
-				anchor: (b.content ?? '').replace(/\s+/g, ' ').slice(0, MAX_BOOKMARK_ANCHOR_LENGTH),
+				anchor: semanticContextById.get(b.id)!.anchor.slice(0, MAX_BOOKMARK_ANCHOR_LENGTH),
+				sourceContext: semanticContextById.get(b.id)!.sourceContext,
 				canAssignIcon: b.isUsingDefaultIcon !== false,
 			})))
 			const messages = [
@@ -312,11 +363,6 @@ export class AIService {
 			onProgress?.(localize("util.AIService.parsingAndValidatingTheAiImprovements"))
 			try {
 				const parsed = parseAIJsonReply(response, '[')
-				const semanticContextById = new Map(batch.map(bookmark => [bookmark.id, {
-					label: labelText(bookmark.label),
-					anchor: bookmark.content ?? '',
-					canAssignIcon: bookmark.isUsingDefaultIcon !== false,
-				}]))
 				optimized.push(...normalizeAIOptimizedBookmarks(parsed, semanticContextById))
 			} catch (error) {
 				logger.error(localize("util.AIService.failedToParseTheAiLabelResponse", { error }))

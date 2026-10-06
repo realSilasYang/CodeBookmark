@@ -87,6 +87,8 @@ CodeBookmark 是用書籤標記及導覽程式碼的 VS Code 擴充功能。黏�
 
 ## 8. AI 輔助
 
+所有 AI 產生、追加和改善功能會綜合標籤、原始程式碼錨點、附近程式碼及結構性註解選擇圖示，支援 106 類語意。簡短標籤亦可按程式碼用途選擇圖示；改善時可只補圖示，並保留手動自訂圖示。`codebookmark.AI.assignIcons` 控制是否套用 AI 圖示。
+
 在設定中填寫 `Codebookmark.AI: Address`、`API Key` 及模型名稱。Address 可接受資源 Endpoint、API Base URL、Chat Completions、Responses、Anthropic Messages、Gemini `generateContent` 或 Ollama 位址；測試成功後會把輸入框更新為實際可用地址。遠端服務應使用 HTTPS。
 
 AI 可為目前程式檔或工作區內無書籤的程式檔產生書籤，也可為已有書籤的程式檔追加、重新產生或改善標籤。選單會按目前是否開啟檔案、是否為工作區，以及目標範圍是否已有書籤動態隱藏無效項目。

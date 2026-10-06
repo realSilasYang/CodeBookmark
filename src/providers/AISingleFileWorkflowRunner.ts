@@ -78,7 +78,7 @@ export async function runGenerateBookmarksForFile(
 			try {
 				const aiBookmarks = await AIService.generateBookmarks(codeContent, document.uri.fsPath, (message: string) => {
 					statusMessage.replace(vscode.window.setStatusBarMessage(`AI: ${message}`))
-				}, token)
+				}, token, mode === 'append' ? existingBookmarks : [])
 
 				if (token.isCancellationRequested) return
 				port.workflowGuard.assertStorageScope(taskScope)

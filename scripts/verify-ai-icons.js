@@ -115,6 +115,12 @@ const expectedCatalog = [
   ['apple', 'brand_apple.svg', '初始化 iOS 应用'],
   ['windows', 'brand_windows.svg', '调用 Win32 API'],
   ['linux', 'brand_linux.svg', '注册 Linux 信号'],
+  ['sync', 'ui_counterclockwise_arrows_button_fluent.svg', '同步状态到客户端'],
+  ['download', 'ui_inbox_tray_twitter.svg', '下载远端资源'],
+  ['upload', 'ui_outbox_tray_twitter.svg', '上传本地文件'],
+  ['browser', 'arch_globe_showing_americas_fluent.svg', '操作浏览器页面'],
+  ['bookmark', 'fun_bookmark_tabs.svg', '管理书签分组'],
+  ['navigation', 'ui_compass_fluent.svg', '导航并跳转到声明'],
 ]
 
 const dictionary = JSON.parse(fs.readFileSync(path.join('resources', 'icon_dictionary.json'), 'utf8'))
@@ -148,8 +154,8 @@ for (const option of AI_BOOKMARK_ICON_OPTIONS) {
   )
   assert.equal(
     resolveAIIconNameForSemantic(option.key, { labels: ['处理普通业务逻辑'], anchor: expected.example }),
-    undefined,
-    `Source anchors alone must not authorize AI icon key: ${option.key}`,
+    option.iconName,
+    `Clear source anchors should support AI icon key with a generic label: ${option.key}`,
   )
 
   const colorVariant = option.iconName.match(/_(blue|green|purple|red|yellow)\.svg$/)?.[1]

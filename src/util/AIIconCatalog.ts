@@ -1,6 +1,6 @@
 /**
  * 维护 AI 可选择的图标白名单、明确语义、冲突优先级和模型提示文本。
- * 标签必须提供足够直接的概念证据；同优先级冲突或语义含糊时返回默认图标，不强行匹配。
+ * 结合标签、锚点和局部源码复核建议；同等证据下采用模型选择，缺少可靠证据时保留默认图标。
  */
 interface AIIconDefinition {
 	readonly key: string
@@ -23,7 +23,7 @@ const infrastructureProductEvidence = /\b(docker|kubernetes|k8s|pod|helm|aws|ama
 
 const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	// 表达代码组织和阅读路径，例如模块、分支、入口与跳转。
-	{ key: 'entry', iconName: 'fun_rocket_fluent.svg', description: '程序入口、启动、初始化', evidence: [/入口|启动|初始化|激活扩展|程序主函数|\b(entry ?point|startup|bootstrap|initialize|initialization|activate|activation|main)\b/iu] },
+	{ key: 'entry', iconName: 'fun_rocket_fluent.svg', description: '程序入口、启动、初始化', evidence: [/入口|启动|初始化|激活扩展|程序主函数|\b(entry ?point|startup|bootstrap|init|initialize|initialization|activate|activation|main)\b/iu] },
 	{ key: 'algorithm', iconName: 'arch_brain_fluent.svg', description: '明确命名的算法、编解码、散列、排序或压缩', evidence: [/算法|编解码|散列|哈希|排序算法|压缩算法|解压算法|\b(algorithm|punycode|base64|sha\d*|md5|dijkstra|quicksort|mergesort|compression|decompression)\b/iu], conflicts: [/图像|图片|音频|声音|语音|视频|录像|\b(image|audio|sound|voice|video|media)\b/iu] },
 	{ key: 'flow', iconName: 'arch_flow_chart_flat_color.svg', description: '工作流、生命周期、处理管线、状态机', evidence: [/工作流|生命周期|处理管线|状态机|阶段编排|\b(workflow|lifecycle|pipeline|state machine|orchestration)\b/iu] },
 	{ key: 'branch', iconName: 'arch_git_branch_purple.svg', description: '条件分支、路由分发、策略选择', evidence: [/条件分支|分支选择|路由分发|策略选择|分派|\b(branch|dispatch|router|routing|strategy selection)\b/iu] },
@@ -33,7 +33,7 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'hook', iconName: 'arch_hook_twitter.svg', description: '钩子、拦截器、中间件', evidence: [/钩子|拦截器|中间件|\b(hook|interceptor|middleware)\b/iu] },
 	{ key: 'factory', iconName: 'arch_factory_fluent.svg', description: '工厂模式、对象工厂、工厂方法', evidence: [/工厂模式|对象工厂|工厂方法|\b(factory pattern|object factory|factory method)\b/iu] },
 	{ key: 'extension', iconName: 'arch_puzzle_piece_fluent.svg', description: '插件、扩展点、扩展注册', evidence: [/插件|扩展点|扩展注册|插件注册|\b(plugin|extension point|extension registration|addon)\b/iu] },
-	{ key: 'parsing', iconName: 'ui_microscope_fluent.svg', description: '解析器、词法分析、语法分析、分词', evidence: [/解析器|词法分析|语法分析|分词器|\b(parser|tokenizer|lexer|lexical analysis|syntax analysis|parse tree)\b/iu] },
+	{ key: 'parsing', iconName: 'ui_microscope_fluent.svg', description: '解析器、词法分析、语法分析、分词', evidence: [/解析器|词法分析|语法分析|分词器|正则表达式|\b(parse|parser|tokenize|tokenizer|lexer|regex|regexp|regular expression|lexical analysis|syntax analysis|parse tree)\b/iu] },
 	{ key: 'serialization', iconName: 'ui_document_purple.svg', description: '序列化、反序列化、编组与解组', evidence: [/序列化|反序列化|编组|解组|\b(serialization|deserialization|serialize|deserialize|marshal|unmarshal)\b/iu] },
 
 	// 表达数据形态、文件操作、消息通信和外部系统集成。
@@ -49,6 +49,12 @@ const AI_ICON_DEFINITIONS: readonly AIIconDefinition[] = [
 	{ key: 'import', iconName: 'ui_inbox_tray_fluent.svg', description: '数据导入、摄取、入站接收', evidence: [/数据导入|批量导入|导入配置|摄取数据|入站接收|\b(data import|batch import|ingest|inbound receive)\b/iu] },
 	{ key: 'export', iconName: 'ui_outbox_tray_fluent.svg', description: '数据导出、输出交付、出站发送', evidence: [/数据导出|批量导出|导出配置|输出交付|出站发送|\b(data export|batch export|outbound delivery|emit output)\b/iu] },
 	{ key: 'link', iconName: 'arch_globe_showing_asia_australia_fluent.svg', description: 'URL、URI、链接、网址、域名、查询参数', evidence: [/链接|网址|域名|查询参数|\b(url|uri|href|hyperlink|domain name|query string|query parameter)\b/iu] },
+	{ key: 'sync', iconName: 'ui_counterclockwise_arrows_button_fluent.svg', description: '同步状态、双向同步、数据复制', evidence: [/同步状态|状态同步|双向同步|数据同步|\b(sync|synchronize|synchronization|replication)\b/iu], conflicts: [/工作流|\b(workflow|lifecycle|pipeline)\b/iu] },
+	{ key: 'download', iconName: 'ui_inbox_tray_twitter.svg', description: '下载文件、接收远端资源', evidence: [/下载|\b(download|downloaded|downloading)\b/iu] },
+	{ key: 'upload', iconName: 'ui_outbox_tray_twitter.svg', description: '上传文件、发送本地资源', evidence: [/上传|\b(upload|uploaded|uploading)\b/iu] },
+	{ key: 'browser', iconName: 'arch_globe_showing_americas_fluent.svg', description: '浏览器页面、DOM 交互、Webview', evidence: [/浏览器|瀏覽器|网页交互|网页操作|\b(browser|webview|dom|query selector)\b/iu], conflicts: [/树结构|树形结构|语法树|\b(dom tree|syntax tree|ast)\b/iu] },
+	{ key: 'bookmark', iconName: 'fun_bookmark_tabs.svg', description: '书签管理、书签分组、书签保存', evidence: [/书签|書籤|\b(bookmark|bookmarks)\b/iu], conflicts: [/导航|導覽|跳转|跳轉|\b(navigation|navigate|goto)\b/iu] },
+	{ key: 'navigation', iconName: 'ui_compass_fluent.svg', description: '导航、源码跳转、定位声明', evidence: [/导航|導覽|跳转|跳轉|定位声明|\b(navigation|navigate|goto|go to definition|reveal range)\b/iu], conflicts: [/搜索|查找|\b(search|find|lookup)\b/iu] },
 
 	// 表达运行、构建、发布、部署和日常运维状态。
 	{ key: 'configuration', iconName: 'arch_settings_flat_color.svg', description: '配置文件、设置项、环境变量、首选项', evidence: [/配置文件|加载配置|应用设置|设置项|环境变量|首选项|\b(configuration file|load config|application settings?|preferences?|environment variable|env var)\b/iu], conflicts: [filterEvidence, transferEvidence, /\bterraform\b/iu] },
@@ -152,10 +158,11 @@ const preciseDomainKeys = new Set([
 	'filter', 'validation', 'crash', 'analytics', 'trend_up', 'trend_down', 'experiment', 'repair',
 	'expiration', 'approval', 'authentication', 'encryption', 'privacy', 'locking', 'unlocking', 'ai',
 	'calculation', 'policy', 'documentation', 'image', 'audio', 'video', 'user', 'location',
+	'sync', 'download', 'upload', 'browser', 'bookmark', 'navigation',
 ])
 const technologyKeys = new Set([
 	'mongodb', 'mysql', 'sqlite', 'postgresql', 'redis', 'container', 'orchestration', 'aws', 'azure', 'gcp',
-	'github', 'gitlab', 'terraform', 'typescript', 'javascript', 'python', 'java', 'golang', 'rust', 'cpp',
+	'github', 'greasyfork', 'gitlab', 'terraform', 'typescript', 'javascript', 'python', 'java', 'golang', 'rust', 'cpp',
 	'csharp', 'php', 'ruby', 'nodejs', 'react', 'vue', 'angular', 'svelte', 'eslint', 'jest', 'android',
 	'apple', 'windows', 'linux',
 ])
@@ -191,25 +198,61 @@ function normalizeSemanticText(parts: readonly string[]): string {
 
 export function resolveAIIconNameForSemantic(
 	value: unknown,
-	semantic: { readonly labels: readonly string[], readonly anchor?: string },
+	semantic: { readonly labels: readonly string[], readonly anchor?: string, readonly sourceContext?: string },
 ): string | undefined {
 	if (typeof value !== 'string') return undefined
-	const requestedDefinition = iconDefinitions.get(value)
+	const aliases: Readonly<Record<string, string>> = {
+		database: 'data', auth: 'authentication', regex: 'parsing', regexp: 'parsing',
+		postgres: 'postgresql', docker: 'container', kubernetes: 'orchestration',
+		'node.js': 'nodejs', go: 'golang', 'c++': 'cpp', 'c#': 'csharp',
+		synchronization: 'sync', synchronize: 'sync', navigate: 'navigation', greasy_fork: 'greasyfork',
+	}
+	const key = value.trim().toLowerCase().replace(/[\s-]+/gu, '_')
+	const requestedDefinition = iconDefinitions.get(aliases[key] ?? key)
 	if (!requestedDefinition) return undefined
 
 	const labelText = normalizeSemanticText(semantic.labels)
-	if (!labelText.trim()) return undefined
-	const completeContext = normalizeSemanticText([...semantic.labels, semantic.anchor ?? ''])
-	const matches = AI_ICON_DEFINITIONS.filter(definition =>
-		definition.evidence.some(pattern => pattern.test(labelText))
-		&& !definition.conflicts?.some(pattern => pattern.test(completeContext))
-	)
+	const anchorText = normalizeSemanticText([semantic.anchor ?? ''])
+	const sourceText = normalizeSemanticText([semantic.sourceContext ?? ''])
+	const completeContext = `${labelText}\n${anchorText}\n${sourceText}`
+	const matches = AI_ICON_DEFINITIONS.flatMap(definition => {
+		if (definition.conflicts?.some(pattern => pattern.test(completeContext))) return []
+		const evidence = definition.evidence.some(pattern => pattern.test(labelText)) ? 3
+			: definition.evidence.some(pattern => pattern.test(anchorText)) ? 2
+				: definition.evidence.some(pattern => pattern.test(sourceText)) ? 1 : 0
+		return evidence > 0 ? [{ definition, evidence }] : []
+	})
 	if (matches.length === 0) return undefined
 
-	const priority = (definition: AIIconDefinition): number =>
-		technologyKeys.has(definition.key) ? 3 : preciseDomainKeys.has(definition.key) ? 2 : 1
+	// 标签优先，其次是锚点和局部源码；同等证据下优先明确技术和具体用途。
+	const priority = (match: typeof matches[number]): number => match.evidence * 10
+		+ (technologyKeys.has(match.definition.key) ? 3 : preciseDomainKeys.has(match.definition.key) ? 2 : 1)
 	const highestPriority = Math.max(...matches.map(priority))
-	const mostSpecific = matches.filter(definition => priority(definition) === highestPriority)
-	if (mostSpecific.length !== 1 || mostSpecific[0].key !== requestedDefinition.key) return undefined
+	if (!matches.some(match => match.definition.key === requestedDefinition.key && priority(match) === highestPriority)) return undefined
 	return requestedDefinition.iconName
+}
+
+/** 提取当前锚点所属的短源码片段，遇到相邻声明或新分段就停止，避免借用其他模块的语义。 */
+export function buildAIIconSourceContext(lines: readonly string[], line: number | undefined): string {
+	if (line === undefined || !Number.isSafeInteger(line) || line < 0 || line >= lines.length) return ''
+	const comment = /^\s*(?:\/\/|\/\*|\*|#|;|--)/u
+	const declaration = /^(?:export\s+|public\s+|private\s+|static\s+|async\s+)*(?:function\b|class\b|interface\b|def\b|func\b|(?:const|let|var)\s+\w+\s*=)/u
+	const indent = (text: string) => text.length - text.trimStart().length
+	const anchorIndent = indent(lines[line])
+	let start = line
+	while (start > Math.max(0, line - 4) && comment.test(lines[start - 1])) start--
+	let end = line + 1
+	let hasCode = !comment.test(lines[line]) && lines[line].trim() !== ''
+	for (; end < Math.min(lines.length, line + 12); end++) {
+		const text = lines[end].trim()
+		if (!text) {
+			if (hasCode) break
+			continue
+		}
+		if (comment.test(lines[end]) && hasCode && indent(lines[end]) <= anchorIndent) break
+		if (hasCode && indent(lines[end]) <= anchorIndent && declaration.test(text)) break
+		if (!comment.test(lines[end])) hasCode = true
+		if (/^[}\]]\s*[;,]?$/u.test(text) && indent(lines[end]) <= anchorIndent) { end++; break }
+	}
+	return lines.slice(start, end).join('\n').slice(0, 4_000)
 }

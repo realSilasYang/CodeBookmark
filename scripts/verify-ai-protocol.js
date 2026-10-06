@@ -101,7 +101,7 @@ async function main() {
   assert.match(requests[0].messages[0].content, /不匹配时使用默认图标/)
   assert.doesNotMatch(requests[0].messages[0].content, /无法可靠判断时使用 module/)
   assert.match(requests[0].messages[0].content, /entry：程序入口、启动、初始化/)
-  assert.match(requests[0].messages[0].content, /URL、URI、域名及查询参数应选择 link/)
+  assert.match(requests[0].messages[0].content, /URL、URI、域名和查询参数选择 link/)
   assert.doesNotMatch(requests[0].messages[0].content, /module：/)
 
   const optimized = await AIService.optimizeBookmarks(sourceWithBackslash, 'sample.ts', [{

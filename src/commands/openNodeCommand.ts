@@ -72,26 +72,12 @@ async function closeOnlyWelcomeTabsInFolderWindow(): Promise<void> {
 	} catch {}
 }
 
-async function clearNavigatedTreeSelection(treeView: vscode.TreeView<Bookmark>, bookmark: Bookmark): Promise<void> {
-	const hasSingleNavigatedSelection = () => treeView.visible
-		&& treeView.selection.length === 1 && treeView.selection[0].id === bookmark.id
-	if (!hasSingleNavigatedSelection()) return
-	try {
-		// list.clear 同时清除行选择和行焦点，避免原生按钮在失焦后因残留状态持续显示。
-		// 点击时书签树已经获得列表焦点；再次聚焦会让宿主把选中行滚动到视图中间。
-		await vscode.commands.executeCommand('list.clear')
-	} catch {
-		// 视图关闭或销毁导致清理失败时，仍继续正常的文件跳转。
-	}
-}
-
 export function openNodeCommand(
 	context: vscode.ExtensionContext,
-	treeView: vscode.TreeView<Bookmark>,
 	preserveTreeScrollDuringNavigation: (navigation: () => Promise<void>) => Promise<void>,
 ) {
 	const openBookmark = vscode.commands.registerCommand(Commands.openBookmark,
-		async (bookmark: Bookmark, fromTree = false) => {
+		async (bookmark: Bookmark) => {
 			if (!bookmark || typeof bookmark.path !== 'string' || bookmark.path.trim() === '') {
 				void vscode.window.showErrorMessage(localize("commands.openNodeCommand.theBookmarkPathIsInvalidAndCannotBeOpened"))
 				return
@@ -123,7 +109,7 @@ export function openNodeCommand(
 						range = new vscode.Range(new vscode.Position(line.lineNumber, indentation), line.range.end)
 					}
 
-					if (fromTree === true) await clearNavigatedTreeSelection(treeView, bookmark)
+					// 保留宿主点击产生的条目选择；重复聚焦或 reveal 会让书签列表滚动。
 					const editor = await vscode.window.showTextDocument(document, existingColumn
 						? { viewColumn: existingColumn, preserveFocus: false }
 						: {

@@ -111,7 +111,7 @@ export function splitAIGenerationChunks(
 }
 
 /**
- * 只保留某一段负责范围内的节点；上下文中的节点会被丢弃，子节点则提升到当前层级。
+ * 保留某一段负责范围内的新节点；已有父书签可跨段充当容器，其他上下文节点的子节点提升到当前层级。
  * 这里不依赖模型是否准确填写 lineNumber，调用方会先用完整源码和 anchor 校正位置。
  */
 export function filterAIBookmarksToRange(
@@ -119,13 +119,18 @@ export function filterAIBookmarksToRange(
 	resolveLine: (bookmark: AIBookmark) => number | undefined,
 	startLine: number,
 	endLine: number,
+	existingParentLines: ReadonlySet<number> = new Set(),
 ): AIBookmark[] {
 	const filtered: AIBookmark[] = []
 	for (const bookmark of bookmarks) {
-		const children = filterAIBookmarksToRange(bookmark.subs, resolveLine, startLine, endLine)
+		const children = filterAIBookmarksToRange(bookmark.subs, resolveLine, startLine, endLine, existingParentLines)
 		const line = resolveLine(bookmark)
 		if (line === undefined || line < startLine || line >= endLine) {
-			filtered.push(...children)
+			if (line !== undefined && existingParentLines.has(line) && children.length > 0) {
+				filtered.push({ ...bookmark, line, subs: children })
+			} else {
+				filtered.push(...children)
+			}
 			continue
 		}
 		filtered.push({ ...bookmark, line, subs: children })

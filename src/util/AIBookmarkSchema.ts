@@ -4,7 +4,7 @@
  */
 import { findBestFingerprintLine } from './FingerprintMatcher'
 import { localize } from '../i18n/Localization'
-import { resolveAIIconNameForSemantic } from './AIIconCatalog'
+import { buildAIIconSourceContext, resolveAIIconNameForSemantic } from './AIIconCatalog'
 import { isJsonRecord } from './JsonRecord'
 
 const MAX_AI_BOOKMARKS = 300
@@ -28,6 +28,7 @@ export interface AIOptimizedBookmark {
 interface AIOptimizationSemanticContext {
 	label: string
 	anchor: string
+	sourceContext?: string
 	canAssignIcon: boolean
 }
 
@@ -60,7 +61,7 @@ function generatedBookmarkItems(payload: unknown): unknown[] {
 	throw new Error(localize("util.AIBookmarkSchema.aiResponseMustContainABookmarksArray"))
 }
 
-export function normalizeAIBookmarkPayload(payload: unknown): AIBookmark[] {
+export function normalizeAIBookmarkPayload(payload: unknown, sourceLines?: string[]): AIBookmark[] {
 	let visited = 0
 
 	const normalizeItems = (items: unknown[], depth: number): AIBookmark[] => {
@@ -83,7 +84,12 @@ export function normalizeAIBookmarkPayload(payload: unknown): AIBookmark[] {
 			const oneBasedLine = parseInteger(value.lineNumber)
 			const line = oneBasedLine !== undefined && oneBasedLine > 0 ? oneBasedLine - 1 : undefined
 			const content = normalizeAnchor(value.anchor)
-			const iconName = resolveAIIconNameForSemantic(value.icon, { labels: [label], anchor: content })
+			const sourceLine = sourceLines ? resolveAIBookmarkLine(sourceLines, { label, line, content, subs: [] }) : undefined
+			const iconName = sourceLines && sourceLine === undefined ? undefined : resolveAIIconNameForSemantic(value.icon, {
+				labels: [label],
+				anchor: sourceLine === undefined ? content : sourceLines?.[sourceLine],
+				sourceContext: sourceLines ? buildAIIconSourceContext(sourceLines, sourceLine) : undefined,
+			})
 
 			if (!label || (line === undefined && content.trim() === '')) {
 				normalized.push(...subs)
@@ -168,8 +174,9 @@ export function normalizeAIOptimizedBookmarks(
 		const newLabel = normalizeLabel(rawLabel)
 		const iconName = semanticContext?.canAssignIcon
 			? resolveAIIconNameForSemantic(value.icon, {
-				labels: [newLabel, semanticContext.label],
+				labels: [newLabel || semanticContext.label],
 				anchor: semanticContext.anchor,
+				sourceContext: semanticContext.sourceContext,
 			})
 			: undefined
 		if (!semanticContext || seen.has(id) || (!newLabel && !iconName)) continue

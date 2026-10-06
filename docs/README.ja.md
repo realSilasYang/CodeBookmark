@@ -79,6 +79,8 @@ CodeBookmark のブックマークと AI 支援でコードのマーキングや
 
 ## 8. AI 支援
 
+AI の生成、追加、改善は、ラベル、ソースアンカー、近くのコード、構造的なコメントを基に 106 種類の意味からアイコンを選びます。短いラベルでもコードの用途を使え、改善ではアイコンだけを追加できます。手動設定のアイコンは保持します。`codebookmark.AI.assignIcons` で適用を制御します。
+
 `Codebookmark.AI: Address`、`API Key`、モデル名を設定します。Address にはリソース Endpoint、API Base URL、Chat Completions、Responses、Anthropic Messages、Gemini `generateContent`、Ollama の各 URL を入力でき、接続成功後は実際に使えたアドレスへ更新されます。リモートサービスには HTTPS を使用してください。
 
 現在のスクリプトやワークスペース内の未作成スクリプトにブックマークを生成でき、既存のスクリプトには追加、再生成、ラベル改善を実行できます。メニューはファイル／ワークスペースの状態と既存ブックマークの有無に応じて不要な項目を隠します。

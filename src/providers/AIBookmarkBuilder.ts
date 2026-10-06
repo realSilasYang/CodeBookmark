@@ -4,6 +4,7 @@
  */
 import * as vscode from 'vscode'
 import { Bookmark, CursorIndex } from '../models/Bookmark'
+import type { BookmarkSet } from '../models/BookmarkSet'
 import type { AIBookmark } from '../util/AIBookmarkSchema'
 import { resolveAIBookmarkLine } from '../util/AIBookmarkSchema'
 import { getFingerprintContext } from '../util/FingerprintMatcher'
@@ -11,6 +12,9 @@ import { getFingerprintContext } from '../util/FingerprintMatcher'
 interface AIBookmarkBuildState {
 	lines: string[]
 	occupiedLines: Set<number>
+	reusableBookmarksByLine: Map<number, Bookmark>
+	existingBookmarks: ReadonlySet<Bookmark>
+	roots: Bookmark[]
 	assignIcons: boolean
 	created: number
 	skipped: number
@@ -50,11 +54,13 @@ function processAIBookmark(
 	pathRel: string,
 	state: AIBookmarkBuildState,
 	parent?: Bookmark,
-): Bookmark[] {
+): void {
 	const line = resolveAIBookmarkLine(state.lines, aiBookmark)
 	if (line === undefined || state.occupiedLines.has(line)) {
 		state.skipped++
-		return aiBookmark.subs.flatMap(child => processAIBookmark(child, pathRel, state, parent))
+		const existingParent = line === undefined ? undefined : state.reusableBookmarksByLine.get(line)
+		for (const child of aiBookmark.subs) processAIBookmark(child, pathRel, state, existingParent ?? parent)
+		return
 	}
 	state.occupiedLines.add(line)
 
@@ -71,16 +77,31 @@ function processAIBookmark(
 	const context = getFingerprintContext(state.lines, line, lineText)
 	bookmark.contextBefore = context.before
 	bookmark.contextAfter = context.after
+	state.reusableBookmarksByLine.set(line, bookmark)
+	// 构建阶段不修改已有树，撤销快照必须先于真正的插入。
+	if (parent && !state.existingBookmarks.has(parent)) parent.subs.add(bookmark)
+	else state.roots.push(bookmark)
 
 	for (const child of aiBookmark.subs) {
-		const childBookmarks = processAIBookmark(child, pathRel, state, bookmark)
-		bookmark.subs.addAll(childBookmarks)
+		processAIBookmark(child, pathRel, state, bookmark)
 	}
 
 	bookmark.refreshDisplayProps()
-		if (bookmark.subs.size > 0) bookmark.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+	if (bookmark.subs.size > 0) bookmark.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
 	state.created++
-	return [bookmark]
+}
+
+/** 追加优先使用构建时匹配到的原父节点；没有匹配时沿用普通新增的文件和固定容器规则。 */
+export function insertGeneratedAIBookmark(bookmark: Bookmark, bookmarks: BookmarkSet): void {
+	const parent = bookmark.parent ? bookmarks.findBookmark(bookmark.parent) : undefined
+	if (parent && !parent.isFile && !parent.isCodeMarker && !parent.isBookmarkInvalid) {
+		bookmark.parent = parent
+		bookmark.ownerScriptId = parent.ownerScriptId
+		parent.subs.add(bookmark)
+		parent.refreshDisplayProps()
+		return
+	}
+	bookmarks.addNewBookmark(bookmark)
 }
 
 export function buildAIBookmarks(
@@ -99,11 +120,15 @@ export function buildAIBookmarks(
 	const state: AIBookmarkBuildState = {
 		lines,
 		occupiedLines: new Set(occupiedBookmarks.map(bookmark => bookmark.start.line)),
+		reusableBookmarksByLine: new Map(occupiedBookmarks
+			.filter(bookmark => !bookmark.isFile && !bookmark.isCodeMarker && !bookmark.isBookmarkInvalid)
+			.map(bookmark => [bookmark.start.line, bookmark])),
+		existingBookmarks: new Set(occupiedBookmarks),
+		roots: [],
 		assignIcons,
 		created: 0,
 		skipped: 0,
 	}
-	const roots: Bookmark[] = []
-	for (const aiBookmark of aiBookmarks) roots.push(...processAIBookmark(aiBookmark, pathRel, state))
-	return { roots, created: state.created, skipped: state.skipped }
+	for (const aiBookmark of aiBookmarks) processAIBookmark(aiBookmark, pathRel, state)
+	return { roots: state.roots, created: state.created, skipped: state.skipped }
 }

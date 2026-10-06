@@ -73,6 +73,8 @@ CodeBookmark로 코드 북마크와 AI 지원을 활용해 시간을 절약했�
 
 ## 8. AI 지원
 
+모든 AI 생성, 추가 및 개선 기능은 레이블, 소스 앵커, 주변 코드와 구조적 주석을 사용해 106가지 의미의 아이콘을 선택합니다. 짧은 레이블도 코드 용도를 활용하며 개선 시 아이콘만 추가할 수 있습니다. 수동 아이콘은 유지합니다. `codebookmark.AI.assignIcons`로 적용을 제어합니다.
+
 `Codebookmark.AI: Address`, `API Key`, 모델 이름을 입력합니다. Address에는 Resource Endpoint, API Base URL, Chat Completions URL, Responses URL, Anthropic Messages URL, Gemini `generateContent` URL, Ollama 주소를 넣을 수 있습니다. 연결에 성공하면 실제로 동작한 주소로 입력값을 갱신합니다. 원격 서비스에는 HTTPS를 사용하십시오.
 
 현재 스크립트나 워크스페이스 안의 북마크 없는 스크립트에 새 북마크를 만들 수 있고, 기존 북마크가 있는 스크립트에는 추가·재생성·라벨 최적화를 실행할 수 있습니다. 메뉴는 열린 파일, 워크스페이스 여부와 기존 데이터에 맞춰 의미 없는 항목과 불필요한 단계를 자동으로 숨깁니다.

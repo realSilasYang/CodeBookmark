@@ -2,6 +2,26 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.6 - 2026-10-06
+
+### ✨ Added
+
+- **AI icon categories:** Expanded the available categories from 100 to 106 with synchronization, download, upload, browser, bookmark, and navigation icons, including common technology-name aliases.
+
+---
+
+### 🚀 Improvements
+
+- **Icon selection across all AI features:** Generation, append generation, single-file optimization, folder batch optimization, and selected-bookmark optimization now combine labels, verified source anchors, nearby code, and structural comments to improve short-label and multilingual cases while reducing interference from adjacent modules.
+- **AI icon improvements:** Icons can be added without changing labels, and manually assigned icons remain protected; prompts and READMEs are updated in all 13 supported languages.
+- **Appending to existing bookmark structure:** Append analysis considers existing bookmark hierarchy and attaches new children to their original parents, preserving parent relationships across large-source segments without duplicating parents or promoting children to the top level.
+
+---
+
+### 🐛 Fixed
+
+- **Selection after navigation:** Clicking a bookmark keeps the item selected after navigating to code while preserving the bookmark tree's scroll position.
+
 ## 🎉 Version 3.2.5 - 2026-10-05
 
 ### ⚠️ Important Notes

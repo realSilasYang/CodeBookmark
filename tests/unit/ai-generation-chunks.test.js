@@ -57,3 +57,12 @@ test('context-only parents are promoted while responsible children remain', () =
   const filtered = filterAIBookmarksToRange([parent], bookmark => bookmark.line, 10, 20)
   assert.deepEqual(filtered, [child])
 })
+
+test('append retains an existing parent outside the chunk only when it contains responsible children', () => {
+  const child = { label: 'New stage', line: 12, content: '// new stage', subs: [] }
+  const unrelated = { label: 'Other segment', line: 30, content: '// other segment', subs: [] }
+  const parent = { label: 'Existing module', line: 2, content: '// module', subs: [child, unrelated] }
+  const filtered = filterAIBookmarksToRange([parent], bookmark => bookmark.line, 10, 20, new Set([2, 30]))
+  assert.deepEqual(filtered, [{ ...parent, subs: [child] }])
+  assert.deepEqual(filterAIBookmarksToRange([parent], bookmark => bookmark.line, 40, 50, new Set([2])), [])
+})
