@@ -2,6 +2,12 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 版本 3.2.8 - 2026-11-19
+
+### 🐛 修复
+
+- **CSS 章节书签定位**：修复在 `userChrome.css` 等文件前部插入代码后，多级书签中的章节标题误标为失效的问题。重新打开文件时，可结合唯一的完整标题和两侧分隔线或空行定位。已经失效的书签须有原文重新插入的证据，才能依靠这类上下文恢复。
+
 ## 🎉 版本 3.2.7 - 2026-11-19
 
 ### 🚀 优化

@@ -2,6 +2,12 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.8 - 2026-11-19
+
+### 🐛 Fixed
+
+- **CSS section bookmarks** stay valid when code is inserted earlier in files such as `userChrome.css`. When a file is reopened, CodeBookmark can locate a unique full-line heading using its surrounding separator lines or blank lines. An invalid bookmark can recover through this check when the original text is reinserted.
+
 ## 🎉 Version 3.2.7 - 2026-11-19
 
 ### 🚀 Improvements
