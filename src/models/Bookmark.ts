@@ -125,14 +125,6 @@ export class Bookmark extends vscode.TreeItem {
 		this.subs = param?.subs ?? new BookmarkSet()
 		this.isPinned = param?.isPinned ?? false
 		this.refreshDisplayProps()
-
-		if (!this.isBookmarkInvalid) {
-			this.command = {
-				command: Commands.openBookmark,
-				title: localize('models.Bookmark.openBookmark'),
-				arguments: [this]
-			}
-		}
 	}
 
 	private static _handleCollapsible(param?: {
@@ -170,6 +162,14 @@ export class Bookmark extends vscode.TreeItem {
 
 	public refreshDisplayProps() {
 		this.displaySignature = refreshBookmarkTreeItem(this, this.displaySignature)
+		if (this.isBookmarkInvalid) this.command = undefined
+		else if (!this.command) {
+			this.command = {
+				command: Commands.openBookmark,
+				title: localize('models.Bookmark.openBookmark'),
+				arguments: [this],
+			}
+		}
 	}
 
 	// Bookmark 只知道自身及子节点。scriptId、源路径和格式头属于脚本信封，

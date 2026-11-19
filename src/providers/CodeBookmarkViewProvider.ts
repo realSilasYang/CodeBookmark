@@ -162,7 +162,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	private currentScopeUri(): vscode.Uri | undefined {
 		return this.currentScopeFilePath ? vscode.Uri.file(this.currentScopeFilePath) : undefined
 	}
-	private absoluteBookmarkPath(bookmarkPath: string): string {
+	absoluteBookmarkPath(bookmarkPath: string): string {
 		return fileUtils.relativeToAbsolute(bookmarkPath, this.currentScopeUri())
 	}
 	private readonly bookmarkTreeDataProjectionPortAdapter: BookmarkTreeDataProjectionPort<Bookmark, vscode.Uri> = {
@@ -405,7 +405,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		refreshDecorations: () => this.refreshDecoration(),
 	})
 	private readonly bookmarkDocumentChangeCoordinator =
-		new BookmarkDocumentChangeCoordinator<vscode.TextDocument, vscode.Uri, BookmarkSet>()
+		new BookmarkDocumentChangeCoordinator<vscode.TextDocument, vscode.Uri, vscode.TextDocumentContentChangeEvent>()
 	private readonly viewLoads = new ViewLoadSession()
 	private readonly viewRefreshCoordinator = new BookmarkViewRefreshCoordinator()
 	private readonly viewMutationBarrier = new BookmarkViewMutationBarrier()
@@ -1210,7 +1210,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	private readonly bookmarkDocumentChangePortAdapter: BookmarkDocumentChangePort<
 		vscode.TextDocument,
 		vscode.Uri,
-		BookmarkSet
+		vscode.TextDocumentContentChangeEvent
 	> = {
 		isFileDocument: document => document.uri.scheme === 'file',
 		documentUri: document => document.uri,
@@ -1218,33 +1218,29 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		filePath: uri => uri.fsPath,
 		relativeBookmarkPath: absolutePath => fileUtils.absoluteToRelative(absolutePath),
 		currentViewGeneration: () => this.viewLoadGeneration,
-		currentBookmarkState: () => this.codeBookmarks,
-		bookmarkCount: bookmarkPath => this.getBookmarksByPath(bookmarkPath).length,
-		relocateBookmarks: (bookmarkState, bookmarkPath, uri) =>
-			fileUtils.readContentBookmarkInFile(bookmarkState, true, bookmarkPath, uri),
+		relocateBookmarks: (document, changes) => this.reconcileDocumentBookmarks(document, changes),
 		documentLines: textDocumentLines,
 		documentLanguage: document => document.languageId,
 		synchronizeCodeMarkers: (uri, lines, languageId) =>
 			this.synchronizeCodeMarkerSnapshot(uri, lines, languageId),
 		persistCodeMarkerChanges: absolutePaths => this.persistCodeMarkerChanges(absolutePaths),
-		saveBookmarks: absolutePaths => this.saveBookmarksToFile(absolutePaths),
-		refreshDecorations: () => this.refreshDecoration(),
 		reportFailure: error => logger.error(localize("providers.CodeBookmarkViewProvider.bookmarkPositionTrackingFailed", { errorMessage: errorMessage(error) })),
 	}
 
-	private bookmarkDocumentChangePort(): BookmarkDocumentChangePort<
-		vscode.TextDocument,
-		vscode.Uri,
-		BookmarkSet
-	> {
-		return this.bookmarkDocumentChangePortAdapter
+	reconcileDocumentBookmarks(document: vscode.TextDocument, changes?: readonly vscode.TextDocumentContentChangeEvent[]): void {
+		if (document.uri.scheme !== 'file' || !this.uriMatchesCurrentScope(document.uri)) return
+		const absolutePath = document.uri.fsPath
+		const bookmarks = this.getBookmarksByPath(fileUtils.absoluteToRelative(absolutePath))
+		if (bookmarks.length === 0 || !fileUtils.reconcileDocumentBookmarks(bookmarks, document, changes)) return
+		this.saveBookmarksToFile([absolutePath])
+		this.refreshDecoration(true, false)
 	}
 
 	changeContentFile(event: vscode.TextDocumentChangeEvent) {
 		this.bookmarkDocumentChangeCoordinator.handleChange(
 			event.document,
-			event.contentChanges.length > 0,
-			this.bookmarkDocumentChangePort(),
+			event.contentChanges,
+			this.bookmarkDocumentChangePortAdapter,
 		)
 	}
 
@@ -1469,10 +1465,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			),
 			readContentBookmarks: (bookmarks, scopeFilePath, candidateSignal) => fileUtils.readContentBookmarkInFile(
 				bookmarks,
-				true,
-				undefined,
 				scopeFilePath ? vscode.Uri.file(scopeFilePath) : undefined,
-				undefined,
 				candidateSignal,
 			),
 			readWorkspaceOrder: (bookmarks, candidateTarget, candidateSignal) => this.readWorkspaceOrderForView(

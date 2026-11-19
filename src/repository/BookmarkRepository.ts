@@ -10,10 +10,10 @@ import { fileUtils } from '../util/FileUtils'
 import { logger } from '../util/Logger'
 import { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
-import { projectBookmarksByOwner } from '../models/BookmarkOwnership'
+import { allBookmarks, projectBookmarksByOwner } from '../models/BookmarkOwnership'
 import { fileChangeFingerprints } from '../util/FileChangeFingerprint'
 import { canonicalBookmarkPath } from '../util/BookmarkPath'
-import { createScriptId, fingerprintSourceFile, isScriptId, type SourceFingerprint } from '../util/ScriptIdentity'
+import { createScriptId, fingerprintSourceFile, isScriptId } from '../util/ScriptIdentity'
 import {
 	executeScriptRelocation,
 	type ScriptRelocationRecord,
@@ -38,7 +38,8 @@ import { ScriptIndex, type ScriptIndexEntry } from './ScriptIndex'
 import { inferDirectoryRelocation, planScriptRelocation } from './ScriptRelocationPlan'
 import { recoverScriptRelocations } from './ScriptRelocationRecovery'
 import { WorkspaceOrderStore } from './WorkspaceOrderStore'
-import { SourceCandidateIndex, type SourceCandidate } from './SourceCandidateIndex'
+import { SourceCandidateIndex } from './SourceCandidateIndex'
+import { findRelocatedSource } from './SourceRelocationMatcher'
 import {
 	bookmarkItems,
 	createScriptEnvelope,
@@ -185,8 +186,9 @@ class CodeBookmarksRepository {
 		const current = await fingerprintSourceFile(entry.metadata.path)
 		if (current?.sha256 === expected.sha256) return true
 		if (entry.metadata.missingSince !== undefined || !current) return false
-		return expected.device !== undefined && expected.inode !== undefined
+		return expected.device !== undefined && expected.inode !== undefined && expected.inode !== '0'
 			&& current.device === expected.device && current.inode === expected.inode
+			&& (expected.birthtimeMs === undefined || expected.birthtimeMs === current.birthtimeMs)
 	}
 
 	private async rebuildIndex(storageRoot: string, signal?: AbortSignal): Promise<void> {
@@ -259,10 +261,6 @@ class CodeBookmarksRepository {
 
 	private entriesAtAbsolutePath(absolutePath: string): ScriptIndexEntry[] {
 		return this.scriptIndex.byPath(absolutePath)
-	}
-
-	private entriesWithFingerprint(fingerprint: SourceFingerprint): ScriptIndexEntry[] {
-		return this.scriptIndex.byFingerprint(fingerprint)
 	}
 
 	private displayPath(absolutePath: string, scopeUri?: vscode.Uri): string {
@@ -348,95 +346,13 @@ class CodeBookmarksRepository {
 		return SourceCandidateIndex.scan(root, () => throwIfReadCancelled(signal))
 	}
 
-	private bookmarkAnchors(fileNode: Bookmark): string[] {
-		const anchors = new Set<string>()
-		const collect = (bookmarks: Bookmark[]): void => {
-			for (const bookmark of bookmarks) {
-				for (const value of [bookmark.content, bookmark.contextBefore, bookmark.contextAfter]) {
-					const normalized = value?.trim()
-					if (normalized && normalized.length >= 4) anchors.add(normalized)
-				}
-				if (bookmark.subs.size > 0) collect(bookmark.subs.values)
-				if (anchors.size >= 20) return
-			}
-		}
-		collect(fileNode.subs.values)
-		return [...anchors].slice(0, 20)
-	}
-
-	private async findRelocatedSource(
+	private findRelocatedSource(
 		fileNode: Bookmark,
 		data: BookmarkFileEnvelope,
 		candidates: SourceCandidateIndex,
 		signal?: AbortSignal,
 	): Promise<string | undefined> {
-		throwIfReadCancelled(signal)
-		const metadata = scriptMetadata(data)
-		const anchors = this.bookmarkAnchors(fileNode)
-		const expectedBaseName = path.basename(metadata?.path ?? fileNode.path)
-		const expectedBaseNameKey = expectedBaseName
-		const expectedExtension = path.extname(metadata?.path ?? fileNode.path).toLowerCase()
-		const previous = metadata?.fingerprint
-		const fileSystemIdentityMatches = previous?.device && previous.inode
-			? candidates.byFileSystemIdentity.get(`${previous.device}\0${previous.inode}`) ?? []
-			: []
-
-		if (previous) {
-			const exactMatches: SourceCandidate[] = []
-			for (const candidate of candidates.bySize.get(previous.size) ?? []) {
-				throwIfReadCancelled(signal)
-				let fingerprint = candidates.fingerprints.get(candidate.path)
-				if (!candidates.fingerprints.has(candidate.path)) {
-					fingerprint = await fingerprintSourceFile(candidate.path)
-					throwIfReadCancelled(signal)
-					candidates.fingerprints.set(candidate.path, fingerprint)
-				}
-				if (fingerprint?.sha256 === previous.sha256) exactMatches.push(candidate)
-			}
-			if (exactMatches.length === 1) return exactMatches[0].path
-			if (exactMatches.length > 1) return undefined
-		}
-
-		const orderedCandidates: SourceCandidate[] = []
-		const seenCandidates = new Set<string>()
-		const appendCandidates = (items: readonly SourceCandidate[]): void => {
-			for (const candidate of items) {
-				if (seenCandidates.has(candidate.path)) continue
-				seenCandidates.add(candidate.path)
-				orderedCandidates.push(candidate)
-			}
-		}
-		appendCandidates(fileSystemIdentityMatches)
-		appendCandidates(candidates.byBaseName.get(expectedBaseNameKey) ?? [])
-		appendCandidates(candidates.byExtension.get(expectedExtension) ?? [])
-		appendCandidates(candidates.all)
-		const scored: Array<{ path: string, score: number, anchorMatches: number, baseNameMatches: boolean }> = []
-		for (const candidate of orderedCandidates) {
-			throwIfReadCancelled(signal)
-			const baseNameMatches = candidate.baseNameKey === expectedBaseNameKey
-			if (anchors.length > 0 && candidate.stat.size <= 16 * 1024 * 1024) {
-				const content = await candidates.readContent(candidate.path)
-				throwIfReadCancelled(signal)
-				if (content === undefined) continue
-				const anchorMatches = anchors.filter(anchor => content.includes(anchor)).length
-				if (anchorMatches > 0) {
-					const ratioScore = Math.round(anchorMatches / anchors.length * 40)
-					const nameScore = baseNameMatches ? 15 : 0
-					const extensionScore = expectedExtension !== '' && candidate.extension === expectedExtension ? 5 : 0
-					const score = anchorMatches * 20 + ratioScore + nameScore + extensionScore
-					scored.push({ path: candidate.path, score, anchorMatches, baseNameMatches })
-				}
-			}
-		}
-
-		scored.sort((a, b) => b.score - a.score)
-		if (scored.length === 0) return undefined
-		const tied = scored.filter(candidate => candidate.score === scored[0].score)
-		const top = tied[0]
-		const reliableAnchorMatch = top.anchorMatches >= 2
-			|| (anchors.length === 1 && top.anchorMatches === 1 && top.baseNameMatches)
-		if (tied.length === 1 && reliableAnchorMatch) return top.path
-		return undefined
+		return findRelocatedSource(fileNode, scriptMetadata(data)?.fingerprint, candidates, () => throwIfReadCancelled(signal))
 	}
 
 	private async reconcileMissingEntriesInWorkspace(
@@ -598,6 +514,8 @@ class CodeBookmarksRepository {
 		if (this.entriesAtAbsolutePath(activeAbsolutePath).length > 0) return
 		const activeCandidate = await this.sourceCandidateIndex([activeAbsolutePath], signal)
 		if (activeCandidate.all.length === 0) return
+		const workspace = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(activeAbsolutePath))
+		let scopeCandidates: SourceCandidateIndex | undefined
 		const matches: Array<{ entry: ScriptIndexEntry, data: BookmarkFileEnvelope }> = []
 		for (const entry of this.scriptIndex.values()) {
 			throwIfReadCancelled(signal)
@@ -610,7 +528,10 @@ class CodeBookmarksRepository {
 				throwIfReadCancelled(signal)
 				const fileNode = this.createFileNode(data, entry.metadata.path)
 				if (!fileNode) continue
-				if (await this.findRelocatedSource(fileNode, data, activeCandidate, signal)) {
+				if (!await this.findRelocatedSource(fileNode, data, activeCandidate, signal)) continue
+				scopeCandidates ??= await this.sourceCandidates(workspace?.uri.fsPath ?? path.dirname(activeAbsolutePath), signal)
+				const target = await this.findRelocatedSource(fileNode, data, scopeCandidates, signal)
+				if (target && this.pathsReferToSameFile(target, activeAbsolutePath)) {
 					matches.push({ entry, data })
 				}
 			} catch (error) {
@@ -732,11 +653,16 @@ class CodeBookmarksRepository {
 		const newScope = fileUtils.getWorkspaceBookmarkFolder(newRoot, storageRoot)
 		if (!oldScope || !newScope) return undefined
 		const summaries: BookmarkLevelSummary[] = []
-		for (const entry of affected) {
+		const plan = planScriptRelocation(affected, oldRoot, newRoot, true)
+		const candidates = await this.sourceCandidateIndex(plan.map(item => item.targetPath), signal)
+		for (const { entry, targetPath } of plan) {
 			throwIfReadCancelled(signal)
 			const data = (await this.readBookmarkFile(entry.filePath)).data
 			const fileNode = this.createFileNode(data, entry.metadata.path)
-			summaries.push(summarizeBookmarkTrees(fileNode?.subs ?? []))
+			if (!fileNode || this.entriesAtAbsolutePath(targetPath).some(existing => existing.id !== entry.id)) return undefined
+			const target = await this.findRelocatedSource(fileNode, data, candidates, signal)
+			if (!target || !this.pathsReferToSameFile(target, targetPath)) return undefined
+			summaries.push(summarizeBookmarkTrees(fileNode.subs))
 		}
 
 		await this.enqueueRelocation(async () => {
@@ -821,7 +747,8 @@ class CodeBookmarksRepository {
 							relocationApplied = true
 						}
 					}
-					if ((!await this.originalPathIsAvailable(entry) || tombstonePathMismatch) && workspaceFolder) {
+					const originalAvailable = await this.originalPathIsAvailable(entry)
+					if ((!originalAvailable || tombstonePathMismatch) && workspaceFolder) {
 						if (ambiguousRelocationTargets.size > 0) {
 							const storageNode = this.createFileNode(data, entry.metadata.path)
 							const candidates = workspaceCandidates ?? await this.sourceCandidates(workspaceFolder.uri.fsPath, signal)
@@ -847,7 +774,8 @@ class CodeBookmarksRepository {
 						}
 					}
 					if (relocatedPath && this.entriesAtAbsolutePath(relocatedPath).some(existing => existing.id !== entry.id)) continue
-					if (tombstonePathMismatch && !relocationApplied) continue
+					if (!relocationApplied && (tombstonePathMismatch
+						|| (!originalAvailable && await pathExists(entry.metadata.path)))) continue
 					const display = this.displayPath(currentEntry.metadata.path, activeUri ?? workspaceFolder?.uri)
 					const fileNode = this.createFileNode(data, display)
 					if (fileNode) {
@@ -1097,19 +1025,7 @@ class CodeBookmarksRepository {
 		if (!fingerprint) return []
 		const candidateIndex = await this.sourceCandidateIndex([targetPath])
 		candidateIndex.fingerprints.set(targetPath, fingerprint)
-		const exactEntries = [] as ScriptIndexEntry[]
-		for (const entry of this.entriesWithFingerprint(fingerprint)) {
-			if (!await this.originalPathIsAvailable(entry)) exactEntries.push(entry)
-		}
-		if (exactEntries.length > 1) return []
-		if (exactEntries.length === 1) {
-			const entry = exactEntries[0]
-			if (this.entriesAtAbsolutePath(targetPath).some(existing => existing.id !== entry.id)) return []
-			const data = (await this.readBookmarkFile(entry.filePath)).data
-			const oldAbsolutePath = entry.metadata.path
-			await this.rebindConfiguration(entry, data, targetPath)
-			return [{ oldAbsolutePath, newAbsolutePath: targetPath, scriptId: entry.id }]
-		}
+		let scopeCandidates: SourceCandidateIndex | undefined
 		const matches: Array<{ entry: ScriptIndexEntry, data: BookmarkFileEnvelope }> = []
 		for (const entry of this.scriptIndex.values()) {
 			if (absolutePathKey(entry.metadata.path) === absolutePathKey(targetPath)
@@ -1124,6 +1040,9 @@ class CodeBookmarksRepository {
 					candidateIndex,
 				)
 				if (!relocated || absolutePathKey(relocated) !== absolutePathKey(targetPath)) continue
+				scopeCandidates ??= await this.sourceCandidates(workspaceFolder?.uri.fsPath ?? path.dirname(targetPath))
+				const verifiedTarget = await this.findRelocatedSource(fileNode, data, scopeCandidates)
+				if (!verifiedTarget || !this.pathsReferToSameFile(verifiedTarget, targetPath)) continue
 				matches.push({ entry, data })
 			} catch (error) {
 				logger.error(localize("repository.BookmarkRepository.failedToRecoverABookmarkBindingWhenANew", { targetPath, error }))
@@ -1221,12 +1140,7 @@ class CodeBookmarksRepository {
 			const targetDocument = vscode.workspace.textDocuments.find(document => document.uri.scheme === 'file'
 				&& absolutePathKey(document.uri.fsPath) === absolutePathKey(targetPath))
 				?? await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath))
-			await fileUtils.readContentBookmarksInDocument(
-				new BookmarkSet([fileNode]),
-				targetDocument,
-				fileNode.path,
-				vscode.Uri.file(targetPath),
-			)
+			fileUtils.reconcileDocumentBookmarks(allBookmarks(fileNode.subs), targetDocument)
 			bookmarks = fileNode.subs.values.map(bookmark => bookmark.toJSON())
 			setSerializedBookmarkPaths(bookmarks, targetPath)
 			output.bookmarks = bookmarks

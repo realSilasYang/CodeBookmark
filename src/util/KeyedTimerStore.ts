@@ -1,6 +1,6 @@
 /**
  * 按业务键持有可替换定时器，集中处理防抖替换、范围取消和停用清理。
- * 已被替换的回调即使因事件循环竞争仍被调用，也不会误删同键的新定时器。
+ * 已被替换或取消的回调即使因事件循环竞争被调度，也不会执行过期工作。
  */
 export interface TimerScheduling<Timer> {
 	setTimer(callback: () => void, delay: number): Timer
@@ -21,7 +21,8 @@ export class KeyedTimerStore<Key, Timer> {
 		const previous = this.timers.get(key)
 		if (previous !== undefined) this.scheduling.clearTimer(previous)
 		const timer = this.scheduling.setTimer(() => {
-			if (this.timers.get(key) === timer) this.timers.delete(key)
+			if (this.timers.get(key) !== timer) return
+			this.timers.delete(key)
 			callback()
 		}, delay)
 		this.timers.set(key, timer)

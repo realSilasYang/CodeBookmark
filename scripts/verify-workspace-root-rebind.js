@@ -62,6 +62,30 @@ async function main() {
   assert.equal(await cleanupEmptyWorkspaceScopeFolders(storageRoot, []), 1)
   assert.equal(fs.existsSync(oldScope), false)
   assert.equal(fs.existsSync(path.join(storageRoot, '.script-relocations')), false)
+
+  const partialRoot = path.join(sandbox, 'partial-old-workspace')
+  const validPath = path.join(newRoot, 'src', 'verified.ts')
+  const wrongPath = path.join(newRoot, 'src', 'same-name.ts')
+  const missingPath = path.join(newRoot, 'src', 'missing.ts')
+  const partial = [
+    { id: '10000000-0000-9000-1000-000000000053', target: validPath, text: 'const verifiedWorkspaceMove = true' },
+    { id: '10000000-0000-9000-1000-000000000054', target: wrongPath, text: 'const deletedOriginalFacility = true' },
+    { id: '10000000-0000-9000-1000-000000000055', target: missingPath, text: 'const missingWorkspaceFile = true' },
+  ]
+  fs.writeFileSync(validPath, partial[0].text)
+  fs.writeFileSync(wrongPath, 'const unrelatedWorkspaceFile = true')
+  for (const item of partial) {
+    item.previous = path.join(partialRoot, 'src', path.basename(item.target))
+    fs.writeFileSync(path.join(scriptFolder, `${item.id}.json`), JSON.stringify(envelope(item.id, item.previous, item.text)))
+  }
+  bookmarkRepository.invalidateIndex()
+  const partialLoaded = await bookmarkRepository.readBookmarksFromFile([validPath])
+  assert.ok(partialLoaded.some(node => node.scriptId === partial[0].id))
+  assert.ok(partial.slice(1).every(item => !partialLoaded.some(node => node.scriptId === item.id)))
+  for (const [index, item] of partial.entries()) {
+    const data = JSON.parse(fs.readFileSync(path.join(scriptFolder, `${item.id}.json`), 'utf8'))
+    assert.equal(path.resolve(data.script.path), path.resolve(index === 0 ? item.target : item.previous))
+  }
 }
 
 main().catch(error => {

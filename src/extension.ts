@@ -63,8 +63,9 @@ export function activate(context: vscode.ExtensionContext): CodeBookmarkExtensio
 
 	const viewCodeBookmark = createCodeBookmarkView(context, codeBookmarkProvider)
 	bookmarkCommands(context, codeBookmarkProvider)
-	openNodeCommand(context, navigation =>
-		codeBookmarkProvider.preserveTreeScrollDuringNavigation(navigation))
+	openNodeCommand(context, navigation => codeBookmarkProvider.preserveTreeScrollDuringNavigation(navigation),
+		document => codeBookmarkProvider.reconcileDocumentBookmarks(document),
+		bookmarkPath => vscode.Uri.file(codeBookmarkProvider.absoluteBookmarkPath(bookmarkPath)))
 	registerExportCommand(context, codeBookmarkProvider)
 
 	fileEditorSubscriber(context, codeBookmarkProvider)

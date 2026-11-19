@@ -79,7 +79,7 @@ describe('shared infrastructure', () => {
     })
   })
 
-  it('does not let a replaced timer callback remove its successor', () => {
+  it('skips replaced and cancelled callbacks without removing the successor', () => {
     const scheduled = []
     const cleared = []
     const store = new KeyedTimerStore({
@@ -97,7 +97,8 @@ describe('shared infrastructure', () => {
     assert.deepEqual(cleared, [first])
     first.callback()
     store.cancelWhere(key => key === 'file')
-    assert.equal(calls, 1)
+    scheduled[1].callback()
+    assert.equal(calls, 0)
     assert.deepEqual(cleared, [first, scheduled[1]])
   })
 

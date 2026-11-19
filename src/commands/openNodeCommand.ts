@@ -75,6 +75,8 @@ async function closeOnlyWelcomeTabsInFolderWindow(): Promise<void> {
 export function openNodeCommand(
 	context: vscode.ExtensionContext,
 	preserveTreeScrollDuringNavigation: (navigation: () => Promise<void>) => Promise<void>,
+	reconcileDocumentBookmarks?: (document: vscode.TextDocument) => void,
+	resolveBookmarkUri: (path: string) => vscode.Uri = bookmarkPath => fileUtils.relativeToUri(bookmarkPath),
 ) {
 	const openBookmark = vscode.commands.registerCommand(Commands.openBookmark,
 		async (bookmark: Bookmark) => {
@@ -82,13 +84,18 @@ export function openNodeCommand(
 				void vscode.window.showErrorMessage(localize("commands.openNodeCommand.theBookmarkPathIsInvalidAndCannotBeOpened"))
 				return
 			}
+			if (bookmark.isBookmarkInvalid) return
 			await preserveTreeScrollDuringNavigation(async () => {
 				try {
 					const fileUri = bookmark.isFile && bookmark.resourceUri
 						? bookmark.resourceUri
-						: fileUtils.relativeToUri(bookmark.path)
+						: resolveBookmarkUri(bookmark.path)
 					const existingColumn = openedViewColumn(fileUri)
 					const document = await vscode.workspace.openTextDocument(fileUri)
+					if (!bookmark.isFile) {
+						reconcileDocumentBookmarks?.(document)
+						if (bookmark.isBookmarkInvalid) return
+					}
 					const fallbackColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active
 					if (!existingColumn) await closeOnlyWelcomeTabsInFolderWindow()
 

@@ -1,20 +1,10 @@
 /**
- * 预处理书签行上下文并为候选行评分，在重复代码中选择文本、邻接上下文和距离最可信的位置。
- * 最高分不唯一或证据不足时不返回猜测结果，避免书签悄悄跳到另一段相似代码。
+ * 提取书签的邻接上下文，并为 AI 返回的局部源码提示提供近似行号搜索。
+ * 手动书签的重新绑定由粘性引擎单独核验。
  */
 interface FingerprintContext {
 	before?: string
 	after?: string
-}
-
-interface PreparedFingerprintText {
-	normalized: string
-	tokens: ReadonlySet<string>
-}
-
-export interface PreparedFingerprintContext {
-	before?: PreparedFingerprintText
-	after?: PreparedFingerprintText
 }
 
 function normalize(value: string | undefined): string {
@@ -38,49 +28,11 @@ function similarity(expected: string | undefined, actual: string | undefined): n
 	return intersection / new Set([...leftTokens, ...rightTokens]).size
 }
 
-function prepareFingerprintText(value: string | undefined): PreparedFingerprintText | undefined {
-	if (value === undefined) return undefined
-	const normalized = normalize(value)
-	return {
-		normalized,
-		tokens: new Set(normalized.split(/\W+/).filter(Boolean))
-	}
-}
-
-export function prepareFingerprintContext(context: FingerprintContext): PreparedFingerprintContext {
-	return {
-		before: prepareFingerprintText(context.before),
-		after: prepareFingerprintText(context.after)
-	}
-}
-
-function preparedSimilarity(expected: PreparedFingerprintText | undefined, actual: PreparedFingerprintText | undefined): number {
-	if (!expected || !actual || !expected.normalized || !actual.normalized) return 0
-	if (expected.normalized === actual.normalized) return 1
-	if (expected.normalized.includes(actual.normalized) || actual.normalized.includes(expected.normalized)) return 0.5
-	if (expected.tokens.size === 0 || actual.tokens.size === 0) return 0
-	let intersection = 0
-	for (const token of expected.tokens) {
-		if (actual.tokens.has(token)) intersection++
-	}
-	return intersection / (expected.tokens.size + actual.tokens.size - intersection)
-}
-
-export function scorePreparedFingerprintCandidate(
-	originalLine: number,
-	candidateLine: number,
-	expected: PreparedFingerprintContext,
-	actual: PreparedFingerprintContext
-): number {
-	const contextScore = preparedSimilarity(expected.before, actual.before) + preparedSimilarity(expected.after, actual.after)
-	return contextScore * 1_000_000 - Math.abs(candidateLine - originalLine)
-}
-
-export function getFingerprintContext(lines: readonly string[], line: number, content: string): FingerprintContext {
+export function getFingerprintContext(lines: readonly string[], line: number, content: string, endLine = line): FingerprintContext {
 	if (content.trim() !== '') {
 		return {
 			before: line > 0 ? lines[line - 1]?.trim() : undefined,
-			after: line + 1 < lines.length ? lines[line + 1]?.trim() : undefined
+			after: endLine + 1 < lines.length ? lines[endLine + 1]?.trim() : undefined
 		}
 	}
 
