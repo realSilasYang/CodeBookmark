@@ -1,6 +1,6 @@
 /**
- * 对编辑中的文档变化进行防抖，在稳定后运行粘性重定位和自动标记对账。
- * 合并期间不依赖逐次行号增减，而是使用文档最终内容，避免快速编辑积累位置误差。
+ * 按事件顺序追踪手动书签，对只需最终文本的自动标记扫描进行防抖。
+ * 视图切换或路径移动后，旧任务不再读取文档或写入书签。
  */
 import { bookmarkPathKey, isSameOrDescendantBookmarkPath } from '../util/BookmarkPath'
 import {
@@ -15,26 +15,22 @@ interface BookmarkDocumentMarkerResult {
 	changed: boolean
 }
 
-export interface BookmarkDocumentChangePort<Document, Uri, BookmarkState> {
+export interface BookmarkDocumentChangePort<Document, Uri, Change> {
 	isFileDocument(document: Document): boolean
 	documentUri(document: Document): Uri
 	isCurrentScope(uri: Uri): boolean
 	filePath(uri: Uri): string
 	relativeBookmarkPath(absolutePath: string): string
 	currentViewGeneration(): number
-	currentBookmarkState(): BookmarkState
-	bookmarkCount(bookmarkPath: string): number
-	relocateBookmarks(bookmarkState: BookmarkState, bookmarkPath: string, uri: Uri): Promise<number>
+	relocateBookmarks(document: Document, changes: readonly Change[]): void
 	documentLines(document: Document): readonly string[]
 	documentLanguage(document: Document): string | undefined
 	synchronizeCodeMarkers(uri: Uri, lines: readonly string[], languageId?: string): BookmarkDocumentMarkerResult
 	persistCodeMarkerChanges(absolutePaths: readonly string[]): void
-	saveBookmarks(absolutePaths: readonly string[]): void
-	refreshDecorations(): void
 	reportFailure(error: unknown): void
 }
 
-export class BookmarkDocumentChangeCoordinator<Document, Uri, BookmarkState> {
+export class BookmarkDocumentChangeCoordinator<Document, Uri, Change> {
 	private readonly timers: KeyedTimerStore<string, DocumentChangeTimer>
 
 	constructor(
@@ -46,10 +42,10 @@ export class BookmarkDocumentChangeCoordinator<Document, Uri, BookmarkState> {
 
 	handleChange(
 		document: Document,
-		hasContentChanges: boolean,
-		port: BookmarkDocumentChangePort<Document, Uri, BookmarkState>,
+		changes: readonly Change[],
+		port: BookmarkDocumentChangePort<Document, Uri, Change>,
 	): void {
-		if (!hasContentChanges || !port.isFileDocument(document)) return
+		if (changes.length === 0 || !port.isFileDocument(document)) return
 		const uri = port.documentUri(document)
 		if (!port.isCurrentScope(uri)) return
 
@@ -57,9 +53,15 @@ export class BookmarkDocumentChangeCoordinator<Document, Uri, BookmarkState> {
 		const bookmarkPath = port.relativeBookmarkPath(absolutePath)
 		const timerKey = bookmarkPathKey(bookmarkPath)
 		const viewGeneration = port.currentViewGeneration()
+		port.relocateBookmarks(document, changes)
 		this.timers.replace(timerKey, () => {
-			void this.processChange(document, uri, absolutePath, bookmarkPath, viewGeneration, port)
-				.catch(error => port.reportFailure(error))
+			if (viewGeneration !== port.currentViewGeneration() || !port.isCurrentScope(uri)) return
+			try {
+				const markerResult = port.synchronizeCodeMarkers(uri, port.documentLines(document), port.documentLanguage(document))
+				if (markerResult.changed) port.persistCodeMarkerChanges([absolutePath])
+			} catch (error) {
+				port.reportFailure(error)
+			}
 		}, this.debounceMs)
 	}
 
@@ -69,37 +71,5 @@ export class BookmarkDocumentChangeCoordinator<Document, Uri, BookmarkState> {
 
 	dispose(): void {
 		this.timers.clear()
-	}
-
-	private async processChange(
-		document: Document,
-		uri: Uri,
-		absolutePath: string,
-		bookmarkPath: string,
-		viewGeneration: number,
-		port: BookmarkDocumentChangePort<Document, Uri, BookmarkState>,
-	): Promise<void> {
-		if (viewGeneration !== port.currentViewGeneration() || !port.isCurrentScope(uri)) return
-		const bookmarkState = port.currentBookmarkState()
-
-		// 防抖期间可能已经发生多轮插入和删除；回调真正执行时只相信文档最终文本，
-		// 不能把那些已被合并掉的中间事件继续折算成行号偏移。
-		const relocated = port.bookmarkCount(bookmarkPath) > 0
-			? await port.relocateBookmarks(bookmarkState, bookmarkPath, uri)
-			: 0
-		if (viewGeneration !== port.currentViewGeneration()
-			|| bookmarkState !== port.currentBookmarkState()) return
-
-		const markerResult = port.synchronizeCodeMarkers(
-			uri,
-			port.documentLines(document),
-			port.documentLanguage(document),
-		)
-		if (markerResult.changed) {
-			port.persistCodeMarkerChanges([absolutePath])
-		} else if (relocated > 0) {
-			port.saveBookmarks([absolutePath])
-			port.refreshDecorations()
-		}
 	}
 }

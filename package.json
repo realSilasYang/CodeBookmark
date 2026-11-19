@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "3.2.6",
+  "version": "3.2.7",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -133,6 +133,11 @@
   },
   "dependencies": {
     "fflate": "0.8.3"
+  },
+  "overrides": {
+    "@vscode/vsce": {
+      "minimatch": "11.0.9"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

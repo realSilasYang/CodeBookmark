@@ -3,6 +3,7 @@
  * 每一步都通过扩展公开测试 API 读取结果；清单回退、SVG 元数据等反例也在真实语言模式下执行。
  */
 const assert = require('node:assert/strict')
+const { randomUUID } = require('node:crypto')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const vscode = require('vscode')
@@ -36,6 +37,79 @@ async function findNamedFile(root, fileName) {
 function localizedValue(value) {
   if (typeof value === 'string') return value
   return value?.value
+}
+
+async function verifyNestedBookmarkDeletion(workspaceFolder, integration, storageRoot) {
+  const uri = vscode.Uri.joinPath(workspaceFolder.uri, 'sticky-deletion.ts')
+  const source = [
+    'const leadingSentinel = true;',
+    'function deletedFeature() {',
+    '  const nestedSource = 123;',
+    '  return value;',
+    '}',
+    'function unrelatedFeature() {',
+    '  const unrelatedValue = 4;',
+    '  return value;',
+    '}',
+    'const trailingSentinel = true;',
+  ].join('\n')
+  await fs.writeFile(uri.fsPath, source, 'utf8')
+  const document = await vscode.workspace.openTextDocument(uri)
+  const editor = await vscode.window.showTextDocument(document)
+  const findRoot = () => integration.snapshot().roots.find(root => root.path === 'sticky-deletion.ts')
+  const makeNode = (line, subs = []) => ({
+    id: randomUUID(),
+    label: `Source line ${line + 1}`,
+    path: uri.fsPath,
+    content: document.lineAt(line).text.trim(),
+    contextBefore: document.lineAt(line - 1).text.trim(),
+    contextAfter: line + 1 < document.lineCount ? document.lineAt(line + 1).text.trim() : undefined,
+    params: `${line},0,${line},0`,
+    createdAt: Date.now(),
+    collapsibleState: subs.length > 0 ? 1 : 0,
+    pinned: false,
+    iconName: '',
+    isInvalid: false,
+    subs,
+  })
+  const grandchild = makeNode(3)
+  const child = makeNode(2, [grandchild])
+  const parent = makeNode(1, [child])
+  const survivor = makeNode(9)
+  await integration.addBookmark(1, 'Register sticky deletion fixture')
+  const scriptId = findRoot().scriptId
+  const configPath = path.join(storageRoot, 'scripts', `${scriptId}.json`)
+  const envelope = JSON.parse(await fs.readFile(configPath, 'utf8'))
+  await fs.writeFile(configPath, JSON.stringify({ ...envelope, bookmarks: [parent, survivor] }))
+  await integration.reload()
+  await waitFor(() => assert.equal(findRoot().children.find(node => node.id === parent.id).children[0].children[0].id, grandchild.id),
+    'Three-level bookmark fixture did not load')
+  const read = async () => JSON.parse(await fs.readFile(configPath, 'utf8')).bookmarks
+  const group = items => {
+    const rootNode = items.find(item => item.id === parent.id)
+    return [rootNode, rootNode.subs[0], rootNode.subs[0].subs[0]]
+  }
+  const before = group(await read())
+  assert.deepEqual(before.map(item => item.id), [parent.id, child.id, grandchild.id])
+
+  assert.equal(await editor.edit(edit => edit.delete(new vscode.Range(1, 0, 5, 0))), true)
+  await waitFor(() => assert.equal(findRoot().children.find(node => node.id === survivor.id).line, 5),
+    'Surviving bookmark did not follow the code after block deletion')
+  await integration.flush()
+  const after = group(await read())
+  assert.ok(after.every(item => item.isInvalid))
+  assert.deepEqual(after.map(item => [item.id, item.params, item.content]),
+    before.map(item => [item.id, item.params, item.content]))
+  await integration.reload()
+  assert.ok(group(await read()).every(item => item.isInvalid))
+
+  await vscode.commands.executeCommand('undo')
+  await waitFor(() => assert.equal(document.getText(), source), 'Editor undo did not restore deleted source')
+  await waitFor(() => assert.equal(findRoot().children.find(node => node.id === survivor.id).line, 9),
+    'Surviving bookmark did not follow editor undo')
+  await integration.flush()
+  assert.deepEqual(group(await read()).map(item => [item.id, item.params, item.isInvalid]),
+    before.map(item => [item.id, item.params, false]))
 }
 
 async function run() {
@@ -146,13 +220,24 @@ async function run() {
   assert.equal(snapshot.roots[0].children[0].id, bookmarkId)
 
   await extensionApi.integration.toggleBookmark(0, 'Toggle command bookmark')
-  await waitFor(() => {
-    snapshot = extensionApi.integration.snapshot()
-    assert.deepEqual(snapshot.roots[0].children.map(child => child.label).sort(), [
-      'Integration return value',
-      'Toggle command bookmark',
-    ].sort())
-  }, 'Bookmark toggle did not settle after Extension Host file events')
+  try {
+    await waitFor(() => {
+      snapshot = extensionApi.integration.snapshot()
+      assert.deepEqual(snapshot.roots[0]?.children.map(child => child.label).sort(), [
+        'Integration return value',
+        'Toggle command bookmark',
+      ].sort())
+    }, 'Bookmark toggle did not settle after Extension Host file events')
+  } catch (error) {
+    const scriptDirectory = path.join(storageRoot, 'scripts')
+    const files = await fs.readdir(scriptDirectory)
+    const detail = await Promise.all(files.filter(name => name.endsWith('.json')).map(async name => {
+      const envelope = JSON.parse(await fs.readFile(path.join(scriptDirectory, name), 'utf8'))
+      return { script: envelope.script, labels: envelope.bookmarks.map(bookmark => bookmark.label) }
+    }))
+    console.error('Bookmark toggle diagnostics:', JSON.stringify({ snapshot, scriptId, detail }))
+    throw error
+  }
   await extensionApi.integration.toggleBookmark(0, 'This label must not be requested while deleting')
   assert.deepEqual(
     extensionApi.integration.snapshot().roots[0].children.map(child => child.id),
@@ -375,6 +460,7 @@ async function run() {
     false,
     'SVG metadata prose was incorrectly treated as a TODO/FIXME/BUG directive',
   )
+  await verifyNestedBookmarkDeletion(workspaceFolder, extensionApi.integration, storageRoot)
   await vscode.commands.executeCommand('workbench.action.closeAllEditors')
 }
 

@@ -10,6 +10,7 @@ export interface SourceFingerprint {
 	size: number
 	device?: string
 	inode?: string
+	birthtimeMs?: number
 }
 
 function createRandomIdentity(): string {
@@ -51,6 +52,7 @@ export async function fingerprintSourceFile(filePath: string): Promise<SourceFin
 			size: stat.size,
 			device: device || undefined,
 			inode: inode || undefined,
+			birthtimeMs: stat.birthtimeMs > 0 ? stat.birthtimeMs : undefined,
 		}
 		return fingerprint
 	} catch {

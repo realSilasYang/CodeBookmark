@@ -8,11 +8,9 @@ import { normalizedAbsolutePath } from '../util/AbsolutePath'
 import { SOURCE_SCAN_EXCLUDED_DIRECTORIES } from '../util/SourceFilePolicy'
 import type { SourceFingerprint } from '../util/ScriptIdentity'
 
-export interface SourceCandidate {
+interface SourceCandidate {
 	path: string
 	stat: fs.Stats
-	baseNameKey: string
-	extension: string
 	fileSystemIdentity?: string
 }
 
@@ -22,8 +20,6 @@ const MAX_SOURCE_CONTENT_CACHE_BYTES = 32 * 1024 * 1024
 export class SourceCandidateIndex {
 	readonly all: SourceCandidate[]
 	readonly bySize = new Map<number, SourceCandidate[]>()
-	readonly byBaseName = new Map<string, SourceCandidate[]>()
-	readonly byExtension = new Map<string, SourceCandidate[]>()
 	readonly byFileSystemIdentity = new Map<string, SourceCandidate[]>()
 	readonly fingerprints = new Map<string, SourceFingerprint | undefined>()
 	private readonly contents = new Map<string, string | undefined>()
@@ -33,8 +29,6 @@ export class SourceCandidateIndex {
 		this.all = candidates
 		for (const candidate of candidates) {
 			this.add(this.bySize, candidate.stat.size, candidate)
-			this.add(this.byBaseName, candidate.baseNameKey, candidate)
-			this.add(this.byExtension, candidate.extension, candidate)
 			if (candidate.fileSystemIdentity) {
 				this.add(this.byFileSystemIdentity, candidate.fileSystemIdentity, candidate)
 			}
@@ -67,8 +61,6 @@ export class SourceCandidateIndex {
 					candidates[index] = {
 						path: candidatePath,
 						stat,
-						baseNameKey: path.basename(candidatePath),
-						extension: path.extname(candidatePath).toLowerCase(),
 						fileSystemIdentity: `${String(stat.dev)}\0${String(stat.ino)}`,
 					}
 				} catch {

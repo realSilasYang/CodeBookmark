@@ -2,6 +2,20 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.7 - 2026-11-19
+
+### 🚀 Improvements
+
+- **Bookmark position tracking** follows the editor's actual edit ranges and checks the bookmarked text and its context when opening a file or navigating to a bookmark.
+- **Script path recovery** uses file identity, content hashes, and source anchors after file renames, directory moves, or workspace path changes. When inferring a workspace move, CodeBookmark verifies each target script before migrating the layout and order together.
+- **Development dependency security** updates linting and publishing dependencies flagged by the dependency audit.
+
+---
+
+### 🐛 Fixed
+
+- **Nested bookmarks after block deletion** retain their original text, selection, and hierarchy. Navigation is disabled for invalid bookmarks. Undoing the deletion or reinserting the code can restore bookmarks whose positions can be verified.
+
 ## 🎉 Version 3.2.6 - 2026-10-06
 
 ### ✨ Added

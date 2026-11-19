@@ -30,11 +30,14 @@ function sourceFingerprint(value: unknown): SourceFingerprint | undefined {
 	if (typeof value.size !== 'number' || !Number.isFinite(value.size) || value.size < 0) return undefined
 	if (value.device !== undefined && typeof value.device !== 'string') return undefined
 	if (value.inode !== undefined && typeof value.inode !== 'string') return undefined
+	if (value.birthtimeMs !== undefined
+		&& (typeof value.birthtimeMs !== 'number' || !Number.isFinite(value.birthtimeMs) || value.birthtimeMs <= 0)) return undefined
 	return {
 		sha256: value.sha256,
 		size: value.size,
 		device: value.device,
 		inode: value.inode,
+		birthtimeMs: value.birthtimeMs as number | undefined,
 	}
 }
 

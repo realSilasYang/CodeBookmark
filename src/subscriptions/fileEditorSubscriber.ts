@@ -73,7 +73,11 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 	setupSourceFileWatchers()
 
 	const documentChanges = vscode.workspace.onDidChangeTextDocument(event => {
-		bookmarkProvider.changeContentFile(event)
+		try {
+			bookmarkProvider.changeContentFile(event)
+		} catch (error) {
+			logger.error(localize("providers.CodeBookmarkViewProvider.bookmarkPositionTrackingFailed", { errorMessage: String(error) }))
+		}
 	})
 
 	const focusEditor = vscode.window.onDidChangeActiveTextEditor(editor => {
@@ -90,6 +94,7 @@ export function fileEditorSubscriber(context: vscode.ExtensionContext,
 		if (isEligibleSource(document.uri)) {
 			scheduleSourceAppearance(document.uri.fsPath)
 		}
+		bookmarkProvider.reconcileDocumentBookmarks(document)
 		void bookmarkProvider.syncCodeMarkersInDocument(document)
 			.catch(error => logger.error(localize("subscriptions.fileEditorSubscriber.failedToSynchronizeTodoFixmeBugBookmarksAfterOpening", { fsPath: document.uri.fsPath, error })))
 	})

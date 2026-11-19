@@ -57,22 +57,22 @@ export function createIntegrationTestApi(
 		},
 		async addBookmark(line: number, label: string): Promise<void> {
 			const editor = activeFileEditor()
-			selectLine(editor, line)
 			await provider.ensureEditorScope(editor)
+			selectLine(editor, line)
 			await provider.forceAddBookmark(editor, async () => label)
 			await provider.flushPendingSaves(true)
 		},
 		async toggleBookmark(line: number, label: string): Promise<void> {
 			const editor = activeFileEditor()
-			selectLine(editor, line)
 			await provider.ensureEditorScope(editor)
+			selectLine(editor, line)
 			await provider.toggleBookmark(editor, async () => label)
 			await provider.flushPendingSaves(true)
 		},
 		async deleteBookmarksAtLine(line: number): Promise<void> {
 			const editor = activeFileEditor()
-			selectLine(editor, line)
 			await provider.ensureEditorScope(editor)
+			selectLine(editor, line)
 			await provider.forceDeleteBookmark(editor)
 			await provider.flushPendingSaves(true)
 		},
