@@ -6,7 +6,6 @@ import type { TextDocument, TextDocumentContentChangeEvent } from 'vscode'
 import type { Bookmark } from '../models/Bookmark'
 import { ContextBookmark } from './ContextValue'
 import { getFingerprintContext } from './FingerprintMatcher'
-import { textDocumentLines } from './VscodeDocument'
 
 interface Point {
 	line: number
@@ -40,24 +39,30 @@ function distinctive(text: string): boolean {
 	return (text.match(/[\p{L}\p{N}_]/gu)?.length ?? 0) >= 12
 }
 
+const SECTION_DECORATION = /([=~*_#-])\1{2,}/u
+
+function matchesSectionContext(content: string, before: string, after: string): boolean {
+	if (!meaningful(content)) return false
+	if (before === '' && after === '') {
+		const leading = content.match(/^[^\p{L}\p{N}]+/u)?.[0] ?? ''
+		const trailing = content.match(/[^\p{L}\p{N}]+$/u)?.[0] ?? ''
+		return SECTION_DECORATION.test(leading) && SECTION_DECORATION.test(trailing)
+	}
+	return [before, after].every(line => !/[\p{L}\p{N}]/u.test(line) && SECTION_DECORATION.test(line))
+}
+
 class Snapshot {
-	readonly version: number
 	readonly lines: string[]
-	readonly text: string
 	readonly reconciled = new WeakSet<Bookmark>()
 	private readonly eol: string
-	private readonly lineStarts: number[] = []
+	private readonly lineStarts: number[] = [0]
 	private readonly matches = new Map<string, Span[]>()
 
-	constructor(document: TextDocument) {
-		this.version = document.version
-		this.lines = textDocumentLines(document)
-		this.text = document.getText()
-		this.eol = this.text.includes('\r\n') ? '\r\n' : '\n'
-		let offset = 0
-		for (const line of this.lines) {
-			this.lineStarts.push(offset)
-			offset += line.length + this.eol.length
+	constructor(readonly version: number, readonly text: string) {
+		this.lines = text.split(/\r\n|\r|\n/)
+		this.eol = text.match(/\r\n|\r|\n/)?.[0] ?? '\n'
+		for (const lineBreak of text.matchAll(/\r\n|\r|\n/g)) {
+			this.lineStarts.push(lineBreak.index + lineBreak[0].length)
 		}
 	}
 
@@ -137,6 +142,20 @@ function editsInOrder(changes: readonly TextDocumentContentChangeEvent[]): Edit[
 	})
 }
 
+function snapshotBeforeInsertions(current: Snapshot, edits: readonly Edit[]): Snapshot | undefined {
+	// 纯插入可以从当前文本还原编辑前的内容，即使扩展错过了上一个文档版本。
+	let cursor = 0
+	const unchanged: string[] = []
+	for (const edit of edits) {
+		if (edit.start !== edit.end || edit.inserted.start < cursor
+			|| current.text.slice(edit.inserted.start, edit.inserted.end) !== edit.text) return undefined
+		unchanged.push(current.text.slice(cursor, edit.inserted.start))
+		cursor = edit.inserted.end
+	}
+	unchanged.push(current.text.slice(cursor))
+	return new Snapshot(current.version - 1, unchanged.join(''))
+}
+
 function mapOffset(offset: number, edits: readonly Edit[], right: boolean): number {
 	let shift = 0
 	for (const edit of edits) {
@@ -173,26 +192,35 @@ function selectCandidate(
 	const content = fingerprintText(bookmark.content ?? '')
 	const wholeLine = samePoint(bookmark.start, bookmark.end)
 	const hasContext = meaningful(bookmark.contextBefore) || meaningful(bookmark.contextAfter)
-	const candidates = snapshot.candidates(content, wholeLine).filter(span => !edits?.length
+	const original = snapshot.offset(bookmark.start)
+	const strongText = distinctive(content) && (edits !== undefined || !hasContext || content.includes('\n'))
+	const requiredContext = content === '' || (bookmark.isBookmarkInvalid && !edits) ? 2 : 1
+	const candidates = snapshot.candidates(content, wholeLine)
+	const eligible = candidates.filter(span => !edits?.length
 		|| edits.some(edit => edit.inserted.start < edit.inserted.end
 			&& span.start < edit.inserted.end
 			&& (span.start === span.end ? span.start >= edit.inserted.start : span.end > edit.inserted.start)))
 	let best: Span | undefined
 	let bestScore = 0
-	for (const span of candidates) {
+	for (const span of eligible) {
 		const context = snapshot.context(span)
 		const before = meaningful(bookmark.contextBefore) && bookmark.contextBefore === context.before
 		const after = meaningful(bookmark.contextAfter) && bookmark.contextAfter === context.after
 		const contextScore = Number(before) + Number(after)
-		const original = snapshot.offset(bookmark.start)
+		const line = snapshot.point(span.start).line
 		const atOriginal = original !== undefined && (wholeLine
-			? snapshot.point(span.start).line === bookmark.start.line
+			? line === bookmark.start.line
 			: span.start === original)
-		const strongText = distinctive(content) && (edits !== undefined || !hasContext || content.includes('\n'))
-		const requiredContext = content === '' || (bookmark.isBookmarkInvalid && !edits) ? 2 : 1
+		const canVerifySection = !bookmark.isBookmarkInvalid || edits?.some(edit =>
+			edit.inserted.start <= span.start && span.end <= edit.inserted.end)
 		const verified = contextScore >= requiredContext
-			|| (strongText && candidates.length === 1 && (!bookmark.isBookmarkInvalid || !!edits))
-			|| (!bookmark.isBookmarkInvalid && atOriginal && candidates.length === 1 && !hasContext)
+			|| (strongText && eligible.length === 1 && (!bookmark.isBookmarkInvalid || !!edits))
+			|| (!bookmark.isBookmarkInvalid && atOriginal && eligible.length === 1 && !hasContext)
+			// 格式化分隔线可以跟踪标题。已失效的书签还须确认原文重新插入，防止重载后吸附残存副本。
+			|| (canVerifySection && candidates.length === 1 && snapshot.lines[line].trim() === content
+				&& context.before !== undefined && context.before === bookmark.contextBefore
+				&& context.after !== undefined && context.after === bookmark.contextAfter
+				&& matchesSectionContext(content, context.before, context.after))
 		if (!verified) continue
 		const score = 1 + contextScore
 		if (score > bestScore) {
@@ -211,7 +239,7 @@ export class StickyBookmarkTracker {
 	private snapshot(document: TextDocument): Snapshot {
 		const cached = this.snapshots.get(document)
 		if (cached?.version === document.version) return cached
-		const snapshot = new Snapshot(document)
+		const snapshot = new Snapshot(document.version, document.getText())
 		this.snapshots.set(document, snapshot)
 		return snapshot
 	}
@@ -228,13 +256,15 @@ export class StickyBookmarkTracker {
 	}
 
 	reconcile(bookmarks: readonly Bookmark[], document: TextDocument, changes?: readonly TextDocumentContentChangeEvent[]): number {
-		const previous = this.snapshots.get(document)
+		const cached = this.snapshots.get(document)
 		const current = this.snapshot(document)
 		const edits = changes?.length ? editsInOrder(changes) : undefined
+		const previous = cached?.version === current.version - 1 ? cached
+			: edits && snapshotBeforeInsertions(current, edits)
 		let changed = 0
 		for (const bookmark of bookmarks) {
 			if (bookmark.isFile || bookmark.isCodeMarker || current.reconciled.has(bookmark)) continue
-			if (this.relocate(bookmark, current, previous?.version === current.version - 1 ? previous : undefined, edits)) changed++
+			if (this.relocate(bookmark, current, previous, edits)) changed++
 			current.reconciled.add(bookmark)
 		}
 		return changed

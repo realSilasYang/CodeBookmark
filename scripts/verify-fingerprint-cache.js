@@ -122,3 +122,80 @@ const crlf = documentFor('\r\n' + selected.getText().replace(/\n/g, '\r\n'))
 new StickyBookmarkTracker().reconcile([range], crlf)
 assert.deepEqual(range.start, { line: 2, column: 2 })
 assert.deepEqual(range.end, { line: 2, column: 22 })
+
+// CSS 多层章节常用分隔线或空行包裹标题，标题重新定位后应保留原选区。
+const cssLines = [
+  '/* userChrome.css */',
+  '',
+  '/* ====================',
+  '自定义地址栏样式',
+  '====================',
+  '*/',
+  '',
+  '/* === 侧栏子区域 === */',
+  '',
+  '/* AI聊天机器人 */',
+  '  #sidebar-box { display: flex; }',
+]
+const randomCss = ['#dummy-random-block {',
+  ...Array.from({ length: 19 }, (_, index) => `  --dummy-${index}: ${index}px;`),
+  '}',
+].join('\n') + '\n'
+const sectionLine = 3
+const nestedLine = 7
+const childLine = 9
+for (const insertAt of [0, 1, 2, 3, 4, 6, 7, 8]) {
+  const original = documentFor(cssLines.join('\n'))
+  const section = bookmark(original, sectionLine, sectionLine, cssLines[sectionLine].length)
+  const nested = bookmark(original, nestedLine, nestedLine, cssLines[nestedLine].length)
+  const child = bookmark(original, childLine, childLine, cssLines[childLine].length)
+  const group = [section, nested, child]
+  section.subs = [nested]
+  nested.subs = [child]
+  const creation = new StickyBookmarkTracker()
+  group.forEach(node => creation.updateContext(node, original))
+  const insertionOffset = cssLines.slice(0, insertAt).reduce((offset, line) => offset + line.length + 1, 0)
+  const changes = original.change([insertionOffset, insertionOffset, randomCss])
+  // 扩展尚未记录上一个文档版本时，编辑事件仍需通过原文和上下文建立基准。
+  new StickyBookmarkTracker().reconcile(group, original, changes)
+  assert.ok(group.every(node => !node.isBookmarkInvalid), `insert before line ${insertAt + 1}`)
+  assert.deepEqual(group.map(node => [node.start.line, node.end.column]),
+    [sectionLine, nestedLine, childLine].map(line => [line + (line >= insertAt ? 21 : 0), cssLines[line].length]))
+  assert.equal(section.subs[0], nested)
+  assert.equal(nested.subs[0], child)
+}
+
+const savedCss = documentFor(cssLines.join('\n'))
+const originalTracker = new StickyBookmarkTracker()
+const cssBookmarks = [bookmark(savedCss, sectionLine), bookmark(savedCss, nestedLine)]
+for (const node of cssBookmarks) {
+  originalTracker.updateContext(node, savedCss)
+}
+const reopenedCss = documentFor(randomCss + savedCss.getText())
+assert.equal(new StickyBookmarkTracker().reconcile(cssBookmarks, reopenedCss), 2)
+assert.deepEqual(cssBookmarks.map(node => [node.isBookmarkInvalid, node.start.line]), [[false, 24], [false, 28]])
+
+const duplicateCss = documentFor(`${savedCss.getText()}\n${savedCss.getText()}`)
+const duplicateHeading = bookmark(savedCss, sectionLine)
+originalTracker.updateContext(duplicateHeading, duplicateCss)
+assert.equal(new StickyBookmarkTracker().reconcile([duplicateHeading], duplicateCss), 1)
+assert.equal(duplicateHeading.isBookmarkInvalid, true)
+
+const deletedHeading = bookmark(duplicateCss, sectionLine)
+const duplicateTracker = new StickyBookmarkTracker()
+duplicateTracker.updateContext(deletedHeading, duplicateCss)
+duplicateTracker.reconcile([deletedHeading], duplicateCss, duplicateCss.change([0, savedCss.getText().length + 1, '']))
+assert.equal(deletedHeading.isBookmarkInvalid, true)
+assert.equal(new StickyBookmarkTracker().reconcile([deletedHeading], duplicateCss), 0)
+assert.equal(deletedHeading.isBookmarkInvalid, true)
+duplicateTracker.reconcile([deletedHeading], duplicateCss, duplicateCss.change(
+  [0, duplicateCss.getText().length, savedCss.getText()],
+))
+assert.equal(deletedHeading.isBookmarkInvalid, false)
+
+const ordinaryCode = documentFor('\n  display: flex;\n\n')
+const deletedDeclaration = bookmark(ordinaryCode, 1)
+originalTracker.updateContext(deletedDeclaration, ordinaryCode)
+deletedDeclaration.contextValue = ContextBookmark.BookmarkInvalid
+assert.equal(new StickyBookmarkTracker().reconcile([deletedDeclaration], ordinaryCode), 0)
+assert.equal(deletedDeclaration.isBookmarkInvalid, true)
