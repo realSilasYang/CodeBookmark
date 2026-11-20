@@ -480,7 +480,7 @@ icon é opcional. Determine a responsabilidade principal pelo rótulo, âncora v
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'A transferência da pasta de armazenamento falhou; a pasta de origem continuará em uso: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'A pasta de armazenamento foi transferida e a pasta anterior foi limpa, mas ocorreu um erro ao concluir a troca. A nova pasta continuará em uso: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'De baixo para cima',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Escolha a ordem de exibição (isso não altera a ordem original definida por arrastar e soltar)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Escolha a ordem de exibição',
 	'providers.BookmarkTreeInteractionRunner.current': ' (atual)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Ordem personalizada',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'Foi detectada uma operação de arrastar; a exibição voltou automaticamente para “Ordem personalizada”.',

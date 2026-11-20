@@ -480,7 +480,7 @@ icon è facoltativo. Determina la responsabilità principale da etichetta, ancor
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'Il trasferimento della cartella di archiviazione non è riuscito; la cartella di origine resterà in uso: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'La cartella di archiviazione è stata trasferita e quella precedente è stata pulita, ma si è verificato un errore nel completare il passaggio. La nuova cartella resterà in uso: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'Dal basso verso l’alto',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Scegli l’ordine di visualizzazione (non modifica l’ordine originale definito mediante trascinamento)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Scegli un ordine',
 	'providers.BookmarkTreeInteractionRunner.current': ' (corrente)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Ordine personalizzato',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'È stato rilevato un trascinamento; la visualizzazione è tornata automaticamente a “Ordine personalizzato”.',

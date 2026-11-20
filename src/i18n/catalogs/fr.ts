@@ -480,7 +480,7 @@ icon est facultatif. Déduisez la responsabilité principale du libellé, de l�
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'Échec du transfert du dossier de stockage ; le dossier source reste utilisé : {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'Le dossier de stockage a été transféré et l’ancien dossier nettoyé, mais une erreur est survenue lors de la finalisation. Le nouveau dossier reste utilisé : {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'De bas en haut',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Choisissez l’ordre d’affichage (sans modifier l’ordre d’origine défini par glisser-déposer)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Choisissez un ordre de tri',
 	'providers.BookmarkTreeInteractionRunner.current': ' (actuel)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Ordre personnalisé',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'Un glisser-déposer a été détecté ; l’affichage est automatiquement revenu à « Ordre personnalisé ».',

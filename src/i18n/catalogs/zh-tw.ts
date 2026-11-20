@@ -582,7 +582,7 @@ icon 是選填欄位。綜合標籤、真實原始程式碼錨點、附近程式
 	"providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive": "書籤儲存資料夾轉移失敗，仍會繼續使用來源資料夾：{errorMessage}",
 	"providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas": "書籤儲存資料夾已轉移，原資料夾亦已清理，但完成切換時發生錯誤；目前會繼續使用新資料夾：{errorMessage}",
 	"providers.BookmarkTreeInteractionRunner.bottomToTop": "由下至上",
-	"providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying": "選擇檢視排序方式（不影響拖放所用的原始順序）",
+	"providers.BookmarkTreeInteractionRunner.chooseSortOrder": "選擇排序方式",
 	"providers.BookmarkTreeInteractionRunner.current": "（目前）",
 	"providers.BookmarkTreeInteractionRunner.customOrder": "自訂排序",
 	"providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom": "偵測到拖放操作，檢視已自動切換回「自訂排序」。",

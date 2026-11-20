@@ -480,7 +480,7 @@ icon es opcional. Determina la responsabilidad principal mediante la etiqueta, e
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'No se pudo trasladar la carpeta de almacenamiento y se seguirá usando la carpeta de origen: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'La carpeta de almacenamiento se trasladó y la anterior se limpió, pero se produjo un error al completar el cambio. Se seguirá usando la carpeta nueva: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'De abajo arriba',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Selecciona el orden de la vista (no cambia el orden original creado al arrastrar)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Elige un orden',
 	'providers.BookmarkTreeInteractionRunner.current': '(actual)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Orden personalizado',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'Se detectó una operación de arrastre y la vista volvió automáticamente a «Orden personalizado».',

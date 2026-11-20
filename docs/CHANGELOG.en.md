@@ -2,6 +2,20 @@
 
 [简体中文](https://github.com/realSilasYang/CodeBookmark/blob/main/CHANGELOG.md) · [English](https://github.com/realSilasYang/CodeBookmark/blob/main/docs/CHANGELOG.en.md)
 
+## 🎉 Version 3.2.9 - 2026-11-21
+
+### ✨ Added
+
+- **Active bookmark indicator:** Marks the bookmark corresponding to the current cursor position in the active editor within the bookmark tree (decorating item descriptions with a `🏲` pennant symbol), updating in real time across editor switches, selection changes, visible scroll ranges, and fold state without manual lookup or disrupting selection and scrolling.
+- **Persistent sort preferences and position-ascending default:** Bookmarks now display in code position (top to bottom) ascending order by default on initial open; sorting preferences are remembered separately per workspace and standalone script, and dragging nodes automatically reverts to Custom Order while keeping preference state synchronized.
+
+---
+
+### 🚀 Improvements
+
+- **Tree action icons:** Redesigned sidebar bookmark tree action buttons (delete bookmark, set as/remove container, edit bookmark submenu) with high-definition native icons adapted for light and dark themes.
+- **Sort mode picker:** Streamlined sort selection prompts and reorganized option order to prioritize position- and time-based sorting.
+
 ## 🎉 Version 3.2.8 - 2026-11-19
 
 ### 🐛 Fixed

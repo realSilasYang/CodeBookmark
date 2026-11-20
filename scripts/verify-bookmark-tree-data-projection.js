@@ -115,7 +115,8 @@ assert.deepEqual(empty.projection.children(undefined, empty.port), [])
 
 const provider = fs.readFileSync('src/providers/CodeBookmarkViewProvider.ts', 'utf8')
 assert.match(provider, /return this\.bookmarkTreeDataProjection\.children\(element, this\.bookmarkTreeDataProjectionPort\(\)\)/)
-assert.match(provider, /return this\.bookmarkTreeDataProjection\.treeItem\(element, this\.bookmarkTreeDataProjectionPort\(\)\)/)
+assert.match(provider, /const item = this\.bookmarkTreeDataProjection\.treeItem\(element, this\.bookmarkTreeDataProjectionPort\(\)\)/)
+assert.match(provider, /return this\.currentBookmarkMarker\.decorate\(item\)/)
 assert.doesNotMatch(provider, /private fileNodesCache/)
 
 console.log('BookmarkTreeDataProjection contract verified.')

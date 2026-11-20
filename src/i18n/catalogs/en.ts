@@ -480,7 +480,7 @@ icon is optional. Infer the primary responsibility from the label, verified sour
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'Bookmark storage transfer failed. The original folder remains active: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'Bookmark storage was transferred and the original folder was cleaned, but an error occurred while completing the switch. The new folder remains active: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'Bottom to Top',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Choose the view order (does not change the underlying drag-and-drop order)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Choose a sort order',
 	'providers.BookmarkTreeInteractionRunner.current': '(Current)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Custom Order',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'Dragging detected. The view automatically switched back to Custom Order.',

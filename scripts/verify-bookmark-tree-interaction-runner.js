@@ -50,7 +50,8 @@ const { vscode } = createVscodeFake({
 const restoreModules = installModuleMocks({ vscode })
 const { Bookmark, CursorIndex } = require('../out/models/Bookmark')
 const { BookmarkSet } = require('../out/models/BookmarkSet')
-const { SortModeBookmark } = require('../out/models/ViewMode')
+const { bookmarkSortPreference, SortModeBookmark } = require('../out/models/ViewMode')
+const { ExtensionStateKeys } = require('../out/util/constants/ExtensionStateKeys')
 const { ContextBookmark } = require('../out/util/ContextValue')
 const {
   BOOKMARK_TREE_MIME_TYPE,
@@ -94,6 +95,21 @@ function addChild(parent, child) {
 }
 
 async function main() {
+  function memento() {
+    const values = new Map()
+    return { get: key => values.get(key), update: async (key, value) => { values.set(key, value) } }
+  }
+  const context = { workspaceState: memento(), globalState: memento() }
+  const anotherWorkspace = { ...context, workspaceState: memento() }
+  const workspaceScope = 'workspace:C:/workspace'
+  const scriptScope = 'file:C:/standalone/a.ts'
+  const otherScriptScope = 'file:C:/standalone/b.ts'
+  let scope = workspaceScope
+  const preference = () => bookmarkSortPreference(context, scope)
+  assert.equal(preference().mode, SortModeBookmark.LineAsc)
+  assert.equal(bookmarkSortPreference(context, 'global'), undefined)
+  await anotherWorkspace.workspaceState.update(ExtensionStateKeys.bookmarkSortMode, 99)
+  assert.equal(bookmarkSortPreference(anotherWorkspace, workspaceScope).mode, SortModeBookmark.LineAsc)
   let tree = new BookmarkSet()
   let workspaceOrder = null
   let expansionRoots = []
@@ -119,6 +135,7 @@ async function main() {
       return true
     },
     commitTopology: async () => { events.push('topology') },
+    sortPreference: preference,
     refreshDecoration: () => events.push('refresh'),
     fireTreeChanged: () => events.push('tree'),
     expansionRoots: () => expansionRoots,
@@ -147,9 +164,9 @@ async function main() {
   const fileTransfer = new DataTransfer()
   runBookmarkTreeDrag([fileC], fileTransfer)
   assert.deepEqual(fileTransfer.get(BOOKMARK_TREE_MIME_TYPE).value, [fileC])
-  SortModeBookmark.mode = SortModeBookmark.TimeAsc
+  await preference().save(SortModeBookmark.TimeAsc)
   await runBookmarkTreeDrop(fileA, fileTransfer, port)
-  assert.equal(SortModeBookmark.mode, SortModeBookmark.Custom)
+  assert.equal(preference().mode, SortModeBookmark.Custom)
   assert.equal(informationMessages.at(-1), '检测到拖拽操作，已自动切换回“自定义排序”模式。')
   assert.deepEqual(tree.values.map(item => item.id), ['file-c', 'file-a', 'file-b'])
   assert.deepEqual(events, [
@@ -212,10 +229,12 @@ async function main() {
 
   const cyclicTransfer = new DataTransfer()
   runBookmarkTreeDrag([sourceFile], cyclicTransfer)
+  await preference().save(SortModeBookmark.LineDesc)
   events.length = 0
   await runBookmarkTreeDrop(second, cyclicTransfer, port)
   assert.deepEqual(events, ['capture:tree'])
   assert.equal(warningMessages.at(-1), '不能把父书签移动到它的子书签之前。')
+  assert.equal(preference().mode, SortModeBookmark.LineDesc)
 
   const marker = bookmark('marker', 'TODO', 'src/z.ts', 9)
   marker.codeMarker = {}
@@ -225,14 +244,12 @@ async function main() {
   const late = bookmark('late', 'Late', 'src/b.ts', 1)
   late.createdAt = 300
   const customItems = [late, marker, early]
-  SortModeBookmark.mode = SortModeBookmark.Custom
-  assert.equal(sortBookmarkTreeItems(customItems), customItems)
-  SortModeBookmark.mode = SortModeBookmark.TimeAsc
-  assert.deepEqual(sortBookmarkTreeItems(customItems).map(item => item.id), ['marker', 'early', 'late'])
-  SortModeBookmark.mode = SortModeBookmark.LineAsc
-  assert.deepEqual(sortBookmarkTreeItems([late, early]).map(item => item.id), ['early', 'late'])
-  SortModeBookmark.mode = SortModeBookmark.LineDesc
-  assert.deepEqual(sortBookmarkTreeItems([early, late]).map(item => item.id), ['late', 'early'])
+  assert.equal(sortBookmarkTreeItems(customItems, SortModeBookmark.Custom), customItems)
+  assert.deepEqual(sortBookmarkTreeItems(customItems, SortModeBookmark.TimeAsc).map(item => item.id), ['marker', 'early', 'late'])
+  assert.deepEqual(sortBookmarkTreeItems(customItems).map(item => item.id), ['early', 'late', 'marker'])
+  assert.deepEqual(sortBookmarkTreeItems(customItems, SortModeBookmark.LineDesc).map(item => item.id), ['marker', 'late', 'early'])
+  const sameFile = [bookmark('middle', 'Middle', 'src/z.ts', 5), marker, bookmark('top', 'Top', 'src/z.ts', 1)]
+  assert.deepEqual(sortBookmarkTreeItems(sameFile).map(item => item.id), ['top', 'middle', 'marker'])
 
   const expansionFile = fileNode('expand-file', 'src/expand.ts')
   const branch = bookmark('branch', 'Branch', expansionFile.path, 1, expansionFile)
@@ -296,18 +313,36 @@ async function main() {
   await runSearchBookmarksInActiveFile(port)
   assert.equal(warningMessages.at(-1), '当前没有打开的文件')
 
-  SortModeBookmark.mode = SortModeBookmark.Custom
-  quickPickSelector = items => items.find(item => item.label === '按位置降序')
+  scope = scriptScope
+  quickPickSelector = items => {
+    scope = otherScriptScope
+    return items.find(item => item.mode === SortModeBookmark.TimeDesc)
+  }
   quickPickCalls.length = 0
   events.length = 0
   await runSelectBookmarkSortMode(port)
-  assert.equal(SortModeBookmark.mode, SortModeBookmark.LineDesc)
-  assert.equal(quickPickCalls[0].items.length, 5)
+  assert.equal(preference().mode, SortModeBookmark.LineAsc)
+  assert.equal(bookmarkSortPreference(context, scriptScope).mode, SortModeBookmark.TimeDesc)
+  assert.equal(bookmarkSortPreference(context, workspaceScope).mode, SortModeBookmark.LineDesc)
+  assert.equal(bookmarkSortPreference(context, 'workspace:C:/workspace/second-root').mode, SortModeBookmark.LineDesc)
+  assert.equal(bookmarkSortPreference(anotherWorkspace, workspaceScope).mode, SortModeBookmark.LineAsc)
+  assert.equal(bookmarkSortPreference(anotherWorkspace, scriptScope).mode, SortModeBookmark.TimeDesc)
+  assert.deepEqual(quickPickCalls[0].items.map(item => item.label), [
+    '按位置升序',
+    '按位置降序',
+    '按时间升序',
+    '按时间降序',
+    '自定义排序',
+  ])
   assert.equal(quickPickCalls[0].items[0].description, '（当前）')
-  assert.equal(quickPickCalls[0].options.placeHolder, '选择视图排序方式（不影响底层拖拽原始顺序）')
+  assert.equal(quickPickCalls[0].options.placeHolder, '选择排序方式')
   assert.deepEqual(events, ['tree'])
 
-  SortModeBookmark.mode = SortModeBookmark.Custom
+  scope = workspaceScope
+  quickPickSelector = items => items.find(item => item.mode === SortModeBookmark.Custom)
+  await runSelectBookmarkSortMode(port)
+  assert.equal(preference().mode, SortModeBookmark.Custom)
+  assert.equal(bookmarkSortPreference(context, scriptScope).mode, SortModeBookmark.TimeDesc)
 }
 
 main().then(

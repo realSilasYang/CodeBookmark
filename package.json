@@ -2,7 +2,7 @@
   "name": "codebookmark",
   "displayName": "%codebookmark.displayName%",
   "description": "%codebookmark.description%",
-  "version": "3.2.8",
+  "version": "3.2.9",
   "publisher": "realSilasYang",
   "author": "阳熙来",
   "private": true,
@@ -202,7 +202,10 @@
       {
         "command": "codebookmark.deleteBookmark",
         "title": "%codebookmark.contributes.commands.codebookmark.deleteBookmark.title%",
-        "icon": "$(trash)"
+        "icon": {
+          "light": "resources/tree-actions/light/trash.png",
+          "dark": "resources/tree-actions/dark/trash.png"
+        }
       },
       {
         "command": "codebookmark.editBookmark.editLabel",
@@ -237,12 +240,18 @@
       {
         "command": "codebookmark.pinView",
         "title": "%codebookmark.contributes.commands.codebookmark.pinView.title%",
-        "icon": "$(folder-opened)"
+        "icon": {
+          "light": "resources/tree-actions/light/folder-opened.png",
+          "dark": "resources/tree-actions/dark/folder-opened.png"
+        }
       },
       {
         "command": "codebookmark.unpinView",
         "title": "%codebookmark.contributes.commands.codebookmark.unpinView.title%",
-        "icon": "$(folder)"
+        "icon": {
+          "light": "resources/tree-actions/light/folder.png",
+          "dark": "resources/tree-actions/dark/folder.png"
+        }
       },
       {
         "command": "codebookmark.undo",
@@ -973,14 +982,20 @@
         {
           "command": "codebookmark.pinView",
           "title": "%codebookmark.contributes.menus.view_item_context.codebookmark.pinView.title%",
-          "icon": "$(folder-opened)",
+          "icon": {
+            "light": "resources/tree-actions/light/folder-opened.png",
+            "dark": "resources/tree-actions/dark/folder-opened.png"
+          },
           "when": "(view == codebookmarkTreeView) && (viewItem == bookmark || (viewItem == bookmarkCodeMarkerDefault || viewItem == bookmarkCodeMarkerCustom) || (viewItem == file || viewItem == fileCustom)) && !codebookmark.hasMultipleSelection",
           "group": "inline@2"
         },
         {
           "command": "codebookmark.unpinView",
           "title": "%codebookmark.contributes.menus.view_item_context.codebookmark.unpinView.title%",
-          "icon": "$(folder)",
+          "icon": {
+            "light": "resources/tree-actions/light/folder.png",
+            "dark": "resources/tree-actions/dark/folder.png"
+          },
           "when": "(view == codebookmarkTreeView) && ((viewItem == bookmarkPinned || viewItem == bookmarkCodeMarkerPinnedDefault || viewItem == bookmarkCodeMarkerPinnedCustom) || (viewItem == filePinned || viewItem == filePinnedCustom)) && !codebookmark.hasMultipleSelection",
           "group": "inline@2"
         },
@@ -992,7 +1007,10 @@
         {
           "command": "codebookmark.deleteBookmark",
           "title": "%codebookmark.contributes.menus.view_item_context.codebookmark.deleteBookmark.title%",
-          "icon": "$(trash)",
+          "icon": {
+            "light": "resources/tree-actions/light/trash.png",
+            "dark": "resources/tree-actions/dark/trash.png"
+          },
           "when": "(view == codebookmarkTreeView) && ((viewItem == bookmark || viewItem == bookmarkInvalid || viewItem == bookmarkPinned) || (viewItem == file || viewItem == fileCustom) || (viewItem == filePinned || viewItem == filePinnedCustom))",
           "group": "inline@4"
         },
@@ -1502,7 +1520,10 @@
       {
         "id": "codebookmark.editSubmenu",
         "label": "%codebookmark.contributes.submenus.codebookmark.editSubmenu.label%",
-        "icon": "$(edit)"
+        "icon": {
+          "light": "resources/tree-actions/light/edit.png",
+          "dark": "resources/tree-actions/dark/edit.png"
+        }
       },
       {
         "id": "codebookmark.moreSubmenu",

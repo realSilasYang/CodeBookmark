@@ -4,6 +4,7 @@
  */
 export const ExtensionStateKeys = {
 	recentIcons: 'codebookmark.recentIcons',
+	bookmarkSortMode: 'codebookmark.bookmarkSortMode',
 } as const
 
 // VS Code 的 setKeysForSync 不是追加，而是用新数组替换整份同步清单。

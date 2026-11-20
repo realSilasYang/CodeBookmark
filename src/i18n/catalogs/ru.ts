@@ -480,7 +480,7 @@ icon необязателен. Определяйте главную задач�
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'Не удалось перенести папку хранилища; продолжает использоваться исходная папка: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'Папка хранилища перенесена, прежняя папка очищена, но при завершении переключения произошла ошибка. Продолжает использоваться новая папка: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'Снизу вверх',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Выберите порядок отображения (исходный порядок перетаскивания не изменяется)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Выберите порядок сортировки',
 	'providers.BookmarkTreeInteractionRunner.current': ' (текущий)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Пользовательский порядок',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'Обнаружено перетаскивание, представление автоматически переключено на «Пользовательский порядок».',

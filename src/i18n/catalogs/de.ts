@@ -480,7 +480,7 @@ icon ist optional. Bestimmen Sie die Hauptaufgabe anhand von Bezeichnung, geprü
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'Übertragung des Lesezeichenspeicherordners fehlgeschlagen; der Quellordner bleibt aktiv: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'Der Speicherordner wurde übertragen und der alte Ordner bereinigt, beim Abschluss des Wechsels ist jedoch ein Fehler aufgetreten. Der neue Ordner bleibt aktiv: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'Von unten nach oben',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Anzeigereihenfolge auswählen (ändert nicht die durch Ziehen festgelegte Grundreihenfolge)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Sortierreihenfolge wählen',
 	'providers.BookmarkTreeInteractionRunner.current': ' (aktuell)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Benutzerdefinierte Reihenfolge',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'Ein Ziehvorgang wurde erkannt; die Ansicht wurde automatisch auf „Benutzerdefinierte Reihenfolge“ zurückgestellt.',

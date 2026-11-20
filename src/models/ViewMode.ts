@@ -1,13 +1,33 @@
 /**
- * 保存书签视图当前排序方式，区分自定义顺序、时间顺序与行号顺序。
- * 该值只控制展示和拖拽策略，不改变磁盘中书签节点本身的语义。
+ * 将书签树的展示排序记录在当前工作区或独立脚本的 VS Code 状态中。
+ * 初次打开时按代码位置升序排列，拖拽形成的自定义顺序由书签树单独保存。
  */
+import type { ExtensionContext } from 'vscode'
+import { ExtensionStateKeys } from '../util/constants/ExtensionStateKeys'
 
-export class SortModeBookmark {
-	static readonly Custom = 0;
-	static readonly TimeAsc = 1;
-	static readonly TimeDesc = 2;
-	static readonly LineAsc = 3;
-	static readonly LineDesc = 4;
-	static mode = SortModeBookmark.Custom;
+export enum SortModeBookmark {
+	Custom = 0,
+	TimeAsc = 1,
+	TimeDesc = 2,
+	LineAsc = 3,
+	LineDesc = 4,
+}
+
+export interface BookmarkSortPreference {
+	mode: SortModeBookmark
+	save(mode: SortModeBookmark): Thenable<void>
+}
+
+export function bookmarkSortPreference(
+	context: Pick<ExtensionContext, 'workspaceState' | 'globalState'>,
+	scope: string | undefined,
+): BookmarkSortPreference | undefined {
+	const isWorkspace = scope?.startsWith('workspace:')
+	if (!isWorkspace && !scope?.startsWith('file:')) return undefined
+
+	const state = isWorkspace ? context.workspaceState : context.globalState
+	const key = isWorkspace ? ExtensionStateKeys.bookmarkSortMode : `${ExtensionStateKeys.bookmarkSortMode}:${scope}`
+	const saved = state.get<unknown>(key)
+	const mode = typeof saved === 'number' && SortModeBookmark[saved] !== undefined ? saved : SortModeBookmark.LineAsc
+	return { mode, save: next => state.update(key, next) }
 }

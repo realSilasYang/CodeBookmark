@@ -140,11 +140,18 @@ import { CodeMarkerWorkflowController } from './CodeMarkerWorkflowController'
 import { cleanupEmptyWorkspaceScopeFolders } from '../util/WorkspaceScopeFolderLifecycle'
 import { errorMessage } from '../util/ErrorMessage'
 import { activeFileUri, textDocumentLines } from '../util/VscodeDocument'
+import { CurrentBookmarkMarker } from './CurrentBookmarkMarker'
+import { bookmarkSortPreference } from '../models/ViewMode'
 const LAST_STORAGE_ROOT_KEY = 'codebookmark.lastStorageRoot'
 const TREE_RENDER_SETTLE_MS = 16
 export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookmark>, vscode.TreeDragAndDropController<Bookmark>, vscode.Disposable {
-	private _onDidChangeTreeData: vscode.EventEmitter<Bookmark | undefined | null | void> = new vscode.EventEmitter<Bookmark | undefined | null | void>()
-	readonly onDidChangeTreeData: vscode.Event<Bookmark | undefined | null | void> = this._onDidChangeTreeData.event
+	private readonly _onDidChangeTreeData = new vscode.EventEmitter<Bookmark | Bookmark[] | void>()
+	readonly onDidChangeTreeData = this._onDidChangeTreeData.event
+	private readonly currentBookmarkMarker = new CurrentBookmarkMarker(
+		editor => this.uriMatchesCurrentScope(editor.document.uri) ? this.getBookmarksByPath(fileUtils.absoluteToRelative(editor.document.uri.fsPath)) : [],
+		bookmark => this.getParent(bookmark),
+		bookmarks => this._onDidChangeTreeData.fire(bookmarks),
+	)
 	readonly dropMimeTypes = [BOOKMARK_TREE_MIME_TYPE]
 	readonly dragMimeTypes = [BOOKMARK_TREE_MIME_TYPE]
 	public codeBookmarks = new BookmarkSet()
@@ -190,7 +197,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 				if (!success) logger.showWarningMessage(localize("providers.CodeBookmarkViewProvider.unableToSaveTheWorkspaceFileOrderCheckBookmark"))
 			})
 		},
-		sortItems: items => sortBookmarkTreeItems(items),
+		sortItems: items => sortBookmarkTreeItems(items, bookmarkSortPreference(this.context, this.currentStorageScope)?.mode),
 		refreshItem: item => item.refreshDisplayProps(),
 		resolveTreePopulation: () => this.resolvePendingTreePopulation(this.viewLoadGeneration),
 	}
@@ -580,7 +587,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			void this.synchronizeIdleView()
 				.catch(error => logger.error(localize("providers.CodeBookmarkViewProvider.failedToSynchronizeTheBookmarkViewAfterScriptTabs", { errorMessage: errorMessage(error) })))
 		})
-		this.context.subscriptions.push(selectionListener, cursorListener, editorListener, tabListener)
+		this.context.subscriptions.push(selectionListener, cursorListener, editorListener, tabListener, this.currentBookmarkMarker.track(treeView, this.onDidChangeTreeData))
 
 		this.bookmarkTreeViewLifecycle.startInitialLoad(treeView, this.bookmarkTreeViewLifecyclePort())
 
@@ -620,7 +627,8 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	}
 
 	getTreeItem(element: Bookmark): vscode.TreeItem {
-		return this.bookmarkTreeDataProjection.treeItem(element, this.bookmarkTreeDataProjectionPort())
+		const item = this.bookmarkTreeDataProjection.treeItem(element, this.bookmarkTreeDataProjectionPort())
+		return this.currentBookmarkMarker.decorate(item)
 	}
 
 	handleDrag(source: Bookmark[], treeDataTransfer: vscode.DataTransfer): void {
@@ -889,7 +897,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 		undoManager.setActiveScope(this.currentStorageScope)
 		void this.setContextValue('bookmarks.var.bookmark.hasInvalid', hasInvalidBookmarks(this.codeBookmarks))
 			.catch(error => logger.error(localize("providers.CodeBookmarkViewProvider.failedToUpdateBookmarkCommandContext", { errorMessage: errorMessage(error) })))
-		
 		if (fireTree) this._onDidChangeTreeData.fire()
 
 		// 树已经换成新快照，当前行的标签装饰也要用同一快照重算，避免短暂显示旧名称。
@@ -1100,6 +1107,7 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 			captureUndoState: workspaceOrder => this.captureUndoState(workspaceOrder),
 			commitUndoState: (captured, action) => this.commitUndoState(captured, action),
 			commitTopology: () => this.commitWorkspaceTopology(),
+			sortPreference: () => bookmarkSortPreference(this.context, this.currentStorageScope),
 			refreshDecoration: () => this.refreshDecoration(),
 			fireTreeChanged: () => this._onDidChangeTreeData.fire(),
 			expansionRoots: () => this.currentStorageScope?.startsWith('workspace:')
@@ -1546,7 +1554,6 @@ export class CodeBookmarksViewProvider implements vscode.TreeDataProvider<Bookma
 	async onSort() {
 		return runSelectBookmarkSortMode(this.bookmarkTreeInteractionPort())
 	}
-
 	private currentStorageScope: string | undefined;
 
 	private storageScopeForUri(uri?: vscode.Uri): string {

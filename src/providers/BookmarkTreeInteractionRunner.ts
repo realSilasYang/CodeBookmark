@@ -7,7 +7,7 @@ import { localize } from '../i18n/Localization'
 import { errorMessage } from '../util/ErrorMessage'
 import type { Bookmark } from '../models/Bookmark'
 import { BookmarkSet } from '../models/BookmarkSet'
-import { SortModeBookmark } from '../models/ViewMode'
+import { SortModeBookmark, type BookmarkSortPreference } from '../models/ViewMode'
 import { Commands } from '../util/constants/Commands'
 import { logger } from '../util/Logger'
 import { isTreeExpandedToLevel } from '../util/TreeExpansionState'
@@ -28,6 +28,7 @@ export interface BookmarkTreeInteractionPort {
 	captureUndoState(workspaceOrder?: string[] | null): CapturedUndoState
 	commitUndoState(captured: CapturedUndoState, action: 'reorderFiles' | 'moveBookmarks'): boolean
 	commitTopology(): Promise<void>
+	sortPreference(): BookmarkSortPreference | undefined
 	refreshDecoration(): void
 	fireTreeChanged(): void
 	expansionRoots(): readonly Bookmark[]
@@ -38,28 +39,20 @@ export interface BookmarkTreeInteractionPort {
 	setExpandCollapseContext(expanded: boolean): Promise<void>
 }
 
-export function sortBookmarkTreeItems(items: Bookmark[]): Bookmark[] {
-	if (SortModeBookmark.mode === SortModeBookmark.Custom) return items
+export function sortBookmarkTreeItems(items: Bookmark[], mode = SortModeBookmark.LineAsc): Bookmark[] {
+	if (mode === SortModeBookmark.Custom) return items
+	if (mode === SortModeBookmark.LineAsc || mode === SortModeBookmark.LineDesc) {
+		const direction = mode === SortModeBookmark.LineAsc ? 1 : -1
+		return [...items].sort((first, second) => direction * (
+			first.path.localeCompare(second.path)
+			|| first.start.line - second.start.line
+			|| first.start.column - second.start.column
+		))
+	}
+	const direction = mode === SortModeBookmark.TimeAsc ? 1 : -1
 	return [...items].sort((first, second) => {
 		if (first.isCodeMarker !== second.isCodeMarker) return first.isCodeMarker ? -1 : 1
-		switch (SortModeBookmark.mode) {
-			case SortModeBookmark.TimeAsc:
-				return first.createdAt - second.createdAt
-			case SortModeBookmark.TimeDesc:
-				return second.createdAt - first.createdAt
-			case SortModeBookmark.LineAsc: {
-				const pathComparison = first.path.localeCompare(second.path)
-				if (pathComparison !== 0) return pathComparison
-				return (first.start?.line || 0) - (second.start?.line || 0)
-			}
-			case SortModeBookmark.LineDesc: {
-				const pathComparison = second.path.localeCompare(first.path)
-				if (pathComparison !== 0) return pathComparison
-				return (second.start?.line || 0) - (first.start?.line || 0)
-			}
-			default:
-				return 0
-		}
+		return direction * (first.createdAt - second.createdAt)
 	})
 }
 
@@ -86,14 +79,14 @@ async function moveNodes(
 	sourceItems: Bookmark[],
 	target: Bookmark | undefined,
 	port: BookmarkTreeInteractionPort,
-): Promise<void> {
+): Promise<boolean> {
 	const bookmarks = port.bookmarks()
 	const source = selectedNodeGroup(sourceItems, bookmarks)
-	if (source.size === 0) return
+	if (source.size === 0) return false
 
 	const currentTarget = target ? bookmarks.findBookmark(target) : undefined
 	for (const bookmark of source) {
-		if (currentTarget && bookmark.equals(currentTarget)) return
+		if (currentTarget && bookmark.equals(currentTarget)) return false
 	}
 
 	const captured = port.captureUndoState()
@@ -106,14 +99,14 @@ async function moveNodes(
 	const changed = !currentTarget || shouldNest
 		? bookmarks.moveGroupToNode(source, currentTarget)
 		: bookmarks.changeIndexNode(source, currentTarget)
-	if (!changed) return
+	if (!changed) return false
 
 	port.commitUndoState(captured, isFileReorder ? 'reorderFiles' : 'moveBookmarks')
 	await port.commitTopology()
 	if (currentTarget && shouldNest) {
 		void runExpandFolderTreeView(currentTarget, port)
 	}
-	port.refreshDecoration()
+	return true
 }
 
 export async function runBookmarkTreeDrop(
@@ -123,14 +116,18 @@ export async function runBookmarkTreeDrop(
 ): Promise<void> {
 	const transferItem = treeDataTransfer.get(BOOKMARK_TREE_MIME_TYPE)
 	if (!transferItem) return
-	if (SortModeBookmark.mode !== SortModeBookmark.Custom) {
-		SortModeBookmark.mode = SortModeBookmark.Custom
-		void vscode.window.showInformationMessage(localize("providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom"))
-	}
-
 	const sourceItems = Array.isArray(transferItem.value) ? transferItem.value as Bookmark[] : []
 	if (sourceItems.length === 0) return
-	await moveNodes(sourceItems, target, port)
+	const preference = port.sortPreference()
+	if (!await moveNodes(sourceItems, target, port)) return
+	try {
+		if (preference && preference.mode !== SortModeBookmark.Custom) {
+			await preference.save(SortModeBookmark.Custom)
+			void vscode.window.showInformationMessage(localize("providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom"))
+		}
+	} finally {
+		port.refreshDecoration()
+	}
 }
 
 function hasReachedDefaultExpandLevel(port: BookmarkTreeInteractionPort): boolean {
@@ -218,18 +215,20 @@ export async function runSearchBookmarksInActiveFile(port: BookmarkTreeInteracti
 }
 
 export async function runSelectBookmarkSortMode(port: BookmarkTreeInteractionPort): Promise<void> {
+	const preference = port.sortPreference()
+	if (!preference) return
 	const current = localize("providers.BookmarkTreeInteractionRunner.current")
-	const options: Array<vscode.QuickPickItem & { mode: number }> = [
-		{ mode: SortModeBookmark.Custom, label: localize("providers.BookmarkTreeInteractionRunner.customOrder"), description: SortModeBookmark.mode === SortModeBookmark.Custom ? current : '' },
-		{ mode: SortModeBookmark.TimeAsc, label: localize("providers.BookmarkTreeInteractionRunner.timeAscending"), description: SortModeBookmark.mode === SortModeBookmark.TimeAsc ? current : localize("providers.BookmarkTreeInteractionRunner.oldestFirst") },
-		{ mode: SortModeBookmark.TimeDesc, label: localize("providers.BookmarkTreeInteractionRunner.timeDescending"), description: SortModeBookmark.mode === SortModeBookmark.TimeDesc ? current : localize("providers.BookmarkTreeInteractionRunner.newestFirst") },
-		{ mode: SortModeBookmark.LineAsc, label: localize("providers.BookmarkTreeInteractionRunner.positionAscending"), description: SortModeBookmark.mode === SortModeBookmark.LineAsc ? current : localize("providers.BookmarkTreeInteractionRunner.topToBottom") },
-		{ mode: SortModeBookmark.LineDesc, label: localize("providers.BookmarkTreeInteractionRunner.positionDescending"), description: SortModeBookmark.mode === SortModeBookmark.LineDesc ? current : localize("providers.BookmarkTreeInteractionRunner.bottomToTop") },
+	const options: Array<vscode.QuickPickItem & { mode: SortModeBookmark }> = [
+		{ mode: SortModeBookmark.LineAsc, label: localize("providers.BookmarkTreeInteractionRunner.positionAscending"), description: preference.mode === SortModeBookmark.LineAsc ? current : localize("providers.BookmarkTreeInteractionRunner.topToBottom") },
+		{ mode: SortModeBookmark.LineDesc, label: localize("providers.BookmarkTreeInteractionRunner.positionDescending"), description: preference.mode === SortModeBookmark.LineDesc ? current : localize("providers.BookmarkTreeInteractionRunner.bottomToTop") },
+		{ mode: SortModeBookmark.TimeAsc, label: localize("providers.BookmarkTreeInteractionRunner.timeAscending"), description: preference.mode === SortModeBookmark.TimeAsc ? current : localize("providers.BookmarkTreeInteractionRunner.oldestFirst") },
+		{ mode: SortModeBookmark.TimeDesc, label: localize("providers.BookmarkTreeInteractionRunner.timeDescending"), description: preference.mode === SortModeBookmark.TimeDesc ? current : localize("providers.BookmarkTreeInteractionRunner.newestFirst") },
+		{ mode: SortModeBookmark.Custom, label: localize("providers.BookmarkTreeInteractionRunner.customOrder"), description: preference.mode === SortModeBookmark.Custom ? current : '' },
 	]
 	const selected = await vscode.window.showQuickPick(options, {
-		placeHolder: localize("providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying"),
+		placeHolder: localize("providers.BookmarkTreeInteractionRunner.chooseSortOrder"),
 	})
-	if (!selected) return
-	SortModeBookmark.mode = selected.mode
+	if (!selected || selected.mode === preference.mode) return
+	await preference.save(selected.mode)
 	port.fireTreeChanged()
 }

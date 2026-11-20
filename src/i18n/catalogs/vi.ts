@@ -480,7 +480,7 @@ icon là tùy chọn. Xác định trách nhiệm chính từ nhãn, neo mã đ�
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'Không thể di chuyển thư mục lưu dấu trang; vẫn tiếp tục dùng thư mục nguồn: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'Đã di chuyển thư mục lưu dấu trang và dọn thư mục cũ, nhưng xảy ra lỗi khi hoàn tất chuyển đổi; vẫn tiếp tục dùng thư mục mới: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': 'Từ dưới lên',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': 'Chọn cách sắp xếp dạng xem (không đổi thứ tự gốc do kéo thả)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': 'Chọn thứ tự sắp xếp',
 	'providers.BookmarkTreeInteractionRunner.current': '(hiện tại)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'Thứ tự tùy chỉnh',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'Đã phát hiện kéo thả và tự chuyển dạng xem về “Thứ tự tùy chỉnh”.',

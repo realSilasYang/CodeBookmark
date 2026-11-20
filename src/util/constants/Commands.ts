@@ -6,6 +6,13 @@ import { ContextBookmark } from '../ContextValue'
 import { messages as defaultMessages } from '../../i18n/catalogs/zh-cn'
 import { UNDO_ACTION_MESSAGE_KEYS } from '../UndoActions'
 
+function treeActionIcon(name: string) {
+	return {
+		light: `resources/tree-actions/light/${name}.png`,
+		dark: `resources/tree-actions/dark/${name}.png`,
+	}
+}
+
 export class Commands {
 	static readonly nameExtension = 'codebookmark'
 
@@ -103,7 +110,7 @@ export class Commands {
 		deleteBookmark: {
 			'command': Commands.nameExtension + '.deleteBookmark',
 			'title': '删除书签',
-			'icon': '$(trash)',
+			'icon': treeActionIcon('trash'),
 			'when': `${this.viewCodeBookmarkView} && ${this.deletableTreeNode}`,
 			'group': 'inline@4'
 		},
@@ -142,14 +149,14 @@ export class Commands {
 		pinView: {
 			'command': Commands.nameExtension + '.pinView',
 			'title': '设置为书签容器',
-			'icon': '$(folder-opened)',
+			'icon': treeActionIcon('folder-opened'),
 			'when': `${this.viewCodeBookmarkView} && (viewItem == ${ContextBookmark.Bookmark} || ${this.codeMarkerOnTree} || ${this.fileOnTree}) && !${this.varHasMultipleSelection}`,
 			'group': 'inline@2'
 		},
 		unpinView: {
 			'command': Commands.nameExtension + '.unpinView',
 			'title': '取消作为书签容器',
-			'icon': '$(folder)',
+			'icon': treeActionIcon('folder'),
 			'when': `${this.viewCodeBookmarkView} && (${this.pinnedBookmarkOnTree} || ${this.pinnedFileOnTree}) && !${this.varHasMultipleSelection}`,
 			'group': 'inline@2'
 		},
@@ -452,7 +459,7 @@ export class Commands {
 		{
 			"id": this.editSubmenuId,
 			"label": "编辑书签",
-			"icon": "$(edit)"
+			"icon": treeActionIcon('edit')
 		},
 		{
 			"id": this.moreSubmenuId,

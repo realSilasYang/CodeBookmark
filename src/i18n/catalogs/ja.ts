@@ -480,7 +480,7 @@ icon は省略可能です。ラベル、検証済みのソースアンカー、
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': 'ブックマーク保存先を移行できませんでした。元のフォルダーを引き続き使用します: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': 'ブックマーク保存先の移行と元フォルダーの整理は完了しましたが、切り替えの完了処理でエラーが発生しました。新しいフォルダーを引き続き使用します: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': '下から上',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': '表示順を選択（ドラッグ＆ドロップ用の元の順序は変わりません）',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': '表示順を選択',
 	'providers.BookmarkTreeInteractionRunner.current': '（現在）',
 	'providers.BookmarkTreeInteractionRunner.customOrder': 'カスタム順',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': 'ドラッグ操作を検出したため、表示をカスタム順へ戻しました。',

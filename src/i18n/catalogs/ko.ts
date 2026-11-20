@@ -440,7 +440,7 @@ icon은 선택 필드입니다. 레이블, 검증된 소스 앵커, 주변 코�
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive': '북마크 저장 폴더를 옮기지 못해 원본 폴더를 계속 사용합니다: {errorMessage}',
 	'providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas': '북마크 저장 폴더를 옮기고 원본 폴더도 정리했지만 전환을 마치는 중 오류가 발생했습니다. 새 폴더를 계속 사용합니다: {errorMessage}',
 	'providers.BookmarkTreeInteractionRunner.bottomToTop': '아래에서 위로',
-	'providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying': '보기 정렬 방식을 선택하세요(드래그로 만든 원래 순서에는 영향 없음)',
+	'providers.BookmarkTreeInteractionRunner.chooseSortOrder': '정렬 방식을 선택하세요',
 	'providers.BookmarkTreeInteractionRunner.current': '(현재)',
 	'providers.BookmarkTreeInteractionRunner.customOrder': '사용자 지정 순서',
 	'providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom': '드래그 동작을 감지하여 보기 순서를 자동으로 “사용자 지정 순서”로 바꿨습니다.',

@@ -354,7 +354,7 @@ export const messages = {
 	"providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageTransferFailedTheOriginalDirectoryRemainsActive": "书签存储目录转移失败，仍继续使用来源目录：{errorMessage}",
 	"providers.BookmarkStoragePathWorkflowRunner.bookmarkStorageWasTransferredAndTheOriginalDirectoryWas": "书签存储目录已转移且原目录已清理，但完成切换时发生错误，已继续使用新目录：{errorMessage}",
 	"providers.BookmarkTreeInteractionRunner.bottomToTop": "从下到上",
-	"providers.BookmarkTreeInteractionRunner.chooseTheViewOrderDoesNotChangeTheUnderlying": "选择视图排序方式（不影响底层拖拽原始顺序）",
+	"providers.BookmarkTreeInteractionRunner.chooseSortOrder": "选择排序方式",
 	"providers.BookmarkTreeInteractionRunner.current": "（当前）",
 	"providers.BookmarkTreeInteractionRunner.customOrder": "自定义排序",
 	"providers.BookmarkTreeInteractionRunner.draggingDetectedTheViewAutomaticallySwitchedBackToCustom": "检测到拖拽操作，已自动切换回“自定义排序”模式。",
